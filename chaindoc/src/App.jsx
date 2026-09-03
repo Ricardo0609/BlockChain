@@ -3,6 +3,10 @@ import { initializeApp } from "firebase/app";
 import {
   getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc
 } from "firebase/firestore";
+import {
+  extractFromFile, ocrImage, stripExtension,
+  ACCEPTED_DOCS, ACCEPTED_IMAGES
+} from "./fileImport";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyABii1ZsNFikCmL48aVJSJnPp9NWgep8tI",
@@ -278,6 +282,40 @@ html,body{background:var(--blanco);color:var(--negro);font-family:var(--f-p);min
 .lock-t{font-family:var(--f-t);font-weight:600;font-size:26px}
 .lock-s{font-size:16px;color:var(--gris-300)}
 
+
+/* ── IMPORTAR / ESCANEAR ── */
+.drop-zone{border:2.5px dashed var(--bordes);border-radius:16px;padding:32px 24px;text-align:center;cursor:pointer;transition:all .18s;background:var(--bg-soft);margin-top:20px}
+.drop-zone:hover,.drop-zone.over{border-color:var(--negro);background:#fff}
+.drop-zone.over{transform:scale(1.01)}
+.dz-ico{font-size:44px;margin-bottom:10px;display:block}
+.dz-t{font-family:var(--f-p);font-weight:600;font-size:18px;color:var(--negro);margin-bottom:6px}
+.dz-s{font-size:14px;color:var(--gris-300);line-height:1.6}
+.dz-formats{font-size:12px;color:var(--gris-200);margin-top:10px}
+
+.imp-progress{margin-top:20px;padding:20px;border:2px solid var(--bordes);border-radius:16px;background:var(--bg-soft)}
+.imp-msg{font-family:var(--f-p);font-size:15px;color:var(--negro);margin-bottom:12px;display:flex;align-items:center;gap:10px}
+.imp-bar{height:8px;background:var(--gris-100);border-radius:20px;overflow:hidden}
+.imp-fill{height:100%;background:var(--negro);border-radius:20px;transition:width .3s ease}
+.imp-hint{font-size:13px;color:var(--gris-200);margin-top:10px;line-height:1.5}
+.mini-spin{width:16px;height:16px;border:2px solid var(--bordes);border-top-color:var(--negro);border-radius:50%;animation:sp .7s linear infinite;flex-shrink:0}
+
+.imp-done{margin-top:20px;border:2px solid var(--verde);border-radius:16px;overflow:hidden}
+.imp-done-h{background:#f0fdf4;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.imp-done-t{font-family:var(--f-p);font-weight:600;font-size:15px;color:var(--verde)}
+.imp-done-m{font-size:13px;color:var(--gris-300)}
+.imp-preview{max-height:220px;overflow-y:auto;padding:16px 18px;font-family:var(--f-p);font-size:14px;line-height:1.8;color:var(--negro);white-space:pre-wrap;background:#fff}
+.imp-preview::-webkit-scrollbar{width:5px}
+.imp-preview::-webkit-scrollbar-thumb{background:var(--bordes);border-radius:3px}
+
+.imp-error{margin-top:20px;padding:16px 18px;border:2px solid #fca5a5;background:var(--rojo-soft);border-radius:16px;font-size:14px;color:var(--rojo);line-height:1.6}
+
+.cam-row{display:flex;gap:14px;margin-top:20px;flex-wrap:wrap}
+.cam-opt{flex:1;min-width:180px;border:2px solid var(--bordes);border-radius:16px;padding:22px 16px;text-align:center;cursor:pointer;background:#fff;transition:all .15s}
+.cam-opt:hover{border-color:var(--negro);box-shadow:var(--sh-sm)}
+.cam-opt-ico{font-size:34px;display:block;margin-bottom:8px}
+.cam-opt-t{font-family:var(--f-p);font-weight:600;font-size:15px}
+.cam-opt-s{font-size:12px;color:var(--gris-300);margin-top:4px}
+
 @media (max-width:900px){
   .nav{padding:16px 20px;flex-wrap:wrap}
   .page{padding:0 20px 40px}
@@ -301,6 +339,7 @@ const TEMPLATES = [
   { id:"blank",    ico:"📄", name:"En blanco", body:"" },
   { id:"carpeta",  ico:"📁", name:"Carpeta",   body:null },
   { id:"subir",    ico:"⬆",  name:"Subir",     body:null },
+  { id:"escanear", ico:"📷", name:"Escanear",  body:null },
   { id:"contrato", ico:"📋", name:"Contrato",  body:"CONTRATO DE ARRENDAMIENTO\n\nEntre las partes:\n\nARRENDADOR: [Nombre completo]\nARRENDATARIO: [Nombre completo]\n\nOBJETO DEL CONTRATO:\n[Descripción del inmueble]\n\nPLAZO:\nEl presente contrato tendrá una vigencia de [X] meses, contados a partir del [fecha].\n\nRENTA MENSUAL:\n$[cantidad] MXN, pagaderos los primeros [X] días de cada mes.\n\nDEPÓSITO EN GARANTÍA:\n$[cantidad] MXN.\n\nOBLIGACIONES DEL ARRENDATARIO:\n1. Pagar puntualmente la renta.\n2. Conservar el inmueble en buen estado.\n3. No subarrendar sin autorización escrita.\n\nOBLIGACIONES DEL ARRENDADOR:\n1. Entregar el inmueble en condiciones habitables.\n2. Realizar reparaciones estructurales." },
   { id:"recibo",   ico:"🧾", name:"Recibo",    body:"RECIBO DE PAGO\n\nNo: [número]\nFecha: [fecha]\n\nRecibí de: [Nombre / Empresa]\n\nCantidad: $[monto] MXN\nCantidad con letra: [monto en letra]\n\nConcepto:\n[Descripción del pago]\n\nForma de pago:\n[ ] Depósito   [ ] Cheque   [ ] Efectivo\n\nRecibido por: [Nombre]" },
   { id:"factura",  ico:"💼", name:"Factura",   body:"FACTURA\n\nNo: [folio]\nFecha de emisión: [fecha]\n\nEMISOR:\n[Razón social]\nRFC: [RFC]\n\nRECEPTOR:\n[Razón social]\nRFC: [RFC]\n\nCONCEPTOS:\n1. [Descripción] — Cantidad: [X] — P. Unitario: $[X] — Importe: $[X]\n\nSubtotal: $[X]\nIVA (16%): $[X]\nTOTAL: $[X]" },
@@ -338,6 +377,11 @@ export default function ChainDoc(){
   const [tpl,setTpl]         = useState("blank");
   const [filterF,setFilterF] = useState(null);
   const [openSec,setOpenSec] = useState({carp:true,docs:true,comp:true});
+  const [imp,setImp]         = useState(null);   // {stage,message,percent}
+  const [impText,setImpText] = useState("");
+  const [impMeta,setImpMeta] = useState(null);   // {name,pages,confidence,kind}
+  const [impErr,setImpErr]   = useState("");
+  const [dragOver,setDragOver] = useState(false);
   const [unlocked,setUnlocked] = useState(false);
   const [lockInput,setLockInput] = useState("");
 
@@ -382,6 +426,38 @@ export default function ChainDoc(){
     await refresh(); setScreen("home");
   };
 
+  // ── IMPORTAR ARCHIVOS ──
+  const resetImport = ()=>{ setImp(null); setImpText(""); setImpMeta(null); setImpErr(""); };
+
+  const handleFile = async(file, forceOcr=false)=>{
+    if(!file) return;
+    resetImport();
+    setImp({stage:"start",message:"Abriendo archivo…",percent:0});
+    try{
+      const fn = forceOcr ? ocrImage : extractFromFile;
+      const res = await fn(file, p=>setImp(p));
+      setImpText(res.text);
+      setImpMeta({
+        name: file.name,
+        pages: res.pages,
+        confidence: res.confidence,
+        kind: forceOcr || file.type.startsWith("image/") ? "ocr" : "doc",
+        chars: res.text.length,
+      });
+      if(!mIn.trim()) setMIn(stripExtension(file.name).slice(0,80));
+      setImp(null);
+    }catch(err){
+      setImp(null);
+      setImpErr(err.message || "No se pudo procesar el archivo.");
+    }
+  };
+
+  const onDrop = (e)=>{
+    e.preventDefault(); setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if(f) handleFile(f);
+  };
+
   // ── DOCS ──
   const createDoc = async()=>{
     const t = TEMPLATES.find(x=>x.id===tpl);
@@ -389,15 +465,28 @@ export default function ChainDoc(){
       if(!mIn.trim()){ notify("Escribe el nombre de la carpeta","err"); return; }
       setFolders([...folders, mIn.trim()]); setModal(null); notify("Carpeta creada ✓"); return;
     }
+    const isImport = (tpl==="subir"||tpl==="escanear");
+    if(isImport && !impText.trim()){
+      notify(tpl==="escanear"?"Primero escanea una imagen":"Primero selecciona un archivo","err");
+      return;
+    }
     const name = mIn.trim() || (t?.name==="En blanco"?"Sin título":t.name);
+    const body = isImport ? impText : (t?.body||"");
+    const origin = isImport
+      ? (impMeta?.kind==="ocr"
+          ? `Creación por escaneo (OCR): ${name}`
+          : `Creación por importación de archivo «${impMeta?.name||name}»: ${name}`)
+      : `Creación de documento: ${name}`;
     const id = genId();
     const numId = genNumId();
-    const g = await mineBlock(null,"CREACIÓN",`Creación de documento: ${name}`,user);
-    const nd = { id, numId, title:name, content:t?.body||"", folder:mIn2||null, owner:user,
+    const g = await mineBlock(null,"CREACIÓN",origin,user);
+    const nd = { id, numId, title:name, content:body, folder:mIn2||null, owner:user,
+                 source: isImport ? (impMeta?.kind==="ocr"?"escaneo":"importado") : "nuevo",
+                 sourceFile: isImport ? (impMeta?.name||null) : null,
                  password:null, sharedWith:[], chain:[g], lastModified:g.timestamp };
     const ok = await store.set(id,nd);
     if(!ok){ notify("Error al crear","err"); return; }
-    setModal(null); setMIn(""); setMIn2(""); setTpl("blank");
+    setModal(null); setMIn(""); setMIn2(""); setTpl("blank"); resetImport();
     setD(nd); setTitle(name); setContent(nd.content); setUnlocked(true);
     setEdit(true); setUrlDoc(id); setScreen("doc");
   };
@@ -545,6 +634,8 @@ export default function ChainDoc(){
             {sg>0 && <span className="chip chip-s">✦ {sg} firma{sg!==1?"s":""}</span>}
             {x.folder && <span className="chip chip-f">📁 {x.folder}</span>}
             {x.password && <span className="chip chip-l">🔒 Protegido</span>}
+            {x.source==="importado" && <span className="chip chip-l">📄 Importado</span>}
+            {x.source==="escaneo" && <span className="chip chip-l">📷 Escaneado</span>}
           </div>
           {drop===x.id && (
             <div className="drop" onClick={e=>e.stopPropagation()}>
@@ -823,20 +914,111 @@ export default function ChainDoc(){
 
   function Modals(){
     if(modal.t==="create") return (
-      <div className="ov" onClick={()=>setModal(null)}><div className="modal wide" onClick={e=>e.stopPropagation()}>
+      <div className="ov" onClick={()=>{if(!imp){setModal(null);resetImport();}}}><div className="modal wide" onClick={e=>e.stopPropagation()}>
         <h2>Crear nuevo</h2>
         <p className="sub">Elige una plantilla o empieza en blanco.</p>
         <div className="tpl-grid">
           {TEMPLATES.map(t=>(
-            <div key={t.id} className={`tpl ${tpl===t.id?"sel":""}`} onClick={()=>setTpl(t.id)}>
+            <div key={t.id} className={`tpl ${tpl===t.id?"sel":""}`}
+              onClick={()=>{setTpl(t.id); resetImport();}}>
               <span className="tpl-ico">{t.id==="subir"?<IcoUpload/>:t.ico}</span>
               <span className="tpl-n">{t.name}</span>
             </div>
           ))}
         </div>
+
+        {/* ── SUBIR ARCHIVO ── */}
+        {tpl==="subir" && !impText && !imp && (
+          <>
+            <label
+              className={`drop-zone ${dragOver?"over":""}`}
+              style={{display:"block"}}
+              onDragOver={e=>{e.preventDefault();setDragOver(true);}}
+              onDragLeave={()=>setDragOver(false)}
+              onDrop={onDrop}
+            >
+              <span className="dz-ico">📄</span>
+              <div className="dz-t">Arrastra tu archivo aquí o haz clic para elegirlo</div>
+              <div className="dz-s">Extraemos el texto y lo dejamos listo para editar.</div>
+              <div className="dz-formats">PDF · DOCX · TXT · MD — hasta 20 MB</div>
+              <input type="file" accept={ACCEPTED_DOCS} style={{display:"none"}}
+                onChange={e=>handleFile(e.target.files?.[0])} />
+            </label>
+            <p className="imp-hint" style={{textAlign:"center"}}>
+              ¿Tu PDF es un escaneo sin texto seleccionable? Usa la opción <strong>Escanear</strong>.
+            </p>
+          </>
+        )}
+
+        {/* ── ESCANEAR ── */}
+        {tpl==="escanear" && !impText && !imp && (
+          <>
+            <div className="cam-row">
+              <label className="cam-opt">
+                <span className="cam-opt-ico">📷</span>
+                <div className="cam-opt-t">Tomar foto</div>
+                <div className="cam-opt-s">Abre la cámara del dispositivo</div>
+                <input type="file" accept={ACCEPTED_IMAGES} capture="environment" style={{display:"none"}}
+                  onChange={e=>handleFile(e.target.files?.[0], true)} />
+              </label>
+              <label className="cam-opt">
+                <span className="cam-opt-ico">🖼️</span>
+                <div className="cam-opt-t">Elegir imagen</div>
+                <div className="cam-opt-s">Desde tu galería o carpeta</div>
+                <input type="file" accept={ACCEPTED_IMAGES} style={{display:"none"}}
+                  onChange={e=>handleFile(e.target.files?.[0], true)} />
+              </label>
+            </div>
+            <p className="imp-hint">
+              Consejos para un mejor reconocimiento: buena iluminación, documento plano y sin sombras,
+              y que ocupe la mayor parte del encuadre. La primera vez se descarga el modelo de idioma
+              (unos segundos); después queda en caché.
+            </p>
+          </>
+        )}
+
+        {/* ── PROGRESO ── */}
+        {imp && (
+          <div className="imp-progress">
+            <div className="imp-msg"><span className="mini-spin"/>{imp.message}</div>
+            <div className="imp-bar"><div className="imp-fill" style={{width:`${imp.percent||0}%`}}/></div>
+            {imp.stage==="ocr" && <div className="imp-hint">El reconocimiento óptico puede tardar entre 10 y 40 segundos según el tamaño de la imagen.</div>}
+          </div>
+        )}
+
+        {/* ── ERROR ── */}
+        {impErr && (
+          <div className="imp-error">
+            <strong>No se pudo procesar.</strong><br/>{impErr}
+            <div style={{marginTop:12}}>
+              <button className="btn btn-secondary" style={{padding:"8px 16px",fontSize:14}}
+                onClick={resetImport}>Intentar con otro archivo</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── RESULTADO ── */}
+        {impText && (
+          <div className="imp-done">
+            <div className="imp-done-h">
+              <div>
+                <div className="imp-done-t">✓ Texto extraído correctamente</div>
+                <div className="imp-done-m">
+                  {impMeta?.name}
+                  {impMeta?.pages ? ` · ${impMeta.pages} página${impMeta.pages!==1?"s":""}` : ""}
+                  {impMeta?.confidence ? ` · precisión ${impMeta.confidence}%` : ""}
+                  {` · ${impMeta?.chars.toLocaleString("es-MX")} caracteres`}
+                </div>
+              </div>
+              <button className="btn btn-tertiary" onClick={resetImport}>Cambiar archivo</button>
+            </div>
+            <div className="imp-preview">{impText}</div>
+          </div>
+        )}
+
         <input className="inp" style={{marginTop:20}}
           placeholder={tpl==="carpeta"?"Nombre de la carpeta":"Nombre del documento"}
-          value={mIn} onChange={e=>setMIn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&createDoc()} autoFocus />
+          value={mIn} onChange={e=>setMIn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&createDoc()} />
         {tpl!=="carpeta" && (<>
           <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Guardar en carpeta (opcional):</p>
           <div className="pills">
@@ -845,8 +1027,13 @@ export default function ChainDoc(){
           </div>
         </>)}
         <div className="modal-row">
-          <button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={createDoc}>{tpl==="carpeta"?"Crear carpeta":"Crear documento"}</button>
+          <button className="btn btn-secondary" onClick={()=>{setModal(null);resetImport();}}>Cancelar</button>
+          <button className="btn btn-primary" onClick={createDoc} disabled={!!imp}>
+            {tpl==="carpeta" ? "Crear carpeta"
+             : tpl==="subir" ? "Importar documento"
+             : tpl==="escanear" ? "Guardar escaneo"
+             : "Crear documento"}
+          </button>
         </div>
       </div></div>
     );
