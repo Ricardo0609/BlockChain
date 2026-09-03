@@ -81,7 +81,10 @@ const CSS = `
   --f-t:'Inter',sans-serif; --f-p:'IBM Plex Sans',sans-serif;
 }
 
-html,body{background:var(--blanco);color:var(--negro);font-family:var(--f-p);min-height:100vh}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--blanco);color:var(--negro);font-family:var(--f-p);min-height:100vh;overflow-x:hidden}
+input,textarea,button,select{font-size:16px}
+img,svg{max-width:100%}
 
 /* ── BOTONES ── */
 .btn{font-family:var(--f-p);font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;gap:8px}
@@ -316,12 +319,191 @@ html,body{background:var(--blanco);color:var(--negro);font-family:var(--f-p);min
 .cam-opt-t{font-family:var(--f-p);font-weight:600;font-size:15px}
 .cam-opt-s{font-size:12px;color:var(--gris-300);margin-top:4px}
 
-@media (max-width:900px){
-  .nav{padding:16px 20px;flex-wrap:wrap}
-  .page{padding:0 20px 40px}
-  .paper{padding:24px 20px}
-  .hist{padding:24px 20px}
-  .menu{padding:24px}
+/* ═══════════════ RESPONSIVE ═══════════════ */
+
+/* ── TABLET (≤1024px) ── */
+@media (max-width:1024px){
+  .nav{padding:18px 24px}
+  .nav-title{font-size:28px}
+  .page{padding:0 24px 40px}
+  .page-title{font-size:32px}
+  .btn-secondary{padding:9px 16px;font-size:15px}
+  .btn-primary,.btn-warning{padding:11px 20px;font-size:15px}
+  .paper{padding:32px 28px}
+  .hist{width:100%;max-width:600px}
+}
+
+/* ── MÓVIL (≤768px) ── */
+@media (max-width:768px){
+
+  /* nav: título arriba, botones en fila deslizable */
+  .nav{padding:14px 16px;flex-direction:column;align-items:stretch;gap:12px;position:sticky}
+  .nav-title{font-size:24px;text-align:left}
+  .nav-id{font-size:17px;gap:6px;min-width:0}
+  .nav-id .num{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .nav-id svg{width:24px;height:24px}
+
+  .nav-actions{
+    display:flex;flex-wrap:nowrap;overflow-x:auto;gap:10px;
+    justify-content:flex-start;padding-bottom:4px;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;
+  }
+  .nav-actions::-webkit-scrollbar{display:none}
+  .nav-actions .btn{flex-shrink:0}
+  .btn-secondary{padding:8px 14px;font-size:14px;border-width:2px;border-radius:10px}
+  .btn-primary,.btn-warning{padding:10px 18px;font-size:14px}
+  .hamburger{width:38px;height:38px;flex-shrink:0;gap:5px}
+  .hamburger span{width:24px;height:2.5px}
+
+  /* páginas */
+  .page{padding:0 16px 32px}
+  .page-title{font-size:26px;margin:18px 0 14px}
+  .sec-h{margin:22px 0 12px;gap:6px}
+  .sec-t{font-size:21px}
+  .sec-arrow{font-size:18px}
+
+  /* carpetas: 2 columnas */
+  .folders{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .folder{padding:12px 14px;border-radius:12px;gap:6px;min-width:0}
+  .folder-n{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .folder svg{width:22px;height:22px;flex-shrink:0}
+
+  /* tarjetas a ancho completo */
+  .cards{display:grid;grid-template-columns:1fr;gap:14px}
+  .card{width:100%;padding:14px;border-radius:14px;gap:12px}
+  .card-t{font-size:18px}
+  .card-prev{height:110px;font-size:11px}
+  .card-meta{font-size:13px}
+  .chip{font-size:10px;padding:3px 8px}
+
+  .drop{right:4px;top:46px;min-width:170px;border-radius:10px}
+  .drop button{padding:14px 16px;font-size:15px}
+
+  /* crear */
+  .create-zone{padding:32px 0}
+  .create-btn{width:100%;max-width:320px;font-size:18px;padding:14px 20px}
+
+  .empty{padding:36px 16px;font-size:15px}
+
+  /* documento */
+  .doc-title-bar{padding:4px 0 14px}
+  .doc-title{font-size:24px}
+  .paper{padding:20px 16px;min-height:400px;border-radius:10px;margin-bottom:18px}
+  .paper-ta,.paper-ro{font-size:16px;line-height:1.75;min-height:340px}
+  .vban{padding:12px 14px;font-size:14px;border-radius:10px}
+
+  /* firmas apiladas */
+  .sign-bar{flex-direction:column;gap:22px;align-items:stretch;padding:12px 0 28px}
+  .sign-group{justify-content:center}
+  .sign-slot{min-width:0;width:100%}
+  .sign-slot p{font-size:18px}
+  .sign-mark{font-size:24px}
+  .fp-btn{width:46px;height:46px;flex-shrink:0}
+
+  /* candado dentro del nav */
+  .toggle-wrap{padding:6px;flex-shrink:0}
+  .toggle-lbl{font-size:13px;white-space:nowrap}
+
+  /* modales a pantalla completa */
+  .ov{padding:0;align-items:flex-end}
+  .modal,.modal.wide{
+    width:100%;max-width:100%;border-radius:20px 20px 0 0;
+    padding:20px 18px 32px;max-height:92vh;
+  }
+  .modal h2{font-size:21px}
+  .modal .sub{font-size:14px;margin-bottom:18px}
+  .modal-row{flex-direction:column-reverse;gap:10px;margin-top:20px}
+  .modal-row .btn{width:100%}
+
+  /* inputs: 16px evita el zoom automático de iOS */
+  .inp{padding:14px 16px;font-size:16px;border-radius:10px;margin-bottom:14px}
+
+  /* plantillas: 3 por fila */
+  .tpl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .tpl{width:100%;height:104px;border-radius:12px;gap:6px;padding:8px}
+  .tpl-ico{font-size:26px}
+  .tpl-ico svg{width:26px;height:26px}
+  .tpl-n{font-size:12px;text-align:center;line-height:1.2}
+
+  .pills{gap:8px}
+  .pill{padding:8px 14px;font-size:14px}
+
+  /* importar */
+  .drop-zone{padding:24px 16px;border-radius:12px;margin-top:16px}
+  .dz-ico{font-size:36px}
+  .dz-t{font-size:16px}
+  .dz-s{font-size:13px}
+  .cam-row{flex-direction:column;gap:10px}
+  .cam-opt{min-width:0;padding:18px 14px;border-radius:12px}
+  .imp-progress,.imp-done,.imp-error{border-radius:12px}
+  .imp-preview{max-height:160px;font-size:13px;padding:14px}
+  .imp-done-h{padding:12px 14px}
+
+  /* contactos */
+  .contact{padding:11px 14px;border-radius:10px}
+  .contact-n{font-size:15px}
+  .avatar{width:30px;height:30px;font-size:13px}
+
+  /* historial a pantalla completa */
+  .hist-ov{justify-content:stretch}
+  .hist{width:100%;max-width:100%;padding:20px 16px 32px;gap:18px}
+  .hist-title{font-size:30px}
+  .tabs{gap:14px;width:100%;justify-content:space-around}
+  .tab{font-size:17px;padding:0 0 6px;border-bottom-width:2.5px}
+  .hist-list{gap:16px}
+  .hcard{width:100%;padding:18px;border-width:2px;border-radius:10px}
+  .hcard-a{font-size:18px}
+  .hcard-d{font-size:15px}
+  .hcard-box{font-size:14px;padding:10px;border-radius:10px}
+  .hcard-eye{font-size:14px}
+  .h-v{font-size:9px}
+
+  /* menú lateral */
+  .menu{width:100%;max-width:300px;padding:20px 24px}
+  .menu-av{width:60px;height:60px;font-size:26px;margin-top:12px}
+  .menu-name{font-size:18px}
+
+  /* auth */
+  .auth-wrap{padding:16px;align-items:flex-start;padding-top:40px}
+  .auth-card{padding:20px 18px;border-radius:14px}
+  .auth-title{font-size:26px}
+  .auth-sub{font-size:14px;margin-bottom:22px}
+  .auth-actions{flex-direction:column-reverse;gap:10px}
+  .auth-actions .btn{width:100%}
+  .fingerprint{width:64px;height:64px;margin-top:20px}
+
+  /* bloqueo */
+  .lock-wrap{padding:28px 20px;min-height:50vh}
+  .lock-ico{font-size:52px}
+  .lock-t{font-size:21px}
+  .lock-s{font-size:15px}
+
+  .notif{top:12px;right:12px;left:12px;font-size:13px;padding:12px 16px}
+}
+
+/* ── MÓVIL CHICO (≤400px) ── */
+@media (max-width:400px){
+  .nav-title{font-size:21px}
+  .page-title{font-size:23px}
+  .folders{grid-template-columns:1fr}
+  .tpl-grid{grid-template-columns:repeat(2,1fr)}
+  .doc-title{font-size:21px}
+  .hist-title{font-size:26px}
+  .tab{font-size:15px}
+  .btn-secondary{padding:8px 12px;font-size:13px}
+}
+
+/* ── Ajustes táctiles generales ── */
+@media (hover:none){
+  .card:hover{transform:none;box-shadow:var(--sh-sm);border-color:var(--bordes)}
+  .card:active{border-color:var(--negro);transform:scale(.99)}
+  .folder:hover{border-color:var(--bordes);box-shadow:none}
+  .folder:active{border-color:var(--negro)}
+  .tpl:hover{transform:none;box-shadow:var(--sh-sm);border-color:var(--bordes)}
+  .tpl.sel{border-color:var(--negro)}
+  .btn-secondary:hover{background:#fff;color:var(--negro)}
+  .btn-secondary.on{background:var(--negro);color:#fff}
+  .create-btn:hover{transform:none}
 }
 `;
 
@@ -618,10 +800,10 @@ export default function ChainDoc(){
     const shared    = docs.filter(x=>(x.sharedWith||[]).length>0 && x.owner!==user);
     const shown     = filterF ? docs.filter(x=>x.folder===filterF) : (view==="documentos"?mine:docs);
 
-    const Card = ({x})=>{
+    const Card = (x)=>{
       const sg = x.chain.filter(b=>b.action==="FIRMA").length;
       return (
-        <div className="card" onClick={()=>openDoc(x.id)}>
+        <div key={x.id} className="card" onClick={()=>openDoc(x.id)}>
           <div className="card-h">
             <span className="card-t">{x.title}</span>
             <button className="icon-btn" style={{color:"var(--gris-200)"}}
@@ -697,7 +879,7 @@ export default function ChainDoc(){
             <span className="sec-t">Documentos</span>
           </div>
           {openSec.docs && (recientes.length
-            ? <div className="cards">{recientes.map(x=><Card key={x.id} x={x}/>)}</div>
+            ? <div className="cards">{recientes.map(Card)}</div>
             : <div className="empty">No hay documentos aún.<br/>Crea el primero con el botón de abajo.</div>)}
 
           <div className="sec-h" onClick={()=>setOpenSec({...openSec,comp:!openSec.comp})}>
@@ -705,7 +887,7 @@ export default function ChainDoc(){
             <span className="sec-t">Compartidos conmigo</span>
           </div>
           {openSec.comp && (shared.length
-            ? <div className="cards">{shared.slice(0,3).map(x=><Card key={x.id} x={x}/>)}</div>
+            ? <div className="cards">{shared.slice(0,3).map(Card)}</div>
             : <div className="empty">Aún no te han compartido documentos.</div>)}
         </>)}
 
@@ -735,13 +917,13 @@ export default function ChainDoc(){
           <h2 className="page-title">{filterF?`Carpeta: ${filterF}`:"Documentos"}
             {filterF && <button className="btn btn-tertiary" style={{marginLeft:16,fontSize:15}} onClick={()=>setFilterF(null)}>✕ Quitar filtro</button>}
           </h2>
-          {shown.length ? <div className="cards">{shown.map(x=><Card key={x.id} x={x}/>)}</div>
+          {shown.length ? <div className="cards">{shown.map(Card)}</div>
                         : <div className="empty">No hay documentos aquí.</div>}
         </>)}
 
         {view==="compartidos" && (<>
           <h2 className="page-title">Compartidos conmigo</h2>
-          {shared.length ? <div className="cards">{shared.map(x=><Card key={x.id} x={x}/>)}</div>
+          {shared.length ? <div className="cards">{shared.map(Card)}</div>
                          : <div className="empty">Aún no te han compartido documentos.</div>}
         </>)}
 
@@ -752,8 +934,8 @@ export default function ChainDoc(){
         </div>
       </div>
 
-      {menuOpen && <SideMenu/>}
-      {modal && <Modals/>}
+      {menuOpen && SideMenu()}
+      {modal && Modals()}
     </>);
   }
 
@@ -887,8 +1069,8 @@ export default function ChainDoc(){
       </div>
     )}
 
-    {menuOpen && <SideMenu/>}
-    {modal && <Modals/>}
+    {menuOpen && SideMenu()}
+    {modal && Modals()}
   </>);
 
   // ── SUBCOMPONENTES ──
