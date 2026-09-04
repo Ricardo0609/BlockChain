@@ -1,30 +1,39 @@
 import { useState, useEffect } from "react";
-import { initializeApp } from "firebase/app";
 import {
-  getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc
+  doc, getDoc, setDoc, collection, getDocs, deleteDoc, query, where
 } from "firebase/firestore";
 import {
   extractFromFile, ocrImage, stripExtension,
   ACCEPTED_DOCS, ACCEPTED_IMAGES
 } from "./fileImport";
-
-const firebaseConfig = {
-  apiKey:            "AIzaSyABii1ZsNFikCmL48aVJSJnPp9NWgep8tI",
-  authDomain:        "blockchain-296a8.firebaseapp.com",
-  projectId:         "blockchain-296a8",
-  storageBucket:     "blockchain-296a8.firebasestorage.app",
-  messagingSenderId: "796845644217",
-  appId:             "1:796845644217:web:5e9b352019eea09ad83e68",
-};
-
-const app = initializeApp(firebaseConfig);
-const db  = getFirestore(app);
+import { db } from "./firebase";                                    // ← ACTUALIZADO
+import {                                                            // ← NUEVO
+  signUp, signIn, logOut, resetPassword,
+  watchAuth, getProfile, saveProfile, authError
+} from "./auth";
 
 const store = {
   async get(id){ try{const s=await getDoc(doc(db,"documents",id));return s.exists()?s.data():null;}catch{return null;} },
   async set(id,d){ try{await setDoc(doc(db,"documents",id),d);return true;}catch(e){console.error(e);return false;} },
   async del(id){ try{await deleteDoc(doc(db,"documents",id));return true;}catch{return false;} },
-  async list(){ try{const s=await getDocs(collection(db,"documents"));return s.docs.map(d=>d.data());}catch{return [];} },
+
+  // ← ACTUALIZADO: antes traía TODOS los documentos de la colección.
+  // Ahora sólo los que son tuyos + los que te compartieron por correo.
+  async list(uid, email){
+    if(!uid) return [];
+    try{
+      const col = collection(db,"documents");
+      const [own, shared] = await Promise.all([
+        getDocs(query(col, where("ownerUid","==",uid))),
+        email
+          ? getDocs(query(col, where("sharedWith","array-contains",email.toLowerCase())))
+          : Promise.resolve({docs:[]}),
+      ]);
+      const byId = new Map();
+      [...own.docs, ...shared.docs].forEach(s=>byId.set(s.id, s.data()));
+      return [...byId.values()];
+    }catch(e){ console.error(e); return []; }
+  },
 };
 
 // ── Crypto ────────────────────────────────────────────────────
@@ -267,6 +276,8 @@ img,svg{max-width:100%}
 .menu{background:#fff;width:386px;max-width:100%;height:100%;padding:24px 56px;display:flex;flex-direction:column;align-items:center;gap:24px;animation:slR .25s ease}
 .menu-av{width:72px;height:72px;border-radius:50%;border:2.5px solid var(--negro);display:flex;align-items:center;justify-content:center;font-size:30px;margin-top:24px}
 .menu-name{font-family:var(--f-t);font-weight:600;font-size:20px;text-align:center}
+.menu-mail{font-size:13px;color:var(--gris-300);text-align:center;margin-top:2px;margin-bottom:8px;word-break:break-all}
+.btn:disabled{opacity:.55;cursor:not-allowed}
 .menu-item{display:flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;font-family:var(--f-p);font-weight:500;font-size:17px;color:var(--gris-400);padding:8px;transition:color .15s}
 .menu-item:hover{color:var(--negro)}
 .menu-x{background:none;border:none;font-size:26px;cursor:pointer;color:var(--negro);margin-top:auto;margin-bottom:40px}
@@ -533,15 +544,19 @@ const CONTACTS = ["Felipe Jarias","Arturo Méndez","Marta Solís","Ramón Gil","
 export default function ChainDoc(){
   const [screen,setScreen]   = useState("loading");
   const [authStep,setAuthStep] = useState(0);
+  const [authMode,setAuthMode] = useState("signup");   // ← NUEVO: "signup" | "login"
+  const [authBusy,setAuthBusy] = useState(false);      // ← NUEVO: bloquea el botón mientras responde Firebase
   const [docs,setDocs]       = useState([]);
   const [folders,setFolders] = useState(()=>{ try{return JSON.parse(localStorage.getItem("cd_folders"))||["Contratos","Facturas","Recibos"];}catch{return ["Contratos","Facturas","Recibos"];} });
   const [view,setView]       = useState("inicio");
   const [d,setD]             = useState(null);
   const [editMode,setEdit]   = useState(false);
-  const [user,setUser]       = useState(()=>localStorage.getItem("cd_user")||"");
-  const [email,setEmail]     = useState("");
+  const [uid,setUid]         = useState(null);         // ← NUEVO: id real de la cuenta
+  const [user,setUser]       = useState("");           // ← ACTUALIZADO: viene del perfil, no de localStorage
+  const [acctEmail,setAcctEmail] = useState("");       // ← NUEVO: correo de la sesión activa
+  const [email,setEmail]     = useState("");           // campo del formulario
   const [pass,setPass]       = useState("");
-  const [signCode,setSignCode] = useState(()=>localStorage.getItem("cd_signcode")||"");
+  const [signCodeHash,setSignCodeHash] = useState(null); // ← ACTUALIZADO: hash, ya no texto plano
   const [title,setTitle]     = useState("");
   const [content,setContent] = useState("");
   const [dirty,setDirty]     = useState(false);
@@ -570,42 +585,134 @@ export default function ChainDoc(){
   const notify = (m,t="ok")=>{ setNotif({m,t}); setTimeout(()=>setNotif(null),3200); };
 
   useEffect(()=>{ const h=()=>setDrop(null); document.addEventListener("click",h); return ()=>document.removeEventListener("click",h); },[]);
-  useEffect(()=>{ if(user) localStorage.setItem("cd_user",user); },[user]);
   useEffect(()=>{ localStorage.setItem("cd_folders",JSON.stringify(folders)); },[folders]);
-  useEffect(()=>{ if(signCode) localStorage.setItem("cd_signcode",signCode); },[signCode]);
 
-  useEffect(()=>{(async()=>{
-    const id = getUrlDoc();
-    if(id){
-      const dd = await store.get(id);
-      if(dd){
-        if(!localStorage.getItem("cd_user")){ setScreen("auth"); return; }
-        setD(dd); setTitle(dd.title); setContent(dd.content||"");
-        setUnlocked(!dd.password); setScreen("doc"); return;
-      }
-    }
-    if(!localStorage.getItem("cd_user")){ setScreen("auth"); return; }
-    await refresh(); setScreen("home");
-  })();},[]);
-
-  const refresh = async()=>{
-    const l = await store.list();
+  const refresh = async(id=uid, mail=acctEmail)=>{             // ← ACTUALIZADO
+    const l = await store.list(id, mail);
     l.sort((a,b)=>new Date(b.lastModified)-new Date(a.lastModified));
     setDocs(l);
   };
 
+  // ← ACTUALIZADO: la sesión ya no se deduce de localStorage.
+  // Firebase avisa por sí solo si hay alguien conectado, al cargar y en cada login/logout.
+  useEffect(()=>{
+    const stop = watchAuth(async(account)=>{
+      if(!account){
+        setUid(null); setUser(""); setAcctEmail(""); setSignCodeHash(null);
+        setDocs([]); setD(null); setScreen("auth");
+        return;
+      }
+
+      const profile = await getProfile(account.uid);
+      setUid(account.uid);
+      setUser(profile?.name || account.displayName || "");
+      setAcctEmail(account.email || "");
+      setSignCodeHash(profile?.signCodeHash || null);
+
+      // Sin código de firma la cuenta está incompleta: mándalo a crearlo.
+      // (Se evalúa el perfil, no el estado local, porque este callback
+      //  se registra una sola vez y no vería los valores actualizados.)
+      if(!profile?.signCodeHash){
+        setAuthMode("signup"); setAuthStep(1); setScreen("auth"); return;
+      }
+
+      const id = getUrlDoc();
+      if(id){
+        const dd = await store.get(id);
+        if(dd){
+          setD(dd); setTitle(dd.title); setContent(dd.content||"");
+          setUnlocked(!dd.password); setScreen("doc"); return;
+        }
+      }
+      await refresh(account.uid, account.email);
+      setScreen("home");
+    });
+    return stop;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
   // ── AUTH ──
-  const doSignup = ()=>{
+  // ← ACTUALIZADO: antes sólo guardaba el nombre y tiraba la contraseña.
+  // Ahora crea una cuenta real en Firebase Authentication.
+  const doSignup = async()=>{
     if(!mIn.trim()){ notify("Escribe tu nombre","err"); return; }
     if(!email.trim()){ notify("Escribe tu correo","err"); return; }
-    setUser(mIn.trim()); setAuthStep(1);
+    if(pass.length<6){ notify("La contraseña necesita al menos 6 caracteres","err"); return; }
+    setAuthBusy(true);
+    try{
+      await signUp(email, pass, mIn);
+      setPass(""); setAuthStep(1);
+      notify("Cuenta creada ✓");
+    }catch(err){
+      notify(authError(err),"err");
+    }finally{ setAuthBusy(false); }
   };
-  const doSignCode = ()=>{
-    if(!pass.trim()){ notify("Crea un código de firma","err"); return; }
-    setSignCode(pass.trim()); setPass(""); setAuthStep(2);
+
+  // ← NUEVO: esto es lo que le faltaba al botón "Inicia sesión".
+  const doLogin = async()=>{
+    if(!email.trim()){ notify("Escribe tu correo","err"); return; }
+    if(!pass){ notify("Escribe tu contraseña","err"); return; }
+    setAuthBusy(true);
+    try{
+      await signIn(email, pass);
+      setPass(""); setEmail("");
+      // watchAuth se encarga de cargar el perfil y entrar a la app.
+    }catch(err){
+      notify(authError(err),"err");
+    }finally{ setAuthBusy(false); }
   };
+
+  // ← NUEVO
+  const doReset = async()=>{
+    if(!email.trim()){ notify("Escribe tu correo para enviarte el enlace","err"); return; }
+    try{
+      await resetPassword(email);
+      notify("Te enviamos un correo para restablecerla ✓");
+    }catch(err){ notify(authError(err),"err"); }
+  };
+
+  // ← NUEVO
+  const doLogout = async()=>{
+    setMenu(false);
+    setUrlDoc(null);
+    await logOut();
+    setAuthMode("login"); setAuthStep(0); setEmail(""); setPass("");
+  };
+
+  // ← ACTUALIZADO: el código de firma se guarda hasheado en el perfil, no en texto plano.
+  const doSignCode = async()=>{
+    if(pass.trim().length<4){ notify("El código necesita al menos 4 caracteres","err"); return; }
+    const hash = await sha256(pass.trim());
+    const ok = await saveProfile(uid,{ signCodeHash:hash });
+    if(!ok){ notify("No se pudo guardar el código","err"); return; }
+    setSignCodeHash(hash); setPass(""); setAuthStep(2);
+  };
+
   const finishAuth = async()=>{
     await refresh(); setScreen("home");
+  };
+
+  // ← NUEVO: guarda los cambios de configuración en el perfil de Firestore
+  const saveSettings = async()=>{
+    const patch = {};
+    if(mIn.trim() && mIn.trim()!==user) patch.name = mIn.trim();
+    if(pass.trim()){
+      if(pass.trim().length<4){ notify("El código necesita al menos 4 caracteres","err"); return; }
+      patch.signCodeHash = await sha256(pass.trim());
+    }
+    if(!Object.keys(patch).length){ setModal(null); setPass(""); return; }
+
+    const ok = await saveProfile(uid, patch);
+    if(!ok){ notify("No se pudo guardar","err"); return; }
+    if(patch.name) setUser(patch.name);
+    if(patch.signCodeHash) setSignCodeHash(patch.signCodeHash);
+    setPass(""); setModal(null); notify("Configuración guardada ✓");
+  };
+
+  // ← NUEVO: cambia entre el asistente de registro y la pantalla de acceso.
+  const switchAuth = (mode)=>{
+    setAuthMode(mode); setAuthStep(0);
+    setEmail(""); setPass(""); setMIn("");
   };
 
   // ── IMPORTAR ARCHIVOS ──
@@ -662,7 +769,8 @@ export default function ChainDoc(){
     const id = genId();
     const numId = genNumId();
     const g = await mineBlock(null,"CREACIÓN",origin,user);
-    const nd = { id, numId, title:name, content:body, folder:mIn2||null, owner:user,
+    const nd = { id, numId, title:name, content:body, folder:mIn2||null,
+                 owner:user, ownerUid:uid, ownerEmail:acctEmail,   // ← ACTUALIZADO
                  source: isImport ? (impMeta?.kind==="ocr"?"escaneo":"importado") : "nuevo",
                  sourceFile: isImport ? (impMeta?.name||null) : null,
                  password:null, sharedWith:[], chain:[g], lastModified:g.timestamp };
@@ -693,10 +801,19 @@ export default function ChainDoc(){
     else notify("Error al firmar","err");
   };
 
+  // ← NUEVO: valida el código contra el hash guardado antes de firmar
+  const trySign = async()=>{
+    if(!signCodeHash){ notify("No tienes código de firma configurado","err"); return; }
+    const h = await sha256(pass.trim());
+    if(h!==signCodeHash){ notify("Código incorrecto","err"); return; }
+    await sign();
+  };
+
   const doShare = async(who)=>{
     const last = d.chain[d.chain.length-1];
     const b = await mineBlock(last,"COMPARTIDO",`Compartido con: ${who}`,user);
-    const up = {...d,sharedWith:[...(d.sharedWith||[]),who],chain:[...d.chain,b],lastModified:b.timestamp};
+    // ← ACTUALIZADO: en minúsculas, porque así los busca store.list()
+    const up = {...d,sharedWith:[...(d.sharedWith||[]),who.toLowerCase()],chain:[...d.chain,b],lastModified:b.timestamp};
     const ok = await store.set(up.id,up);
     if(ok){ setD(up); setModal(null); setMIn(""); notify(`Compartido con ${who} ✓`); }
   };
@@ -751,21 +868,52 @@ export default function ChainDoc(){
     return (<><style>{CSS}</style>
       {notif && <div className={`notif ${notif.t}`}>{notif.m}</div>}
       <div className="auth-wrap"><div className="auth-card">
-        {authStep===0 && (<>
+        {/* ← NUEVO: pantalla de inicio de sesión */}
+        {authMode==="login" && (<>
+          <h1 className="auth-title">Iniciar sesión</h1>
+          <p className="auth-sub">Entra con la cuenta que ya creaste.</p>
+          <input className="inp" type="email" autoComplete="email" placeholder="Correo electrónico"
+            value={email} onChange={e=>setEmail(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&doLogin()} />
+          <input className="inp" type="password" autoComplete="current-password" placeholder="Contraseña"
+            value={pass} onChange={e=>setPass(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&doLogin()} />
+          <div className="auth-actions">
+            <button className="btn btn-tertiary" onClick={()=>switchAuth("signup")}>
+              ¿No tienes cuenta? Créala
+            </button>
+            <button className="btn btn-primary" onClick={doLogin} disabled={authBusy}>
+              {authBusy ? "Entrando…" : "Entrar"}
+            </button>
+          </div>
+          <button className="btn btn-tertiary" style={{marginTop:4}} onClick={doReset}>
+            ¿Olvidaste tu contraseña?
+          </button>
+        </>)}
+
+        {authMode==="signup" && authStep===0 && (<>
           <h1 className="auth-title">Crear cuenta</h1>
           <p className="auth-sub">Documentos con registro inalterable en cadena criptográfica.</p>
           <input className="inp" placeholder="Nombre completo" value={mIn} onChange={e=>setMIn(e.target.value)} />
-          <input className="inp" placeholder="Correo electrónico" value={email} onChange={e=>setEmail(e.target.value)} />
-          <input className="inp" type="password" placeholder="Contraseña" value={pass} onChange={e=>setPass(e.target.value)}
+          <input className="inp" type="email" autoComplete="email" placeholder="Correo electrónico"
+            value={email} onChange={e=>setEmail(e.target.value)} />
+          <input className="inp" type="password" autoComplete="new-password"
+            placeholder="Contraseña (mínimo 6 caracteres)" value={pass} onChange={e=>setPass(e.target.value)}
             onKeyDown={e=>e.key==="Enter"&&doSignup()} />
           <div className="auth-actions">
-            <button className="btn btn-tertiary">¿Ya tienes cuenta? Inicia sesión</button>
-            <button className="btn btn-primary" onClick={doSignup}>Continuar</button>
+            {/* ← ACTUALIZADO: este botón no tenía onClick, por eso no hacía nada */}
+            <button className="btn btn-tertiary" onClick={()=>switchAuth("login")}>
+              ¿Ya tienes cuenta? Inicia sesión
+            </button>
+            <button className="btn btn-primary" onClick={doSignup} disabled={authBusy}>
+              {authBusy ? "Creando…" : "Continuar"}
+            </button>
           </div>
           <div className="dots"><span className="dot on"/><span className="dot"/></div>
         </>)}
 
-        {authStep===1 && (<>
+        {authMode==="signup" && authStep===1 && (<>
+          <h1 className="auth-title">Código de firma</h1>
           <p className="auth-sub" style={{marginBottom:24,textAlign:"left"}}>
             Crea un código para firmar tus documentos. Este código es independiente a tu contraseña de la cuenta;
             lo podrás cambiar las veces que quieras en configuración.
@@ -773,13 +921,14 @@ export default function ChainDoc(){
           <input className="inp" type="password" placeholder="Código de firma" value={pass}
             onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSignCode()} />
           <div className="auth-actions">
-            <button className="btn btn-secondary" onClick={()=>setAuthStep(0)}>Atrás</button>
+            {/* ← ACTUALIZADO: ya no hay "Atrás". La cuenta ya existe en este punto;
+                regresar al formulario intentaría crearla otra vez. */}
             <button className="btn btn-primary" onClick={doSignCode}>Continuar</button>
           </div>
           <div className="dots"><span className="dot"/><span className="dot on"/></div>
         </>)}
 
-        {authStep===2 && (<>
+        {authMode==="signup" && authStep===2 && (<>
           <p className="auth-sub" style={{fontSize:20,color:"var(--negro)",marginBottom:28}}>
             ¿Deseas activar el desbloqueo biométrico para iniciar sesión y firmar tus documentos?
           </p>
@@ -796,8 +945,9 @@ export default function ChainDoc(){
   // ── RENDER: HOME ──
   if(screen==="home"){
     const recientes = docs.slice(0,3);
-    const mine      = docs.filter(x=>x.owner===user||!x.owner);
-    const shared    = docs.filter(x=>(x.sharedWith||[]).length>0 && x.owner!==user);
+    // ← ACTUALIZADO: se compara por uid, no por nombre (dos personas pueden llamarse igual)
+    const mine      = docs.filter(x=>x.ownerUid===uid);
+    const shared    = docs.filter(x=>x.ownerUid!==uid);
     const shown     = filterF ? docs.filter(x=>x.folder===filterF) : (view==="documentos"?mine:docs);
 
     const Card = (x)=>{
@@ -1080,10 +1230,13 @@ export default function ChainDoc(){
         <div className="menu" onClick={e=>e.stopPropagation()}>
           <div className="menu-av">👤</div>
           <div className="menu-name">{user}</div>
-          <button className="menu-item" onClick={()=>{setMenu(false);setPass("");setModal({t:"settings"});}}>
+          <div className="menu-mail">{acctEmail}</div>{/* ← NUEVO */}
+          <button className="menu-item" onClick={()=>{setMenu(false);setPass("");setMIn(user);setModal({t:"settings"});}}>
             <IcoGear/> Configuración
           </button>
           <button className="menu-item" onClick={()=>{setMenu(false);goHome();}}>🏠 Inicio</button>
+          {/* ← NUEVO: sin esto no había forma de cambiar de cuenta */}
+          <button className="menu-item" onClick={doLogout}>🚪 Cerrar sesión</button>
           <button className="create-btn" style={{marginTop:8}}
             onClick={()=>{setMenu(false);setMIn("");setMIn2("");setTpl("blank");setModal({t:"create"});}}>
             <span>Crear documento</span><b>+</b>
@@ -1266,12 +1419,12 @@ export default function ChainDoc(){
         <p className="sub">Ingresa tu código de firma. La firma quedará registrada permanentemente en la cadena a nombre de <strong>{user}</strong>.</p>
         <input className="inp" type="password" placeholder="Código de firma" value={pass}
           onChange={e=>setPass(e.target.value)} autoFocus
-          onKeyDown={e=>{if(e.key==="Enter"){ if(!signCode||pass===signCode) sign(); else notify("Código incorrecto","err"); }}} />
+          onKeyDown={e=>{if(e.key==="Enter"){ trySign(); }}} />
         <div className="modal-row">
           <button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={()=>{ if(!signCode||pass===signCode) sign(); else notify("Código incorrecto","err"); }}>Firmar</button>
+          <button className="btn btn-primary" onClick={()=>{ trySign(); }}>Firmar</button>
         </div>
-        <div className="fingerprint" onClick={()=>{ if(!signCode||pass===signCode) sign(); else notify("Código incorrecto","err"); }}><IcoFinger/></div>
+        <div className="fingerprint" onClick={()=>{ trySign(); }}><IcoFinger/></div>
       </div></div>
     );
 
@@ -1321,12 +1474,15 @@ export default function ChainDoc(){
         <h2>Configuración</h2>
         <p className="sub">Cambia tu nombre o tu código de firma.</p>
         <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Nombre:</p>
-        <input className="inp" placeholder="Tu nombre" value={user} onChange={e=>setUser(e.target.value)} />
+        {/* ← ACTUALIZADO: se edita en un campo temporal y se confirma al guardar */}
+        <input className="inp" placeholder="Tu nombre" value={mIn} onChange={e=>setMIn(e.target.value)} />
         <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Nuevo código de firma:</p>
-        <input className="inp" type="password" placeholder="Código de firma" value={pass} onChange={e=>setPass(e.target.value)} />
+        <input className="inp" type="password" placeholder="Déjalo vacío para no cambiarlo"
+          value={pass} onChange={e=>setPass(e.target.value)} />
         <div className="modal-row">
-          <button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={()=>{ if(pass.trim())setSignCode(pass.trim()); setPass(""); setModal(null); notify("Configuración guardada ✓"); }}>Guardar</button>
+          <button className="btn btn-secondary" onClick={()=>{setPass("");setModal(null);}}>Cancelar</button>
+          {/* ← ACTUALIZADO: ahora persiste en Firestore, antes sólo vivía en memoria */}
+          <button className="btn btn-primary" onClick={saveSettings}>Guardar</button>
         </div>
       </div></div>
     );
