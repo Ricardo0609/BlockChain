@@ -1,0 +1,31 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Cada quien lee y escribe únicamente su propio perfil.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /documents/{docId} {
+      // Lectura: cualquier sesión iniciada, porque los enlaces son
+      // compartibles. La protección extra es la contraseña del documento.
+      allow read: if request.auth != null;
+
+      // Crear: sólo a tu propio nombre. Impide falsificar la propiedad.
+      allow create: if request.auth != null
+                    && request.resource.data.ownerUid == request.auth.uid;
+
+      // Editar: el dueño, o alguien a quien se lo compartieron.
+      allow update: if request.auth != null && (
+                      resource.data.ownerUid == request.auth.uid ||
+                      request.auth.token.email in resource.data.sharedWith
+                    );
+
+      // Borrar: sólo el dueño.
+      allow delete: if request.auth != null
+                    && resource.data.ownerUid == request.auth.uid;
+    }
+  }
+}
