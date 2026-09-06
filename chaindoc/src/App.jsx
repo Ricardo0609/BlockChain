@@ -275,7 +275,56 @@ img,svg{max-width:100%}
 .menu-ov{position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.4);backdrop-filter:blur(2px);display:flex;justify-content:flex-end;animation:fO .2s ease}
 .menu{background:#fff;width:386px;max-width:100%;height:100%;padding:24px 56px;display:flex;flex-direction:column;align-items:center;gap:24px;animation:slR .25s ease}
 .menu-av{width:72px;height:72px;border-radius:50%;border:2.5px solid var(--negro);display:flex;align-items:center;justify-content:center;font-size:30px;margin-top:24px}
+/* ← NUEVO: base de Material Symbols. El texto del span es el
+   nombre del icono; la ligadura de la fuente lo convierte en glifo. */
+.msym{font-family:'Material Symbols Rounded';font-weight:normal;font-style:normal;
+  line-height:1;letter-spacing:normal;text-transform:none;display:inline-flex;
+  align-items:center;justify-content:center;white-space:nowrap;word-wrap:normal;
+  direction:ltr;flex:0 0 auto;overflow:hidden;
+  font-feature-settings:'liga';-webkit-font-smoothing:antialiased;user-select:none}
+
 .menu-name{font-family:var(--f-t);font-weight:600;font-size:20px;text-align:center}
+
+/* ← NUEVO: plantilla visual (formulario) */
+.fd{text-align:left;font-family:var(--f-p)}
+.fd-head{display:flex;align-items:center;gap:24px;flex-wrap:wrap;margin-bottom:22px}
+.fd-heading{font-family:var(--f-t);font-weight:600;font-size:26px;color:var(--gris-400,#6b7280);margin:0;flex:1;min-width:180px}
+.fd-head .fd-field{flex:0 0 auto;margin:0}
+.fd-head .fd-input{width:130px}
+.fd-body{border:1px solid var(--bordes);border-radius:14px;padding:24px 22px;display:flex;flex-direction:column;gap:18px;background:#fff}
+.fd-row{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap}
+.fd-field{display:flex;align-items:center;gap:10px;flex:1;min-width:240px}
+.fd-field.wide{flex-basis:100%}
+.fd-field:has(.area){align-items:flex-start}
+.fd-label{font-weight:600;color:var(--negro);white-space:nowrap;font-size:16px}
+.fd-input{flex:1;min-width:0;border:1px solid var(--bordes);border-radius:9px;padding:9px 12px;
+  font-family:var(--f-p);font-size:15px;color:var(--negro);background:#fff;outline:none;transition:border-color .15s}
+.fd-input:focus{border-color:var(--negro)}
+.fd-input::placeholder{color:#b6b6bd}
+.fd-input.area{min-height:76px;resize:vertical;line-height:1.45}
+.fd-input.mono,.fd-value.mono{font-family:var(--f-m,ui-monospace,monospace);font-size:13px;letter-spacing:.2px}
+.fd-value{flex:1;color:var(--gris-300,#9096a1);font-size:15px;padding:9px 0;word-break:break-word}
+.fd-value.empty{color:#c4c4cb;font-style:italic}
+.fd-radio-wrap{display:flex;align-items:flex-start;gap:12px;flex:1;min-width:240px}
+.fd-radios{display:flex;flex-direction:column;gap:7px}
+.fd-radio{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--negro);cursor:pointer}
+.fd-radio input{width:16px;height:16px;accent-color:var(--negro);cursor:pointer}
+.fd-toggle{display:inline-flex;align-items:center;gap:10px;border:1px solid var(--bordes);border-radius:9px;
+  padding:7px 12px;font-size:13px;font-weight:500;color:var(--negro);cursor:pointer;background:#fff}
+.fd-toggle input{display:none}
+.fd-switch{width:30px;height:16px;border-radius:99px;background:#d6d6dc;position:relative;transition:background .18s;flex:0 0 auto}
+.fd-switch::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;transition:transform .18s}
+.fd-toggle.on .fd-switch{background:var(--negro)}
+.fd-toggle.on .fd-switch::after{transform:translateX(14px)}
+@media(max-width:760px){
+  .fd-row{flex-direction:column;gap:14px}
+  .fd-field,.fd-radio-wrap{min-width:0;width:100%}
+  .fd-field{flex-direction:column;align-items:flex-start;gap:6px}
+  .fd-input{width:100%}
+  .fd-head{gap:14px}
+  .fd-head .fd-input{width:100%}
+  .fd-heading{font-size:21px;flex-basis:100%}
+}
 .menu-mail{font-size:13px;color:var(--gris-300);text-align:center;margin-top:2px;margin-bottom:8px;word-break:break-all}
 .btn:disabled{opacity:.55;cursor:not-allowed}
 .menu-item{display:flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;font-family:var(--f-p);font-weight:500;font-size:17px;color:var(--gris-400);padding:8px;transition:color .15s}
@@ -519,26 +568,220 @@ img,svg{max-width:100%}
 `;
 
 // ── Iconos SVG inline ─────────────────────────────────────────
-const IcoFolder = () => <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>;
-const IcoDots   = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>;
-const IcoEye    = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>;
-const IcoFinger = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M12 2a8 8 0 00-8 8v4M12 6a4 4 0 00-4 4v6M12 10v8M16 10a4 4 0 00-4-4M20 10a8 8 0 00-4-6.9"/></svg>;
-const IcoBack   = () => <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>;
-const IcoGear   = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>;
-const IcoLink   = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>;
-const IcoUpload = () => <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>;
+// ── ICONOS ────────────────────────────────────────────────────
+// ← ACTUALIZADO: antes eran SVG dibujados a mano. Ahora usan
+// Material Symbols (el set de Google). Los nombres de componente
+// se conservan para no tocar las decenas de sitios que los usan.
+const Icon = ({ n, size=24, fill=false, weight=300 }) => (
+  <span className="msym" aria-hidden="true"
+    style={{ fontSize:size, width:size, height:size,
+             fontVariationSettings:`'FILL' ${fill?1:0}, 'wght' ${weight}, 'GRAD' 0, 'opsz' ${size}` }}>
+    {n}
+  </span>
+);
 
+const IcoFolder = () => <Icon n="folder"      size={26} />;
+const IcoDots   = () => <Icon n="more_vert"   size={22} weight={400} />;
+const IcoEye    = () => <Icon n="visibility"  size={18} />;
+const IcoFinger = () => <Icon n="fingerprint" size={24} />;
+const IcoBack   = () => <Icon n="arrow_back"  size={32} />;
+const IcoGear   = () => <Icon n="settings"    size={22} />;
+const IcoLink   = () => <Icon n="link"        size={20} />;
+
+// ← ACTUALIZADO: ahora sólo son los TIPOS de documento (paso 1).
+// "carpeta", "subir", "escanear" y "en blanco" salieron de aquí:
+// el método de creación es el paso 2 y las carpetas tienen su propio modal.
 const TEMPLATES = [
-  { id:"blank",    ico:"📄", name:"En blanco", body:"" },
-  { id:"carpeta",  ico:"📁", name:"Carpeta",   body:null },
-  { id:"subir",    ico:"⬆",  name:"Subir",     body:null },
-  { id:"escanear", ico:"📷", name:"Escanear",  body:null },
-  { id:"contrato", ico:"📋", name:"Contrato",  body:"CONTRATO DE ARRENDAMIENTO\n\nEntre las partes:\n\nARRENDADOR: [Nombre completo]\nARRENDATARIO: [Nombre completo]\n\nOBJETO DEL CONTRATO:\n[Descripción del inmueble]\n\nPLAZO:\nEl presente contrato tendrá una vigencia de [X] meses, contados a partir del [fecha].\n\nRENTA MENSUAL:\n$[cantidad] MXN, pagaderos los primeros [X] días de cada mes.\n\nDEPÓSITO EN GARANTÍA:\n$[cantidad] MXN.\n\nOBLIGACIONES DEL ARRENDATARIO:\n1. Pagar puntualmente la renta.\n2. Conservar el inmueble en buen estado.\n3. No subarrendar sin autorización escrita.\n\nOBLIGACIONES DEL ARRENDADOR:\n1. Entregar el inmueble en condiciones habitables.\n2. Realizar reparaciones estructurales." },
-  { id:"recibo",   ico:"🧾", name:"Recibo",    body:"RECIBO DE PAGO\n\nNo: [número]\nFecha: [fecha]\n\nRecibí de: [Nombre / Empresa]\n\nCantidad: $[monto] MXN\nCantidad con letra: [monto en letra]\n\nConcepto:\n[Descripción del pago]\n\nForma de pago:\n[ ] Depósito   [ ] Cheque   [ ] Efectivo\n\nRecibido por: [Nombre]" },
-  { id:"factura",  ico:"💼", name:"Factura",   body:"FACTURA\n\nNo: [folio]\nFecha de emisión: [fecha]\n\nEMISOR:\n[Razón social]\nRFC: [RFC]\n\nRECEPTOR:\n[Razón social]\nRFC: [RFC]\n\nCONCEPTOS:\n1. [Descripción] — Cantidad: [X] — P. Unitario: $[X] — Importe: $[X]\n\nSubtotal: $[X]\nIVA (16%): $[X]\nTOTAL: $[X]" },
+  { id:"contrato", ico:"contract", name:"Contrato", body:"CONTRATO DE ARRENDAMIENTO\n\nEntre las partes:\n\nARRENDADOR: [Nombre completo]\nARRENDATARIO: [Nombre completo]\n\nOBJETO DEL CONTRATO:\n[Descripción del inmueble]\n\nPLAZO:\nEl presente contrato tendrá una vigencia de [X] meses, contados a partir del [fecha].\n\nRENTA MENSUAL:\n$[cantidad] MXN, pagaderos los primeros [X] días de cada mes.\n\nDEPÓSITO EN GARANTÍA:\n$[cantidad] MXN.\n\nOBLIGACIONES DEL ARRENDATARIO:\n1. Pagar puntualmente la renta.\n2. Conservar el inmueble en buen estado.\n3. No subarrendar sin autorización escrita.\n\nOBLIGACIONES DEL ARRENDADOR:\n1. Entregar el inmueble en condiciones habitables.\n2. Realizar reparaciones estructurales." },
+  { id:"factura",  ico:"receipt_long", name:"Factura",  form:"factura", body:"" },
+  { id:"recibo",   ico:"receipt", name:"Recibo",   form:"recibo",  body:"" },
 ];
 
+// ← NUEVO: paso 2 del flujo de creación.
+const METHODS = [
+  { id:"escanear", ico:"photo_camera", name:"Escanear con foto", desc:"Usa la cámara y extraemos el texto" },
+  { id:"subir",    ico:"upload_file",  name:"Subir archivo",     desc:"PDF, DOCX o TXT desde tu dispositivo" },
+  { id:"cero",     ico:"draft", name:"Crear desde cero",  desc:"Empieza con la plantilla en blanco" },
+];
+
+// ── PLANTILLAS VISUALES ───────────────────────────────────────
+// ← NUEVO: en vez de texto con corchetes, un esquema de campos que
+// se dibuja como formulario. Cada fila es un arreglo de campos.
+const FORMS = {
+  factura: {
+    heading: "Factura",
+    header: [
+      { k:"fecha", label:"Fecha",  type:"date" },
+      { k:"folio", label:"No",     type:"text", placeholder:"000" },
+    ],
+    rows: [
+      [{ k:"emisor",      label:"Emisor",        type:"text",  placeholder:"Razón social", w:2 }],
+      [{ k:"rfcEmisor",   label:"RFC emisor",    type:"text",  placeholder:"XAXX010101000" },
+       { k:"rfcReceptor", label:"RFC receptor",  type:"text",  placeholder:"XAXX010101000" }],
+      [{ k:"receptor",    label:"Receptor",      type:"text",  placeholder:"Razón social", w:2 }],
+      [{ k:"concepto",    label:"Concepto",      type:"area",  placeholder:"Descripción de bienes o servicios", w:2 }],
+      [{ k:"subtotal",    label:"Subtotal",      type:"money" },
+       { k:"iva",         label:"IVA (16%)",     type:"money" }],
+      [{ k:"total",       label:"Total",         type:"money" },
+       { k:"formaPago",   label:"Forma de pago", type:"radio", options:["Depósito","Cheque","Efectivo"] }],
+      [{ k:"uuid",        label:"Folio fiscal",  type:"text",  placeholder:"UUID del CFDI", w:2, mono:true }],
+      [{ k:"periodico",   label:"Enviar periódicamente", type:"toggle" }],
+    ],
+  },
+
+  recibo: {
+    heading: "Recibo de nómina",
+    header: [
+      { k:"fecha", label:"Fecha", type:"date" },
+      { k:"folio", label:"No",    type:"text", placeholder:"000" },
+    ],
+    rows: [
+      [{ k:"recibiDe",    label:"Recibí de",     type:"text",  placeholder:"Empresa" },
+       { k:"cantidad",    label:"Cantidad",      type:"money" }],
+      [{ k:"cantidadTxt", label:"Cantidad con letra", type:"text", placeholder:"veinte mil pesos", w:2 }],
+      [{ k:"concepto",    label:"Concepto",      type:"area",  placeholder:"Descripción del pago", w:2 }],
+      [{ k:"recibidoPor", label:"Recibido por",  type:"text",  placeholder:"Nombre" },
+       { k:"formaPago",   label:"Forma de pago", type:"radio", options:["Depósito","Cheque","Efectivo"] }],
+      [{ k:"periodico",   label:"Enviar periódicamente", type:"toggle" }],
+    ],
+  },
+};
+
+const allFields = (s)=>[...(s.header||[]), ...s.rows.flat()];
+
+// ← NUEVO: convierte los campos a texto para que la cadena siga
+// hasheando contenido legible y el historial no se rompa.
+function serializeForm(formKey, fields){
+  const s = FORMS[formKey]; if(!s) return "";
+  const lines = [s.heading.toUpperCase(), ""];
+  for(const f of allFields(s)){
+    const v = fields[f.k];
+    if(v===undefined || v===null || v==="" || v===false) continue;
+    lines.push(`${f.label}: ${f.type==="toggle" ? "Sí" : f.type==="money" ? `$${v}` : v}`);
+  }
+  return lines.join("\n");
+}
+
+// ── EXTRACCIÓN DE DATOS DESDE OCR / PDF ───────────────────────
+// ← NUEVO: lee el texto crudo del escaneo y rellena los campos.
+const num = (m)=> m ? m[1].replace(/,/g,"") : "";
+
+function parseFactura(text){
+  const t = text.replace(/\s+/g," ");
+  const rfcs = [...t.matchAll(/\b([A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3})\b/g)].map(m=>m[1]);
+  const f = {};
+
+  const uuid = t.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i);
+  if(uuid) f.uuid = uuid[0].toUpperCase();
+
+  if(rfcs[0]) f.rfcEmisor   = rfcs[0];
+  if(rfcs[1]) f.rfcReceptor = rfcs[1];
+
+  const folio = t.match(/folio\s*(?:interno)?[:\s]*([A-Z0-9][A-Z0-9-]{0,15})/i);
+  if(folio && !/fiscal/i.test(folio[0])) f.folio = folio[1];
+
+  const iso = t.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+  const dmy = t.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+  if(iso) f.fecha = iso[1];
+  else if(dmy) f.fecha = `${dmy[3]}-${dmy[2].padStart(2,"0")}-${dmy[1].padStart(2,"0")}`;
+
+  // Se permite texto intermedio sin '$' para tolerar etiquetas como "IVA (16%)"
+  const total    = t.match(/\btotal\b[^$\n]{0,20}\$?\s*([\d,]+\.\d{2})/i);
+  const subtotal = t.match(/\bsub\s?total\b[^$\n]{0,20}\$?\s*([\d,]+\.\d{2})/i);
+  const iva      = t.match(/\biva\b[^$\n]{0,20}\$?\s*([\d,]+\.\d{2})/i);
+  if(total)    f.total    = num(total);
+  if(subtotal) f.subtotal = num(subtotal);
+  if(iva)      f.iva      = num(iva);
+
+  const emisor = text.match(/emisor[:\s]*\n?\s*([^\n]{3,60})/i);
+  if(emisor) f.emisor = emisor[1].trim();
+  const receptor = text.match(/receptor[:\s]*\n?\s*([^\n]{3,60})/i);
+  if(receptor) f.receptor = receptor[1].trim();
+
+  const concepto = text.match(/(?:concepto|descripci[oó]n)[:\s]*\n?\s*([^\n]{3,120})/i);
+  if(concepto) f.concepto = concepto[1].trim();
+
+  return f;
+}
+
 const CONTACTS = ["Felipe Jarias","Arturo Méndez","Marta Solís","Ramón Gil","Luis Alberto"];
+
+// ── PLANTILLA VISUAL ──────────────────────────────────────────
+// ← NUEVO: dibuja el esquema de FORMS como formulario.
+// En modo lectura muestra los valores; vacíos aparecen atenuados.
+function FormDoc({ formKey, fields, onChange, editable }){
+  const s = FORMS[formKey];
+  if(!s) return null;
+  const set = (k,v)=>onChange({ ...fields, [k]:v });
+  const val = (k)=>fields?.[k] ?? "";
+
+  // ← ACTUALIZADO: esto era un componente declarado dentro del render.
+  // React lo trataba como un tipo distinto en cada tecleo, remontaba el
+  // input y se perdía el foco. Como función que devuelve JSX, no ocurre.
+  const field = (f)=>{
+    const v = val(f.k);
+
+    if(f.type==="toggle") return (
+      <label key={f.k} className={`fd-toggle ${v?"on":""}`}>
+        <span>{f.label}</span>
+        <input type="checkbox" checked={!!v} disabled={!editable}
+          onChange={e=>set(f.k, e.target.checked)} />
+        <span className="fd-switch"/>
+      </label>
+    );
+
+    if(f.type==="radio") return (
+      <div key={f.k} className="fd-radio-wrap">
+        <span className="fd-label">{f.label}:</span>
+        <div className="fd-radios">
+          {f.options.map(o=>(
+            <label key={o} className="fd-radio">
+              <input type="radio" name={`${formKey}-${f.k}`} checked={v===o} disabled={!editable}
+                onChange={()=>set(f.k,o)} />
+              <span>{o}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    );
+
+    return (
+      <div key={f.k} className={`fd-field ${f.w===2?"wide":""}`}>
+        <span className="fd-label">{f.label}:</span>
+        {editable ? (
+          f.type==="area"
+            ? <textarea className="fd-input area" value={v} placeholder={f.placeholder||""}
+                onChange={e=>set(f.k,e.target.value)} />
+            : <input className={`fd-input ${f.mono?"mono":""}`}
+                type={f.type==="date"?"date":"text"}
+                inputMode={f.type==="money"?"decimal":undefined}
+                placeholder={f.type==="money"?"$0.00":(f.placeholder||"")}
+                value={v} onChange={e=>set(f.k,e.target.value)} />
+        ) : (
+          <span className={`fd-value ${!v?"empty":""} ${f.mono?"mono":""}`}>
+            {v ? (f.type==="money" ? `$${v}` : v) : (f.placeholder || "—")}
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="fd">
+      <div className="fd-head">
+        <h2 className="fd-heading">{s.heading}</h2>
+        {(s.header||[]).map(field)}
+      </div>
+      <div className="fd-body">
+        {s.rows.map((row,i)=>(
+          <div key={i} className="fd-row">
+            {row.map(field)}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // ── APP ───────────────────────────────────────────────────────
 export default function ChainDoc(){
@@ -571,7 +814,10 @@ export default function ChainDoc(){
   const [modal,setModal]     = useState(null);
   const [mIn,setMIn]         = useState("");
   const [mIn2,setMIn2]       = useState("");
-  const [tpl,setTpl]         = useState("blank");
+  const [tpl,setTpl]         = useState("contrato");  // ← ACTUALIZADO: tipo de documento
+  const [method,setMethod]   = useState(null);        // ← NUEVO: escanear | subir | cero
+  const [createStep,setCreateStep] = useState(0);     // ← NUEVO: 0 = tipo, 1 = método
+  const [fields,setFields]   = useState({});   // valores de la plantilla visual
   const [filterF,setFilterF] = useState(null);
   const [openSec,setOpenSec] = useState({carp:true,docs:true,comp:true});
   const [imp,setImp]         = useState(null);   // {stage,message,percent}
@@ -750,44 +996,77 @@ export default function ChainDoc(){
   // ── DOCS ──
   const createDoc = async()=>{
     const t = TEMPLATES.find(x=>x.id===tpl);
-    if(tpl==="carpeta"){
-      if(!mIn.trim()){ notify("Escribe el nombre de la carpeta","err"); return; }
-      setFolders([...folders, mIn.trim()]); setModal(null); notify("Carpeta creada ✓"); return;
-    }
-    const isImport = (tpl==="subir"||tpl==="escanear");
+    // ← ACTUALIZADO: la importación ya no depende del tipo sino del método elegido.
+    const isImport = (method==="subir"||method==="escanear");
     if(isImport && !impText.trim()){
-      notify(tpl==="escanear"?"Primero escanea una imagen":"Primero selecciona un archivo","err");
+      notify(method==="escanear"?"Primero escanea una imagen":"Primero selecciona un archivo","err");
       return;
     }
-    const name = mIn.trim() || (t?.name==="En blanco"?"Sin título":t.name);
-    const body = isImport ? impText : (t?.body||"");
+    const name = mIn.trim() || t.name;
+
+    // ← ACTUALIZADO: el tipo ya lo eligió el usuario en el paso 1.
+    // El escaneo ya no decide qué es, sólo intenta llenar la plantilla.
+    const formKey = t?.form || null;
+    const initial = (isImport && formKey==="factura") ? parseFactura(impText) : {};
+    const filled  = Object.keys(initial).length;
+
+    const body = formKey
+      ? serializeForm(formKey, initial)
+      : (isImport ? impText : (t?.body||""));
+
     const origin = isImport
-      ? (impMeta?.kind==="ocr"
-          ? `Creación por escaneo (OCR): ${name}`
-          : `Creación por importación de archivo «${impMeta?.name||name}»: ${name}`)
+      ? (filled
+          ? `Creación desde ${method==="escanear"?"escaneo":"archivo"} con extracción automática: ${name}`
+          : method==="escanear"
+            ? `Creación por escaneo (OCR): ${name}`
+            : `Creación por importación de archivo «${impMeta?.name||name}»: ${name}`)
       : `Creación de documento: ${name}`;
+
     const id = genId();
     const numId = genNumId();
     const g = await mineBlock(null,"CREACIÓN",origin,user);
     const nd = { id, numId, title:name, content:body, folder:mIn2||null,
-                 owner:user, ownerUid:uid, ownerEmail:acctEmail,   // ← ACTUALIZADO
-                 source: isImport ? (impMeta?.kind==="ocr"?"escaneo":"importado") : "nuevo",
+                 owner:user, ownerUid:uid, ownerEmail:acctEmail,
+                 tplId: formKey, fields: formKey ? initial : null,
+                 source: isImport ? (method==="escanear"?"escaneo":"importado") : "nuevo",
                  sourceFile: isImport ? (impMeta?.name||null) : null,
                  password:null, sharedWith:[], chain:[g], lastModified:g.timestamp };
     const ok = await store.set(id,nd);
     if(!ok){ notify("Error al crear","err"); return; }
-    setModal(null); setMIn(""); setMIn2(""); setTpl("blank"); resetImport();
-    setD(nd); setTitle(name); setContent(nd.content); setUnlocked(true);
-    setEdit(true); setUrlDoc(id); setScreen("doc");
+
+    if(isImport && formKey){
+      notify(filled
+        ? `${filled} campo${filled===1?"":"s"} llenado${filled===1?"":"s"} automáticamente ✓`
+        : "No se reconocieron campos. Llénalos a mano.", filled?"ok":"err");
+    }
+
+    closeCreate();
+    setD(nd); setTitle(name); setContent(nd.content); setFields(nd.fields||{});
+    setUnlocked(true); setEdit(true); setUrlDoc(id); setScreen("doc");
+  };
+
+  // ← NUEVO: abre y cierra el asistente de creación en un solo lugar
+  const openCreate = ()=>{
+    setMIn(""); setMIn2(""); setTpl("contrato");
+    setMethod(null); setCreateStep(0); resetImport();
+    setModal({t:"create"});
+  };
+  const closeCreate = ()=>{
+    setModal(null); setMIn(""); setMIn2("");
+    setMethod(null); setCreateStep(0); resetImport();
   };
 
   const save = async()=>{
     setSaving(true);
+    // ← ACTUALIZADO: si el documento usa plantilla visual, los campos
+    // se serializan a texto para que la cadena siga hasheando contenido legible.
+    const body = d.tplId ? serializeForm(d.tplId, fields) : content;
     const last = d.chain[d.chain.length-1];
-    const b = await mineBlock(last,"EDICIÓN",content.slice(0,200),user);
-    const up = {...d,title,content,chain:[...d.chain,b],lastModified:b.timestamp};
+    const b = await mineBlock(last,"EDICIÓN",body.slice(0,200),user);
+    const up = {...d,title,content:body,fields:d.tplId?fields:null,
+                chain:[...d.chain,b],lastModified:b.timestamp};
     const ok = await store.set(up.id,up);
-    if(ok){ setD(up); setDirty(false); setEdit(false); notify("Bloque registrado en la cadena ✓"); }
+    if(ok){ setD(up); setContent(body); setDirty(false); setEdit(false); notify("Bloque registrado en la cadena ✓"); }
     else notify("Error al guardar","err");
     setSaving(false);
   };
@@ -840,6 +1119,7 @@ export default function ChainDoc(){
   const openDoc = async(id)=>{
     const dd = await store.get(id); if(!dd){ notify("No encontrado","err"); return; }
     setD(dd); setTitle(dd.title); setContent(dd.content||"");
+    setFields(dd.fields||{});                                   // ← NUEVO
     setUnlocked(!dd.password); setEdit(false); setDirty(false);
     setUrlDoc(id); setScreen("doc");
   };
@@ -1078,7 +1358,7 @@ export default function ChainDoc(){
         </>)}
 
         <div className="create-zone">
-          <button className="create-btn" onClick={()=>{setMIn("");setMIn2("");setTpl("blank");setModal({t:"create"});}}>
+          <button className="create-btn" onClick={openCreate}>
             <span>Crear documento</span><b>+</b>
           </button>
         </div>
@@ -1153,7 +1433,11 @@ export default function ChainDoc(){
       )}
 
       <div className="paper">
-        {editMode
+        {/* ← NUEVO: si el documento tiene plantilla visual, se dibuja como formulario */}
+        {d.tplId && FORMS[d.tplId] ? (
+          <FormDoc formKey={d.tplId} fields={fields} editable={editMode}
+            onChange={f=>{setFields(f);setDirty(true);}} />
+        ) : editMode
           ? <textarea className="paper-ta" value={content} placeholder="Comienza a escribir…"
               onChange={e=>{setContent(e.target.value);setDirty(true);}} />
           : <div className={`paper-ro ${!d.content?"empty-txt":""}`}>{d.content||"Este documento aún no tiene contenido. Presiona «Editar» para comenzar."}</div>}
@@ -1228,17 +1512,17 @@ export default function ChainDoc(){
     return (
       <div className="menu-ov" onClick={()=>setMenu(false)}>
         <div className="menu" onClick={e=>e.stopPropagation()}>
-          <div className="menu-av">👤</div>
+          <div className="menu-av"><Icon n="account_circle" size={38}/></div>
           <div className="menu-name">{user}</div>
           <div className="menu-mail">{acctEmail}</div>{/* ← NUEVO */}
           <button className="menu-item" onClick={()=>{setMenu(false);setPass("");setMIn(user);setModal({t:"settings"});}}>
             <IcoGear/> Configuración
           </button>
-          <button className="menu-item" onClick={()=>{setMenu(false);goHome();}}>🏠 Inicio</button>
+          <button className="menu-item" onClick={()=>{setMenu(false);goHome();}}><Icon n="home" size={22}/> Inicio</button>
           {/* ← NUEVO: sin esto no había forma de cambiar de cuenta */}
-          <button className="menu-item" onClick={doLogout}>🚪 Cerrar sesión</button>
+          <button className="menu-item" onClick={doLogout}><Icon n="logout" size={22}/> Cerrar sesión</button>
           <button className="create-btn" style={{marginTop:8}}
-            onClick={()=>{setMenu(false);setMIn("");setMIn2("");setTpl("blank");setModal({t:"create"});}}>
+            onClick={()=>{setMenu(false);openCreate();}}>
             <span>Crear documento</span><b>+</b>
           </button>
           <button className="menu-x" onClick={()=>setMenu(false)}>✕</button>
@@ -1249,21 +1533,47 @@ export default function ChainDoc(){
 
   function Modals(){
     if(modal.t==="create") return (
-      <div className="ov" onClick={()=>{if(!imp){setModal(null);resetImport();}}}><div className="modal wide" onClick={e=>e.stopPropagation()}>
-        <h2>Crear nuevo</h2>
-        <p className="sub">Elige una plantilla o empieza en blanco.</p>
-        <div className="tpl-grid">
-          {TEMPLATES.map(t=>(
-            <div key={t.id} className={`tpl ${tpl===t.id?"sel":""}`}
-              onClick={()=>{setTpl(t.id); resetImport();}}>
-              <span className="tpl-ico">{t.id==="subir"?<IcoUpload/>:t.ico}</span>
-              <span className="tpl-n">{t.name}</span>
-            </div>
-          ))}
-        </div>
+      <div className="ov" onClick={()=>{if(!imp)closeCreate();}}><div className="modal wide" onClick={e=>e.stopPropagation()}>
+
+        {/* ── PASO 1: TIPO DE DOCUMENTO ── */}
+        {/* ← NUEVO */}
+        {createStep===0 && (<>
+          <h2>¿Qué vas a crear?</h2>
+          <p className="sub">Elige el tipo de documento.</p>
+          <div className="tpl-grid">
+            {TEMPLATES.map(t=>(
+              <div key={t.id} className={`tpl ${tpl===t.id?"sel":""}`}
+                onClick={()=>{ setTpl(t.id); setMethod(null); resetImport(); setCreateStep(1); }}>
+                <span className="tpl-ico"><Icon n={t.ico} size={40}/></span>
+                <span className="tpl-n">{t.name}</span>
+              </div>
+            ))}
+          </div>
+          <div className="modal-row">
+            <button className="btn btn-secondary" onClick={closeCreate}>Cancelar</button>
+          </div>
+        </>)}
+
+        {/* ── PASO 2: MÉTODO ── */}
+        {/* ← NUEVO */}
+        {createStep===1 && (<>
+          <h2>{TEMPLATES.find(x=>x.id===tpl)?.name}</h2>
+          <p className="sub">¿Cómo quieres empezar?</p>
+          <div className="tpl-grid">
+            {METHODS.map(m=>(
+              <div key={m.id} className={`tpl ${method===m.id?"sel":""}`}
+                onClick={()=>{ setMethod(m.id); resetImport(); }}>
+                <span className="tpl-ico"><Icon n={m.ico} size={40}/></span>
+                <span className="tpl-n">{m.name}</span>
+              </div>
+            ))}
+          </div>
+          {method && <p className="imp-hint" style={{textAlign:"center",marginTop:-4}}>
+            {METHODS.find(m=>m.id===method)?.desc}
+          </p>}
 
         {/* ── SUBIR ARCHIVO ── */}
-        {tpl==="subir" && !impText && !imp && (
+        {method==="subir" && !impText && !imp && (
           <>
             <label
               className={`drop-zone ${dragOver?"over":""}`}
@@ -1272,7 +1582,7 @@ export default function ChainDoc(){
               onDragLeave={()=>setDragOver(false)}
               onDrop={onDrop}
             >
-              <span className="dz-ico">📄</span>
+              <span className="dz-ico"><Icon n="description" size={44}/></span>
               <div className="dz-t">Arrastra tu archivo aquí o haz clic para elegirlo</div>
               <div className="dz-s">Extraemos el texto y lo dejamos listo para editar.</div>
               <div className="dz-formats">PDF · DOCX · TXT · MD — hasta 20 MB</div>
@@ -1280,24 +1590,24 @@ export default function ChainDoc(){
                 onChange={e=>handleFile(e.target.files?.[0])} />
             </label>
             <p className="imp-hint" style={{textAlign:"center"}}>
-              ¿Tu PDF es un escaneo sin texto seleccionable? Usa la opción <strong>Escanear</strong>.
+              ¿Tu PDF es un escaneo sin texto seleccionable? Usa <strong>Escanear con foto</strong>.
             </p>
           </>
         )}
 
         {/* ── ESCANEAR ── */}
-        {tpl==="escanear" && !impText && !imp && (
+        {method==="escanear" && !impText && !imp && (
           <>
             <div className="cam-row">
               <label className="cam-opt">
-                <span className="cam-opt-ico">📷</span>
+                <span className="cam-opt-ico"><Icon n="photo_camera" size={34}/></span>
                 <div className="cam-opt-t">Tomar foto</div>
                 <div className="cam-opt-s">Abre la cámara del dispositivo</div>
                 <input type="file" accept={ACCEPTED_IMAGES} capture="environment" style={{display:"none"}}
                   onChange={e=>handleFile(e.target.files?.[0], true)} />
               </label>
               <label className="cam-opt">
-                <span className="cam-opt-ico">🖼️</span>
+                <span className="cam-opt-ico"><Icon n="image" size={34}/></span>
                 <div className="cam-opt-t">Elegir imagen</div>
                 <div className="cam-opt-s">Desde tu galería o carpeta</div>
                 <input type="file" accept={ACCEPTED_IMAGES} style={{display:"none"}}
@@ -1351,25 +1661,28 @@ export default function ChainDoc(){
           </div>
         )}
 
-        <input className="inp" style={{marginTop:20}}
-          placeholder={tpl==="carpeta"?"Nombre de la carpeta":"Nombre del documento"}
-          value={mIn} onChange={e=>setMIn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&createDoc()} />
-        {tpl!=="carpeta" && (<>
+        {/* ← ACTUALIZADO: nombre y carpeta sólo aparecen cuando ya hay método */}
+        {method && (<>
+          <input className="inp" style={{marginTop:20}} placeholder="Nombre del documento"
+            value={mIn} onChange={e=>setMIn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&createDoc()} />
           <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Guardar en carpeta (opcional):</p>
           <div className="pills">
             <button className={`pill ${mIn2===""?"sel":""}`} onClick={()=>setMIn2("")}>Sin carpeta</button>
             {folders.map(f=><button key={f} className={`pill ${mIn2===f?"sel":""}`} onClick={()=>setMIn2(f)}>{f}</button>)}
           </div>
         </>)}
+
         <div className="modal-row">
-          <button className="btn btn-secondary" onClick={()=>{setModal(null);resetImport();}}>Cancelar</button>
-          <button className="btn btn-primary" onClick={createDoc} disabled={!!imp}>
-            {tpl==="carpeta" ? "Crear carpeta"
-             : tpl==="subir" ? "Importar documento"
-             : tpl==="escanear" ? "Guardar escaneo"
+          {/* ← NUEVO: regresar al paso 1 */}
+          <button className="btn btn-secondary" disabled={!!imp}
+            onClick={()=>{ setCreateStep(0); setMethod(null); resetImport(); }}>Atrás</button>
+          <button className="btn btn-primary" onClick={createDoc} disabled={!!imp||!method}>
+            {method==="subir" ? "Importar documento"
+             : method==="escanear" ? "Guardar escaneo"
              : "Crear documento"}
           </button>
         </div>
+        </>)}
       </div></div>
     );
 
