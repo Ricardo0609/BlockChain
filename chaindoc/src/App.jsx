@@ -11,6 +11,10 @@ import {                                                            // ← NUEVO
   signUp, signIn, logOut, resetPassword,
   watchAuth, getProfile, saveProfile, authError
 } from "./auth";
+import {                                                            // ← NUEVO
+  bioAvailable, bioRegister, bioAssert, bioVerify, bioError,
+  hexToBytes, deviceLabel
+} from "./biometric";
 
 const store = {
   async get(id){ try{const s=await getDoc(doc(db,"documents",id));return s.exists()?s.data():null;}catch{return null;} },
@@ -282,6 +286,15 @@ img,svg{max-width:100%}
   align-items:center;justify-content:center;white-space:nowrap;word-wrap:normal;
   direction:ltr;flex:0 0 auto;overflow:hidden;
   font-feature-settings:'liga';-webkit-font-smoothing:antialiased;user-select:none}
+
+/* ← NUEVO: distintivo de firma biométrica en el historial */
+.bio-badge{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:13px;
+  color:var(--gris-300);padding:6px 10px;border-radius:8px;background:rgba(0,0,0,.03)}
+.bio-badge.ok{color:#1a7f4b;background:rgba(26,127,75,.08)}
+
+/* ← NUEVO: separador "o usa tu código" en el modal de firma */
+.sign-or{display:flex;align-items:center;gap:12px;margin:18px 0 14px;color:var(--gris-300);font-size:13px}
+.sign-or::before,.sign-or::after{content:"";flex:1;height:1px;background:var(--bordes)}
 
 .menu-name{font-family:var(--f-t);font-weight:600;font-size:20px;text-align:center}
 
@@ -800,6 +813,9 @@ export default function ChainDoc(){
   const [email,setEmail]     = useState("");           // campo del formulario
   const [pass,setPass]       = useState("");
   const [signCodeHash,setSignCodeHash] = useState(null); // ← ACTUALIZADO: hash, ya no texto plano
+  const [bioCreds,setBioCreds] = useState([]);   // ← NUEVO: credenciales WebAuthn del perfil
+  const [bioOk,setBioOk]       = useState(false); // ← NUEVO: el dispositivo soporta biometría
+  const [bioBusy,setBioBusy]   = useState(false); // ← NUEVO: esperando a Face ID
   const [title,setTitle]     = useState("");
   const [content,setContent] = useState("");
   const [dirty,setDirty]     = useState(false);
@@ -833,6 +849,9 @@ export default function ChainDoc(){
   useEffect(()=>{ const h=()=>setDrop(null); document.addEventListener("click",h); return ()=>document.removeEventListener("click",h); },[]);
   useEffect(()=>{ localStorage.setItem("cd_folders",JSON.stringify(folders)); },[folders]);
 
+  // ← NUEVO: se pregunta una vez si el dispositivo tiene Face ID / huella
+  useEffect(()=>{ bioAvailable().then(setBioOk); },[]);
+
   const refresh = async(id=uid, mail=acctEmail)=>{             // ← ACTUALIZADO
     const l = await store.list(id, mail);
     l.sort((a,b)=>new Date(b.lastModified)-new Date(a.lastModified));
@@ -845,6 +864,7 @@ export default function ChainDoc(){
     const stop = watchAuth(async(account)=>{
       if(!account){
         setUid(null); setUser(""); setAcctEmail(""); setSignCodeHash(null);
+        setBioCreds([]);                                       // ← NUEVO
         setDocs([]); setD(null); setScreen("auth");
         return;
       }
@@ -854,6 +874,7 @@ export default function ChainDoc(){
       setUser(profile?.name || account.displayName || "");
       setAcctEmail(account.email || "");
       setSignCodeHash(profile?.signCodeHash || null);
+      setBioCreds(profile?.bioCreds || []);                    // ← NUEVO
 
       // Sin código de firma la cuenta está incompleta: mándalo a crearlo.
       // (Se evalúa el perfil, no el estado local, porque este callback
@@ -1088,6 +1109,72 @@ export default function ChainDoc(){
     await sign();
   };
 
+  // ── BIOMETRÍA ──
+  // ← NUEVO: registra Face ID / Touch ID / huella para esta cuenta y dispositivo.
+  const enrollBio = async()=>{
+    if(!bioOk){
+      notify(window.isSecureContext
+        ? "Este dispositivo no tiene verificación biométrica"
+        : "La biometría requiere HTTPS", "err");
+      return false;
+    }
+    setBioBusy(true);
+    try{
+      const cred = await bioRegister({ uid, name:user, email:acctEmail });
+      const next = [...bioCreds.filter(c=>c.credId!==cred.credId), cred];
+      const ok = await saveProfile(uid,{ bioCreds:next });
+      if(!ok){ notify("No se pudo guardar la credencial","err"); return false; }
+      setBioCreds(next);
+      notify(`Biometría activada en ${cred.device} ✓`);
+      return true;
+    }catch(err){
+      notify(bioError(err),"err");
+      return false;
+    }finally{ setBioBusy(false); }
+  };
+
+  // ← NUEVO: firma el documento validando la identidad con el enclave seguro.
+  // El reto que firma el dispositivo es el hash del bloque, así que la
+  // firma queda atada a ese bloque y no se puede reutilizar en otro.
+  const signWithBio = async()=>{
+    if(!bioCreds.length){ notify("No tienes biometría activada","err"); return; }
+    setBioBusy(true);
+    try{
+      const last = d.chain[d.chain.length-1];
+      const b = await mineBlock(last,"FIRMA",`Firma biométrica desde ${deviceLabel()}`,user);
+
+      const challenge = hexToBytes(b.hash);
+      const assertion = await bioAssert(bioCreds.map(c=>c.credId), challenge);
+
+      const cred = bioCreds.find(c=>c.credId===assertion.credId);
+      if(!cred){ notify("Credencial desconocida","err"); return; }
+
+      // Si la llave pública está disponible, se exige que la firma sea válida.
+      if(cred.publicKey){
+        const valid = await bioVerify(cred, assertion, challenge);
+        if(!valid){ notify("La firma biométrica no pudo verificarse","err"); return; }
+      }
+
+      b.signature = {
+        method:"webauthn",
+        credId: assertion.credId,
+        device: cred.device || null,
+        alg: cred.alg ?? null,
+        verified: !!cred.publicKey,
+        signature: assertion.signature,
+        authenticatorData: assertion.authenticatorData,
+        clientDataJSON: assertion.clientDataJSON,
+      };
+
+      const up = {...d, chain:[...d.chain,b], lastModified:b.timestamp};
+      const ok = await store.set(up.id,up);
+      if(ok){ setD(up); setModal(null); setPass(""); notify(`✦ Firma biométrica de ${user} registrada`); }
+      else notify("Error al firmar","err");
+    }catch(err){
+      notify(bioError(err),"err");
+    }finally{ setBioBusy(false); }
+  };
+
   const doShare = async(who)=>{
     const last = d.chain[d.chain.length-1];
     const b = await mineBlock(last,"COMPARTIDO",`Compartido con: ${who}`,user);
@@ -1209,14 +1296,35 @@ export default function ChainDoc(){
         </>)}
 
         {authMode==="signup" && authStep===2 && (<>
-          <p className="auth-sub" style={{fontSize:20,color:"var(--negro)",marginBottom:28}}>
-            ¿Deseas activar el desbloqueo biométrico para iniciar sesión y firmar tus documentos?
+          {/* ← ACTUALIZADO: antes sólo mostraba una notificación sin hacer nada. */}
+          <p className="auth-sub" style={{fontSize:20,color:"var(--negro)",marginBottom:12}}>
+            {bioOk
+              ? "¿Deseas activar el desbloqueo biométrico para firmar tus documentos?"
+              : "Este dispositivo no tiene verificación biométrica disponible."}
+          </p>
+          <p className="auth-sub" style={{fontSize:14,marginBottom:24}}>
+            {bioOk
+              ? `Se registrará en ${deviceLabel()}. Tu código de firma seguirá funcionando como respaldo.`
+              : window.isSecureContext
+                ? "Podrás activarla más tarde desde Configuración."
+                : "La biometría requiere una conexión segura (HTTPS)."}
           </p>
           <div className="auth-actions">
-            <button className="btn btn-secondary" onClick={finishAuth}>Ahora no</button>
-            <button className="btn btn-primary" onClick={()=>{notify("Biometría activada ✓");finishAuth();}}>Activar</button>
+            <button className="btn btn-secondary" onClick={finishAuth} disabled={bioBusy}>
+              {bioOk ? "Ahora no" : "Continuar"}
+            </button>
+            {bioOk && (
+              <button className="btn btn-primary" disabled={bioBusy}
+                onClick={async()=>{ await enrollBio(); finishAuth(); }}>
+                {bioBusy ? "Esperando…" : "Activar"}
+              </button>
+            )}
           </div>
-          <div className="fingerprint" onClick={()=>{notify("Biometría activada ✓");finishAuth();}}><IcoFinger/></div>
+          {bioOk && (
+            <div className="fingerprint" onClick={async()=>{ if(!bioBusy){ await enrollBio(); finishAuth(); } }}>
+              <IcoFinger/>
+            </div>
+          )}
         </>)}
       </div></div>
     </>);
@@ -1483,6 +1591,15 @@ export default function ChainDoc(){
                    : b.action==="FIRMA" ? "Firma"
                    : b.content}
                 </div>
+                {/* ← NUEVO: distingue una firma biométrica de una con código */}
+                {b.signature?.method==="webauthn" && (
+                  <div className={`bio-badge ${b.signature.verified?"ok":""}`}>
+                    <IcoFinger/>
+                    {b.signature.verified
+                      ? `Verificada biométricamente en ${b.signature.device||"dispositivo"}`
+                      : `Firmada con biometría en ${b.signature.device||"dispositivo"}`}
+                  </div>
+                )}
                 <button className="hcard-eye" onClick={()=>setShowHashes({...showHashes,[b.index]:!showHashes[b.index]})}>
                   <IcoEye/> Ver hashes
                 </button>
@@ -1726,20 +1843,36 @@ export default function ChainDoc(){
       </div></div>
     );
 
-    if(modal.t==="sign") return (
-      <div className="ov" onClick={()=>setModal(null)}><div className="modal" onClick={e=>e.stopPropagation()}>
+    if(modal.t==="sign"){
+      const canBio = bioOk && bioCreds.length>0;   // ← NUEVO
+      return (
+      <div className="ov" onClick={()=>{if(!bioBusy)setModal(null);}}><div className="modal" onClick={e=>e.stopPropagation()}>
         <h2>Firmar documento</h2>
-        <p className="sub">Ingresa tu código de firma. La firma quedará registrada permanentemente en la cadena a nombre de <strong>{user}</strong>.</p>
+        <p className="sub">
+          La firma quedará registrada permanentemente en la cadena a nombre de <strong>{user}</strong>.
+        </p>
+
+        {/* ← NUEVO: la huella ahora sí dispara la verificación real */}
+        {canBio && (<>
+          <button className="btn btn-primary" style={{width:"100%"}} disabled={bioBusy}
+            onClick={signWithBio}>
+            {bioBusy ? "Esperando verificación…" : `Firmar con ${deviceLabel()==="iPhone"||deviceLabel()==="iPad"?"Face ID":"tu biometría"}`}
+          </button>
+          <div className="fingerprint" onClick={()=>{ if(!bioBusy) signWithBio(); }}><IcoFinger/></div>
+          <div className="sign-or"><span>o usa tu código</span></div>
+        </>)}
+
         <input className="inp" type="password" placeholder="Código de firma" value={pass}
-          onChange={e=>setPass(e.target.value)} autoFocus
+          onChange={e=>setPass(e.target.value)} autoFocus={!canBio}
           onKeyDown={e=>{if(e.key==="Enter"){ trySign(); }}} />
         <div className="modal-row">
-          <button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={()=>{ trySign(); }}>Firmar</button>
+          <button className="btn btn-secondary" onClick={()=>setModal(null)} disabled={bioBusy}>Cancelar</button>
+          <button className="btn btn-primary" onClick={()=>{ trySign(); }} disabled={bioBusy}>Firmar</button>
         </div>
-        <div className="fingerprint" onClick={()=>{ trySign(); }}><IcoFinger/></div>
+        {!canBio && <div className="fingerprint" onClick={()=>{ trySign(); }}><IcoFinger/></div>}
       </div></div>
-    );
+      );
+    }
 
     if(modal.t==="lock") return (
       <div className="ov" onClick={()=>setModal(null)}><div className="modal" onClick={e=>e.stopPropagation()}>
@@ -1792,6 +1925,22 @@ export default function ChainDoc(){
         <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Nuevo código de firma:</p>
         <input className="inp" type="password" placeholder="Déjalo vacío para no cambiarlo"
           value={pass} onChange={e=>setPass(e.target.value)} />
+        {/* ← NUEVO: activar o añadir biometría después del registro */}
+        {bioOk && (<>
+          <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Verificación biométrica:</p>
+          {bioCreds.length>0 && (
+            <p style={{fontSize:13,color:"var(--gris-300)",marginBottom:8}}>
+              Activa en: {bioCreds.map(c=>c.device).join(", ")}
+            </p>
+          )}
+          <button className="btn btn-secondary" style={{width:"100%",marginBottom:16}}
+            disabled={bioBusy} onClick={enrollBio}>
+            {bioBusy ? "Esperando…"
+              : bioCreds.some(c=>c.device===deviceLabel())
+                ? `Volver a registrar ${deviceLabel()}`
+                : `Activar en ${deviceLabel()}`}
+          </button>
+        </>)}
         <div className="modal-row">
           <button className="btn btn-secondary" onClick={()=>{setPass("");setModal(null);}}>Cancelar</button>
           {/* ← ACTUALIZADO: ahora persiste en Firestore, antes sólo vivía en memoria */}
