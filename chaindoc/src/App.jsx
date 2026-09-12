@@ -15,6 +15,13 @@ import {                                                            // ← NUEVO
   bioAvailable, bioRegister, bioAssert, bioVerify, bioError,
   hexToBytes, deviceLabel
 } from "./biometric";
+import {                                                            // ← NUEVO
+  analyzeContract, aiConfigured, hashFile, expedienteStatus, listModels
+} from "./smartContract";
+import {                                                            // ← ACTUALIZADO
+  uploadEvidence, deleteEvidence, openEvidence, storageError,
+  isPreviewable, LIMITE_KB
+} from "./storage";
 
 const store = {
   async get(id){ try{const s=await getDoc(doc(db,"documents",id));return s.exists()?s.data():null;}catch{return null;} },
@@ -286,6 +293,81 @@ img,svg{max-width:100%}
   align-items:center;justify-content:center;white-space:nowrap;word-wrap:normal;
   direction:ltr;flex:0 0 auto;overflow:hidden;
   font-feature-settings:'liga';-webkit-font-smoothing:antialiased;user-select:none}
+
+/* ← NUEVO: sección de documentos adjuntos */
+.adj{margin-top:22px;border-top:1px solid var(--bordes);padding-top:16px}
+.adj-h{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+.adj-t{font-weight:600;font-size:16px;color:var(--negro)}
+.adj-n{font-size:12px;padding:2px 9px;border-radius:99px;background:var(--gris-100,#f3f3f5);color:var(--gris-400)}
+.adj-empty{font-size:14px;color:var(--gris-300);font-style:italic}
+.adj-lock{border:1px dashed var(--bordes);border-radius:12px;padding:18px;text-align:center}
+.adj-lock p{font-size:14px;color:var(--gris-300);margin:0 0 12px;line-height:1.5}
+.adj-row{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;
+  padding:12px;border:1px solid var(--bordes);border-radius:10px;margin-bottom:8px;flex-wrap:wrap}
+.adj-row-b{flex:1;min-width:180px}
+.adj-row-t{font-weight:600;font-size:15px;color:var(--negro);word-break:break-all}
+.adj-row-m{font-size:12px;color:var(--gris-300);margin-top:2px}
+.adj-acts{display:flex;gap:6px;align-items:center;flex:0 0 auto}
+
+/* ← NUEVO: distintivo de expediente en la tarjeta del inicio */
+.chip-exp{background:var(--gris-100,#f3f3f5);color:var(--gris-400);font-weight:600}
+.chip-exp.completo{background:rgba(20,130,90,.12);color:#14825a}
+.chip-exp.vencido{background:rgba(194,65,12,.12);color:#c2410c}
+
+/* ← NUEVO: asistente de contrato inteligente */
+.smart-ta{min-height:200px;resize:vertical;line-height:1.5;font-family:var(--f-p);width:100%;box-sizing:border-box}
+.smart-meta{display:flex;justify-content:space-between;font-size:12px;color:var(--gris-300);margin:-8px 0 14px}
+.smart-warn{color:#c2410c}
+.imp-fill.indet{width:40%;animation:slide 1.1s ease-in-out infinite}
+@keyframes slide{0%{margin-left:0}50%{margin-left:60%}100%{margin-left:0}}
+.smart-res{text-align:left;border:1px solid var(--bordes);border-radius:14px;padding:18px;margin-top:6px}
+.smart-res-h{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+.smart-res-t{font-family:var(--f-t);font-weight:600;font-size:19px;color:var(--negro)}
+.smart-res-s{font-size:14px;color:var(--gris-300);margin-top:3px}
+.smart-chips,.exp-chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px}
+.chip{font-size:12px;padding:4px 10px;border-radius:99px;background:var(--gris-100,#f3f3f5);color:var(--gris-400)}
+.smart-list-t{font-size:13px;font-weight:600;color:var(--gris-400);margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px}
+.smart-item{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--bordes)}
+.smart-num,.exp-check{flex:0 0 26px;height:26px;border-radius:50%;background:var(--gris-100,#f3f3f5);
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--gris-400)}
+.smart-item-b,.exp-item-b{flex:1;min-width:0}
+.smart-item-t,.exp-item-t{font-weight:600;color:var(--negro);font-size:16px}
+.smart-item-d,.exp-item-d{font-size:14px;color:var(--gris-300);margin:2px 0 6px;line-height:1.4}
+.smart-tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font-size:11px;padding:3px 8px;border-radius:6px;background:var(--gris-100,#f3f3f5);color:var(--gris-400)}
+.tag.t-entregable{background:rgba(99,102,241,.12);color:#4f46e5}
+.tag.t-comprobante{background:rgba(234,88,12,.12);color:#c2410c}
+.tag.t-documento{background:rgba(20,130,90,.12);color:#14825a}
+.smart-x{background:none;border:none;font-size:22px;line-height:1;color:var(--gris-300);cursor:pointer;padding:0 4px}
+.smart-x:hover{color:#c2410c}
+
+/* ← NUEVO: vista del expediente */
+.exp{text-align:left}
+.exp-head{border:1px solid var(--bordes);border-radius:14px;padding:16px 18px;margin-bottom:16px}
+.exp-head.completo{border-color:rgba(20,130,90,.45);background:rgba(20,130,90,.05)}
+.exp-head.vencido{border-color:rgba(194,65,12,.45);background:rgba(194,65,12,.05)}
+.exp-bar-wrap{display:flex;align-items:center;gap:12px}
+.exp-bar{flex:1;height:8px;border-radius:99px;background:var(--gris-100,#ececed);overflow:hidden}
+.exp-fill{height:100%;background:var(--negro);border-radius:99px;transition:width .35s}
+.exp-head.completo .exp-fill{background:#14825a}
+.exp-count{font-size:13px;color:var(--gris-400);font-weight:600;white-space:nowrap}
+.exp-state{font-size:14px;color:var(--gris-300);margin-top:8px}
+.exp-head.vencido .exp-state{color:#c2410c;font-weight:600}
+.exp-head.completo .exp-state{color:#14825a;font-weight:600}
+.exp-sum{font-size:15px;color:var(--gris-400);margin-bottom:14px;line-height:1.5}
+.exp-item{display:flex;gap:12px;align-items:flex-start;padding:16px 0;border-top:1px solid var(--bordes)}
+.exp-item.cumplido .exp-check{background:#14825a;color:#fff}
+.exp-up{display:inline-block;margin-top:10px;border:1px dashed var(--bordes);border-radius:9px;
+  padding:9px 14px;font-size:14px;color:var(--gris-400);cursor:pointer;transition:border-color .15s,color .15s}
+.exp-up:hover{border-color:var(--negro);color:var(--negro)}
+.exp-file{margin-top:10px;border:1px solid var(--bordes);border-radius:10px;padding:12px;background:rgba(20,130,90,.04)}
+.exp-file-n{font-weight:600;font-size:15px;color:var(--negro);word-break:break-all}
+.exp-file-m{font-size:12px;color:var(--gris-300);margin-top:2px}
+.exp-file-h{font-family:var(--f-m,ui-monospace,monospace);font-size:11px;color:var(--gris-300);
+  word-break:break-all;margin:6px 0 8px}
+.exp-src{margin-top:22px;border-top:1px solid var(--bordes);padding-top:14px}
+.exp-src summary{cursor:pointer;font-size:14px;color:var(--gris-400);font-weight:500}
+.exp-foot{font-size:12px;color:var(--gris-300);margin-top:16px;font-style:italic}
 
 /* ← NUEVO: distintivo de firma biométrica en el historial */
 .bio-badge{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:13px;
@@ -608,6 +690,8 @@ const TEMPLATES = [
   { id:"contrato", ico:"contract", name:"Contrato", body:"CONTRATO DE ARRENDAMIENTO\n\nEntre las partes:\n\nARRENDADOR: [Nombre completo]\nARRENDATARIO: [Nombre completo]\n\nOBJETO DEL CONTRATO:\n[Descripción del inmueble]\n\nPLAZO:\nEl presente contrato tendrá una vigencia de [X] meses, contados a partir del [fecha].\n\nRENTA MENSUAL:\n$[cantidad] MXN, pagaderos los primeros [X] días de cada mes.\n\nDEPÓSITO EN GARANTÍA:\n$[cantidad] MXN.\n\nOBLIGACIONES DEL ARRENDATARIO:\n1. Pagar puntualmente la renta.\n2. Conservar el inmueble en buen estado.\n3. No subarrendar sin autorización escrita.\n\nOBLIGACIONES DEL ARRENDADOR:\n1. Entregar el inmueble en condiciones habitables.\n2. Realizar reparaciones estructurales." },
   { id:"factura",  ico:"receipt_long", name:"Factura",  form:"factura", body:"" },
   { id:"recibo",   ico:"receipt", name:"Recibo",   form:"recibo",  body:"" },
+  // ← NUEVO: no crea un documento, crea un expediente con lista de comprobantes
+  { id:"inteligente", ico:"rule", name:"Contrato inteligente", smart:true, body:"" },
 ];
 
 // ← NUEVO: paso 2 del flujo de creación.
@@ -833,6 +917,11 @@ export default function ChainDoc(){
   const [tpl,setTpl]         = useState("contrato");  // ← ACTUALIZADO: tipo de documento
   const [method,setMethod]   = useState(null);        // ← NUEVO: escanear | subir | cero
   const [createStep,setCreateStep] = useState(0);     // ← NUEVO: 0 = tipo, 1 = método
+  const [smartText,setSmartText]   = useState("");    // ← NUEVO: texto del contrato base
+  const [smartRes,setSmartRes]     = useState(null);  // ← NUEVO: análisis de la IA
+  const [smartBusy,setSmartBusy]   = useState(false);
+  const [smartErr,setSmartErr]     = useState("");
+  const [filesOpen,setFilesOpen]   = useState(false); // ← NUEVO: adjuntos desbloqueados
   const [fields,setFields]   = useState({});   // valores de la plantilla visual
   const [filterF,setFilterF] = useState(null);
   const [openSec,setOpenSec] = useState({carp:true,docs:true,comp:true});
@@ -993,6 +1082,8 @@ export default function ChainDoc(){
       const fn = forceOcr ? ocrImage : extractFromFile;
       const res = await fn(file, p=>setImp(p));
       setImpText(res.text);
+      // ← NUEVO: el contrato inteligente edita ese texto antes de analizarlo
+      if(tpl==="inteligente") setSmartText(res.text);
       setImpMeta({
         name: file.name,
         pages: res.pages,
@@ -1070,11 +1161,13 @@ export default function ChainDoc(){
   const openCreate = ()=>{
     setMIn(""); setMIn2(""); setTpl("contrato");
     setMethod(null); setCreateStep(0); resetImport();
+    setSmartText(""); setSmartRes(null); setSmartErr("");   // ← NUEVO
     setModal({t:"create"});
   };
   const closeCreate = ()=>{
     setModal(null); setMIn(""); setMIn2("");
     setMethod(null); setCreateStep(0); resetImport();
+    setSmartText(""); setSmartRes(null); setSmartErr("");   // ← NUEVO
   };
 
   const save = async()=>{
@@ -1175,6 +1268,122 @@ export default function ChainDoc(){
     }finally{ setBioBusy(false); }
   };
 
+  // ── CONTRATO INTELIGENTE ──
+  // ← NUEVO: la IA sólo convierte el contrato en una lista de requisitos.
+  // Todo lo que valida después (fechas, faltantes) son reglas deterministas.
+  const runAnalysis = async()=>{
+    setSmartErr(""); setSmartBusy(true); setSmartRes(null);
+    try{
+      const res = await analyzeContract(smartText);
+      setSmartRes(res);
+      if(!mIn.trim()) setMIn(res.titulo);
+    }catch(err){
+      setSmartErr(err.message);
+    }finally{ setSmartBusy(false); }
+  };
+
+  // ← NUEVO: quitar un requisito que la IA sacó de más, antes de confirmar
+  const dropReq = (id)=>
+    setSmartRes(r=>({ ...r, requisitos:r.requisitos.filter(x=>x.id!==id) }));
+
+  // ← NUEVO
+  const createExpediente = async()=>{
+    if(!smartRes) return;
+    const name = mIn.trim() || smartRes.titulo;
+    const id = genId();
+    const numId = genNumId();
+    const g = await mineBlock(null,"CREACIÓN",
+      `Apertura de expediente «${name}» con ${smartRes.requisitos.length} requisitos`,user);
+
+    const nd = {
+      id, numId, title:name, content:smartText, folder:mIn2||null,
+      owner:user, ownerUid:uid, ownerEmail:acctEmail,
+      kind:"expediente",                       // ← lo distingue de un documento normal
+      tplId:null, fields:null,
+      requisitos: smartRes.requisitos,
+      fechaLimite: smartRes.fechaLimite,
+      montoTotal: smartRes.montoTotal,
+      moneda: smartRes.moneda,
+      partes: smartRes.partes,
+      resumen: smartRes.resumen,
+      // Queda registrado qué modelo produjo la lista, para poder auditarlo después.
+      analisis: { modelo:smartRes.modelo, fecha:smartRes.analizadoEn },
+      source:"inteligente", sourceFile:null,
+      password:null, sharedWith:[], chain:[g], lastModified:g.timestamp,
+    };
+
+    const ok = await store.set(id,nd);
+    if(!ok){ notify("Error al crear el expediente","err"); return; }
+    closeCreate();
+    setD(nd); setTitle(name); setContent(smartText); setFields({});
+    setUnlocked(true); setEdit(false); setUrlDoc(id); setScreen("doc");
+    notify(`Expediente abierto con ${smartRes.requisitos.length} requisitos ✓`);
+  };
+
+  // ← ACTUALIZADO: el archivo se guarda en Firestore (colección «evidencias»).
+  // Las imágenes grandes se comprimen solas antes de guardarse.
+  const attachEvidence = async(reqId, file)=>{
+    if(!file || !d) return;
+    setSaving(true);
+    try{
+      const hash = await hashFile(file);   // huella del archivo ORIGINAL
+      const req  = d.requisitos.find(r=>r.id===reqId);
+
+      const guardado = await uploadEvidence({ uid, docId:d.id, reqId, file });
+
+      const last = d.chain[d.chain.length-1];
+      const b = await mineBlock(last,"EVIDENCIA",
+        `${req?.titulo||reqId}: «${file.name}» (${hash.slice(0,16)}…)`,user);
+
+      const requisitos = d.requisitos.map(r=> r.id!==reqId ? r : {
+        ...r, estado:"cumplido",
+        archivo:{ nombre:file.name, tipo:guardado.tipo, tam:guardado.tam,
+                  tamOriginal:file.size, comprimida:guardado.comprimida,
+                  hash, path:guardado.path,
+                  subidoEn:b.timestamp, subidoPor:user },
+      });
+
+      const up = {...d, requisitos, chain:[...d.chain,b], lastModified:b.timestamp};
+      const ok = await store.set(up.id,up);
+      if(ok){
+        setD(up);
+        notify(guardado.comprimida
+          ? "Evidencia registrada ✓ (imagen comprimida para caber)"
+          : "Evidencia registrada en la cadena ✓");
+      }
+      else notify("Error al registrar","err");
+    }catch(e){ console.error(e); notify(storageError(e),"err"); }
+    finally{ setSaving(false); }
+  };
+
+  // ← ACTUALIZADO: además de asentarlo, borra el archivo de Storage
+  const removeEvidence = async(reqId)=>{
+    const req = d.requisitos.find(r=>r.id===reqId);
+    if(req?.archivo?.path) await deleteEvidence(req.archivo.path);
+    const last = d.chain[d.chain.length-1];
+    const b = await mineBlock(last,"EVIDENCIA",
+      `Retiro de evidencia en «${req?.titulo||reqId}»`,user);
+    const requisitos = d.requisitos.map(r=> r.id!==reqId ? r : {...r,estado:"pendiente",archivo:null});
+    const up = {...d, requisitos, chain:[...d.chain,b], lastModified:b.timestamp};
+    if(await store.set(up.id,up)){ setD(up); notify("Evidencia retirada"); }
+  };
+
+  // ← NUEVO: los adjuntos sólo se abren tras validar el código de firma
+  const unlockFiles = async()=>{
+    if(!signCodeHash){ notify("No tienes código de firma configurado","err"); return; }
+    const h = await sha256(pass.trim());
+    if(h!==signCodeHash){ notify("Código incorrecto","err"); return; }
+    setFilesOpen(true); setPass(""); setModal(null);
+    notify("Documentos desbloqueados ✓");
+  };
+
+  // ← ACTUALIZADO: recupera el archivo desde Firestore y lo abre o descarga
+  const getFile = async(archivo, forzarDescarga)=>{
+    try{
+      await openEvidence(archivo?.path, archivo?.nombre, forzarDescarga);
+    }catch(e){ notify(storageError(e),"err"); }
+  };
+
   const doShare = async(who)=>{
     const last = d.chain[d.chain.length-1];
     const b = await mineBlock(last,"COMPARTIDO",`Compartido con: ${who}`,user);
@@ -1207,6 +1416,7 @@ export default function ChainDoc(){
     const dd = await store.get(id); if(!dd){ notify("No encontrado","err"); return; }
     setD(dd); setTitle(dd.title); setContent(dd.content||"");
     setFields(dd.fields||{});                                   // ← NUEVO
+    setFilesOpen(false);                                        // ← NUEVO: se re-bloquea al abrir otro
     setUnlocked(!dd.password); setEdit(false); setDirty(false);
     setUrlDoc(id); setScreen("doc");
   };
@@ -1340,6 +1550,8 @@ export default function ChainDoc(){
 
     const Card = (x)=>{
       const sg = x.chain.filter(b=>b.action==="FIRMA").length;
+      // ← NUEVO: estado del expediente para el distintivo de la tarjeta
+      const ex = x.kind==="expediente" ? expedienteStatus(x) : null;
       return (
         <div key={x.id} className="card" onClick={()=>openDoc(x.id)}>
           <div className="card-h">
@@ -1350,6 +1562,14 @@ export default function ChainDoc(){
           <div className="card-prev">{x.content||"Sin contenido aún…"}</div>
           <div className="card-meta">Última edición: {fmtShort(x.lastModified)}</div>
           <div className="chips">
+            {/* ← NUEVO: los expedientes muestran su avance */}
+            {ex && (
+              <span className={`chip chip-exp ${ex.estado}`}>
+                {ex.completo ? "✓ Expediente completo"
+                 : ex.vencido ? `⚠ Vencido · ${ex.cumplidos}/${ex.total}`
+                 : `${ex.cumplidos}/${ex.total} comprobantes`}
+              </span>
+            )}
             <span className="chip chip-b">{x.chain.length} bloques</span>
             {sg>0 && <span className="chip chip-s">✦ {sg} firma{sg!==1?"s":""}</span>}
             {x.folder && <span className="chip chip-f">📁 {x.folder}</span>}
@@ -1541,8 +1761,127 @@ export default function ChainDoc(){
       )}
 
       <div className="paper">
-        {/* ← NUEVO: si el documento tiene plantilla visual, se dibuja como formulario */}
-        {d.tplId && FORMS[d.tplId] ? (
+        {/* ← NUEVO: los expedientes se ven como lista de comprobantes, no como papel */}
+        {d.kind==="expediente" ? (()=>{
+          const st = expedienteStatus(d);
+          return (<div className="exp">
+            <div className={`exp-head ${st.estado}`}>
+              <div className="exp-bar-wrap">
+                <div className="exp-bar"><div className="exp-fill" style={{width:`${st.porcentaje}%`}}/></div>
+                <span className="exp-count">{st.cumplidos} de {st.total}</span>
+              </div>
+              <div className="exp-state">
+                {st.completo ? "Expediente completo"
+                 : st.vencido ? "Fecha límite vencida"
+                 : st.dias!=null ? `Faltan ${st.dias} día${st.dias===1?"":"s"}`
+                 : "En curso"}
+              </div>
+            </div>
+
+            {d.resumen && <p className="exp-sum">{d.resumen}</p>}
+
+            <div className="exp-chips">
+              {d.fechaLimite && <span className="chip">Límite: {d.fechaLimite}</span>}
+              {d.montoTotal!=null && <span className="chip">{d.moneda||"MXN"} ${d.montoTotal.toLocaleString("es-MX")}</span>}
+              {(d.partes||[]).map((p,i)=><span key={i} className="chip">{p.rol}: {p.nombre}</span>)}
+            </div>
+
+            {(d.requisitos||[]).map((r,i)=>(
+              <div key={r.id} className={`exp-item ${r.estado}`}>
+                <div className="exp-check">{r.estado==="cumplido" ? "✓" : i+1}</div>
+                <div className="exp-item-b">
+                  <div className="exp-item-t">{r.titulo}</div>
+                  <div className="exp-item-d">{r.descripcion}</div>
+                  <div className="smart-tags">
+                    <span className={`tag t-${r.tipo}`}>{r.tipo}</span>
+                    {r.monto!=null && <span className="tag">${r.monto.toLocaleString("es-MX")}</span>}
+                    {r.fechaLimite && <span className="tag">{r.fechaLimite}</span>}
+                    {!r.obligatorio && <span className="tag">opcional</span>}
+                  </div>
+
+                  {r.archivo ? (
+                    <div className="exp-file">
+                      <div className="exp-file-n">{r.archivo.nombre}</div>
+                      <div className="exp-file-m">
+                        {(r.archivo.tam/1024).toFixed(0)} KB · {fmtFull(r.archivo.subidoEn)} · {r.archivo.subidoPor}
+                      </div>
+                      <div className="exp-file-h">SHA-256 {r.archivo.hash}</div>
+                      <button className="btn btn-tertiary" onClick={()=>removeEvidence(r.id)}>Retirar</button>
+                    </div>
+                  ) : (
+                    <label className="exp-up">
+                      <span>Adjuntar comprobante</span>
+                      <input type="file" style={{display:"none"}} disabled={saving}
+                        onChange={e=>{ attachEvidence(r.id, e.target.files?.[0]); e.target.value=""; }} />
+                    </label>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            <details className="exp-src">
+              <summary>Ver contrato base</summary>
+              <div className="paper-ro">{d.content}</div>
+            </details>
+
+            {/* ← NUEVO: documentos adjuntos, protegidos por el código de firma */}
+            {(()=>{
+              const conArchivo = (d.requisitos||[]).filter(r=>r.archivo);
+              return (
+                <div className="adj">
+                  <div className="adj-h">
+                    <span className="adj-t">Documentos adjuntos</span>
+                    <span className="adj-n">{conArchivo.length}</span>
+                  </div>
+
+                  {conArchivo.length===0 ? (
+                    <p className="adj-empty">
+                      Aún no se ha adjuntado ningún comprobante. Límite actual: {LIMITE_KB} KB por archivo
+                      (las imágenes se comprimen solas).
+                    </p>
+                  ) : !filesOpen ? (
+                    <div className="adj-lock">
+                      <p>Los comprobantes están protegidos. Ingresa tu código de firma para consultarlos y descargarlos.</p>
+                      <button className="btn btn-secondary"
+                        onClick={()=>{setPass("");setModal({t:"files"});}}>
+                        Desbloquear documentos
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {conArchivo.map(r=>(
+                        <div key={r.id} className="adj-row">
+                          <div className="adj-row-b">
+                            <div className="adj-row-t">{r.archivo.nombre}</div>
+                            <div className="adj-row-m">
+                              {r.titulo} · {(r.archivo.tam/1024).toFixed(0)} KB
+                              {r.archivo.comprimida && " (comprimida)"} · {fmtFull(r.archivo.subidoEn)}
+                            </div>
+                            <div className="exp-file-h">SHA-256 {r.archivo.hash}</div>
+                          </div>
+                          <div className="adj-acts">
+                            {isPreviewable(r.archivo.tipo) && (
+                              <button className="btn btn-tertiary" onClick={()=>getFile(r.archivo,false)}>Ver</button>
+                            )}
+                            <button className="btn btn-tertiary" onClick={()=>getFile(r.archivo,true)}>Descargar</button>
+                          </div>
+                        </div>
+                      ))}
+                      <button className="btn btn-tertiary" style={{marginTop:10}}
+                        onClick={()=>setFilesOpen(false)}>Volver a bloquear</button>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+            {d.analisis && (
+              <p className="exp-foot">
+                Requisitos extraídos por {d.analisis.modelo} el {fmtFull(d.analisis.fecha)}.
+                Revisados y aceptados por {d.owner}.
+              </p>
+            )}
+          </div>);
+        })() : d.tplId && FORMS[d.tplId] ? (
           <FormDoc formKey={d.tplId} fields={fields} editable={editMode}
             onChange={f=>{setFields(f);setDirty(true);}} />
         ) : editMode
@@ -1649,8 +1988,10 @@ export default function ChainDoc(){
   }
 
   function Modals(){
-    if(modal.t==="create") return (
-      <div className="ov" onClick={()=>{if(!imp)closeCreate();}}><div className="modal wide" onClick={e=>e.stopPropagation()}>
+    if(modal.t==="create"){
+      const isSmart = tpl==="inteligente";   // ← NUEVO
+      return (
+      <div className="ov" onClick={()=>{if(!imp&&!smartBusy)closeCreate();}}><div className="modal wide" onClick={e=>e.stopPropagation()}>
 
         {/* ── PASO 1: TIPO DE DOCUMENTO ── */}
         {/* ← NUEVO */}
@@ -1688,6 +2029,93 @@ export default function ChainDoc(){
           {method && <p className="imp-hint" style={{textAlign:"center",marginTop:-4}}>
             {METHODS.find(m=>m.id===method)?.desc}
           </p>}
+
+        {/* ── CONTRATO INTELIGENTE ── */}
+        {/* ← NUEVO: el contrato se escribe o importa, y de ahí sale el expediente */}
+        {isSmart && method && (method==="cero" || impText) && (<>
+          {!smartRes && (<>
+            <textarea className="inp smart-ta"
+              placeholder={"Pega o escribe aquí el contrato.\n\nEjemplo: «Se contrata el diseño de un póster para la campaña X, con fecha límite del 14 de septiembre de 2026, por $12,000 MXN. El diseñador contratará a un fotógrafo por $4,000 MXN y deberá comprobar ese gasto.»"}
+              value={smartText} onChange={e=>{setSmartText(e.target.value);setSmartErr("");}} />
+            <div className="smart-meta">
+              <span>{smartText.trim().length} caracteres</span>
+              {!aiConfigured() && <span className="smart-warn">Falta configurar la llave de Gemini</span>}
+            </div>
+            {smartErr && (
+              <div className="imp-error">
+                {smartErr}
+                {/* ← NUEVO: muestra qué modelos acepta realmente la llave */}
+                <div style={{marginTop:10}}>
+                  <button className="btn btn-secondary" style={{padding:"8px 16px",fontSize:14}}
+                    onClick={async()=>{
+                      try{
+                        const ms = await listModels();
+                        setSmartErr(`Modelos disponibles para tu llave (${ms.length}): ${ms.slice(0,8).join(", ")}`);
+                      }catch(e){ setSmartErr(e.message); }
+                    }}>
+                    Ver modelos disponibles
+                  </button>
+                </div>
+              </div>
+            )}
+            <button className="btn btn-primary" style={{width:"100%"}}
+              disabled={smartBusy || smartText.trim().length<80}
+              onClick={runAnalysis}>
+              {smartBusy ? "Leyendo el contrato…" : "Analizar contrato"}
+            </button>
+            {smartBusy && <div className="imp-bar" style={{marginTop:12}}><div className="imp-fill indet"/></div>}
+          </>)}
+
+          {/* ── REVISIÓN DEL ANÁLISIS ── */}
+          {smartRes && (<>
+            <div className="smart-res">
+              <div className="smart-res-h">
+                <div>
+                  <div className="smart-res-t">{smartRes.titulo}</div>
+                  <div className="smart-res-s">{smartRes.resumen}</div>
+                </div>
+                <button className="btn btn-tertiary" onClick={()=>setSmartRes(null)}>Reanalizar</button>
+              </div>
+
+              <div className="smart-chips">
+                {smartRes.fechaLimite && <span className="chip">Límite: {smartRes.fechaLimite}</span>}
+                {smartRes.montoTotal!=null && <span className="chip">{smartRes.moneda} ${smartRes.montoTotal.toLocaleString("es-MX")}</span>}
+                {smartRes.partes.map((p,i)=><span key={i} className="chip">{p.rol}: {p.nombre}</span>)}
+              </div>
+
+              <div className="smart-list-t">Comprobantes que se pedirán ({smartRes.requisitos.length})</div>
+              {smartRes.requisitos.map((r,i)=>(
+                <div key={r.id} className="smart-item">
+                  <span className="smart-num">{i+1}</span>
+                  <div className="smart-item-b">
+                    <div className="smart-item-t">{r.titulo}</div>
+                    <div className="smart-item-d">{r.descripcion}</div>
+                    <div className="smart-tags">
+                      <span className={`tag t-${r.tipo}`}>{r.tipo}</span>
+                      {r.monto!=null && <span className="tag">${r.monto.toLocaleString("es-MX")}</span>}
+                      {r.fechaLimite && <span className="tag">{r.fechaLimite}</span>}
+                      {!r.obligatorio && <span className="tag">opcional</span>}
+                    </div>
+                  </div>
+                  <button className="smart-x" onClick={()=>dropReq(r.id)} title="Quitar">×</button>
+                </div>
+              ))}
+
+              <p className="imp-hint" style={{marginTop:14}}>
+                Revisa la lista antes de continuar. La IA puede malinterpretar el contrato,
+                y estos requisitos son los que regirán el expediente.
+              </p>
+            </div>
+
+            <input className="inp" style={{marginTop:18}} placeholder="Nombre del expediente"
+              value={mIn} onChange={e=>setMIn(e.target.value)} />
+            <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Guardar en carpeta (opcional):</p>
+            <div className="pills">
+              <button className={`pill ${mIn2===""?"sel":""}`} onClick={()=>setMIn2("")}>Sin carpeta</button>
+              {folders.map(f=><button key={f} className={`pill ${mIn2===f?"sel":""}`} onClick={()=>setMIn2(f)}>{f}</button>)}
+            </div>
+          </>)}
+        </>)}
 
         {/* ── SUBIR ARCHIVO ── */}
         {method==="subir" && !impText && !imp && (
@@ -1778,8 +2206,8 @@ export default function ChainDoc(){
           </div>
         )}
 
-        {/* ← ACTUALIZADO: nombre y carpeta sólo aparecen cuando ya hay método */}
-        {method && (<>
+        {/* ← ACTUALIZADO: el expediente tiene sus propios campos más abajo */}
+        {method && !isSmart && (<>
           <input className="inp" style={{marginTop:20}} placeholder="Nombre del documento"
             value={mIn} onChange={e=>setMIn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&createDoc()} />
           <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Guardar en carpeta (opcional):</p>
@@ -1790,18 +2218,27 @@ export default function ChainDoc(){
         </>)}
 
         <div className="modal-row">
-          {/* ← NUEVO: regresar al paso 1 */}
-          <button className="btn btn-secondary" disabled={!!imp}
-            onClick={()=>{ setCreateStep(0); setMethod(null); resetImport(); }}>Atrás</button>
-          <button className="btn btn-primary" onClick={createDoc} disabled={!!imp||!method}>
-            {method==="subir" ? "Importar documento"
-             : method==="escanear" ? "Guardar escaneo"
-             : "Crear documento"}
-          </button>
+          <button className="btn btn-secondary" disabled={!!imp||smartBusy}
+            onClick={()=>{ setCreateStep(0); setMethod(null); resetImport();
+                           setSmartText(""); setSmartRes(null); setSmartErr(""); }}>Atrás</button>
+          {/* ← ACTUALIZADO: el expediente se crea con su propia función */}
+          {isSmart ? (
+            <button className="btn btn-primary" onClick={createExpediente}
+              disabled={!smartRes || smartBusy || !smartRes.requisitos.length}>
+              Abrir expediente
+            </button>
+          ) : (
+            <button className="btn btn-primary" onClick={createDoc} disabled={!!imp||!method}>
+              {method==="subir" ? "Importar documento"
+               : method==="escanear" ? "Guardar escaneo"
+               : "Crear documento"}
+            </button>
+          )}
         </div>
         </>)}
       </div></div>
-    );
+      );
+    }
 
     if(modal.t==="newFolder") return (
       <div className="ov" onClick={()=>setModal(null)}><div className="modal" onClick={e=>e.stopPropagation()}>
@@ -1873,6 +2310,21 @@ export default function ChainDoc(){
       </div></div>
       );
     }
+
+    // ← NUEVO: puerta de acceso a los comprobantes
+    if(modal.t==="files") return (
+      <div className="ov" onClick={()=>setModal(null)}><div className="modal" onClick={e=>e.stopPropagation()}>
+        <h2>Documentos adjuntos</h2>
+        <p className="sub">Ingresa tu código de firma para consultar y descargar los comprobantes de este expediente.</p>
+        <input className="inp" type="password" placeholder="Código de firma" value={pass}
+          onChange={e=>setPass(e.target.value)} autoFocus
+          onKeyDown={e=>e.key==="Enter"&&unlockFiles()} />
+        <div className="modal-row">
+          <button className="btn btn-secondary" onClick={()=>{setPass("");setModal(null);}}>Cancelar</button>
+          <button className="btn btn-primary" onClick={unlockFiles}>Desbloquear</button>
+        </div>
+      </div></div>
+    );
 
     if(modal.t==="lock") return (
       <div className="ov" onClick={()=>setModal(null)}><div className="modal" onClick={e=>e.stopPropagation()}>
