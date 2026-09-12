@@ -1368,6 +1368,28 @@ export default function ChainDoc(){
     if(await store.set(up.id,up)){ setD(up); notify("Evidencia retirada"); }
   };
 
+  // ← NUEVO: verificación biométrica genérica, reutilizable por cualquier
+  // acción que necesite confirmar identidad. Devuelve true o false.
+  const verifyBio = async(motivo)=>{
+    if(!bioOk || !bioCreds.length) return false;
+    setBioBusy(true);
+    try{
+      const reto = crypto.getRandomValues(new Uint8Array(32));
+      const assertion = await bioAssert(bioCreds.map(c=>c.credId), reto);
+      const cred = bioCreds.find(c=>c.credId===assertion.credId);
+      if(!cred){ notify("Credencial desconocida","err"); return false; }
+      if(cred.publicKey){
+        const valido = await bioVerify(cred, assertion, reto);
+        if(!valido){ notify("La verificación biométrica falló","err"); return false; }
+      }
+      if(motivo) notify(motivo);
+      return true;
+    }catch(err){
+      notify(bioError(err),"err");
+      return false;
+    }finally{ setBioBusy(false); }
+  };
+
   // ← NUEVO: los adjuntos sólo se abren tras validar el código de firma
   const unlockFiles = async()=>{
     if(!signCodeHash){ notify("No tienes código de firma configurado","err"); return; }
@@ -1377,7 +1399,27 @@ export default function ChainDoc(){
     notify("Documentos desbloqueados ✓");
   };
 
-  // ← ACTUALIZADO: recupera el archivo desde Firestore y lo abre o descarga
+  // ← NUEVO: misma puerta, abierta con biometría
+  const unlockFilesBio = async()=>{
+    if(await verifyBio("Documentos desbloqueados ✓")){
+      setFilesOpen(true); setPass(""); setModal(null);
+    }
+  };
+
+  // ← NUEVO: abre un documento protegido con biometría.
+  // Sólo para el dueño: la contraseña existe para restringir a terceros
+  // con el enlace, y la biometría de un tercero no prueba ser el dueño.
+  const unlockDocBio = async()=>{
+    if(d.ownerUid !== uid){
+      notify("Sólo el dueño puede abrirlo con biometría","err");
+      return;
+    }
+    if(await verifyBio("Documento desbloqueado ✓")){
+      setUnlocked(true); setLockInput("");
+    }
+  };
+
+  // ← NUEVO
   const getFile = async(archivo, forzarDescarga)=>{
     try{
       await openEvidence(archivo?.path, archivo?.nombre, forzarDescarga);
@@ -1704,6 +1746,7 @@ export default function ChainDoc(){
   const iSigned = sigs.some(b=>b.author===user);
 
   if(d.password && !unlocked){
+    const puedeBio = bioOk && bioCreds.length>0 && d.ownerUid===uid;   // ← NUEVO
     return (<><style>{CSS}</style>
       {notif && <div className={`notif ${notif.t}`}>{notif.m}</div>}
       <nav className="nav">
@@ -1712,7 +1755,21 @@ export default function ChainDoc(){
       <div className="lock-wrap">
         <div className="lock-ico">🔒</div>
         <div className="lock-t">Este documento está protegido</div>
-        <div className="lock-s">Ingresa la contraseña para verlo.</div>
+        <div className="lock-s">
+          {puedeBio ? "Usa tu biometría o ingresa la contraseña." : "Ingresa la contraseña para verlo."}
+        </div>
+
+        {/* ← NUEVO: atajo biométrico, sólo visible para el dueño */}
+        {puedeBio && (<>
+          <button className="btn btn-primary" style={{maxWidth:360,width:"100%"}}
+            disabled={bioBusy} onClick={unlockDocBio}>
+            {bioBusy ? "Esperando verificación…"
+              : `Desbloquear con ${deviceLabel()==="iPhone"||deviceLabel()==="iPad"?"Face ID":"tu biometría"}`}
+          </button>
+          <div className="fingerprint" onClick={()=>{ if(!bioBusy) unlockDocBio(); }}><IcoFinger/></div>
+          <div className="sign-or" style={{maxWidth:360,width:"100%"}}><span>o usa la contraseña</span></div>
+        </>)}
+
         <input className="inp" style={{maxWidth:360}} type="password" placeholder="Contraseña"
           value={lockInput} onChange={e=>setLockInput(e.target.value)}
           onKeyDown={e=>{ if(e.key==="Enter"){ if(lockInput===d.password){setUnlocked(true);setLockInput("");} else notify("Contraseña incorrecta","err"); }}} />
@@ -1841,7 +1898,11 @@ export default function ChainDoc(){
                     </p>
                   ) : !filesOpen ? (
                     <div className="adj-lock">
-                      <p>Los comprobantes están protegidos. Ingresa tu código de firma para consultarlos y descargarlos.</p>
+                      <p>
+                        Los comprobantes están protegidos. Verifica tu identidad
+                        {bioOk && bioCreds.length>0 ? " con tu biometría o tu código de firma" : " con tu código de firma"} para
+                        consultarlos y descargarlos.
+                      </p>
                       <button className="btn btn-secondary"
                         onClick={()=>{setPass("");setModal({t:"files"});}}>
                         Desbloquear documentos
@@ -2311,20 +2372,37 @@ export default function ChainDoc(){
       );
     }
 
-    // ← NUEVO: puerta de acceso a los comprobantes
-    if(modal.t==="files") return (
-      <div className="ov" onClick={()=>setModal(null)}><div className="modal" onClick={e=>e.stopPropagation()}>
+    // ← ACTUALIZADO: ahora también se puede abrir con biometría
+    if(modal.t==="files"){
+      const canBio = bioOk && bioCreds.length>0;
+      return (
+      <div className="ov" onClick={()=>{if(!bioBusy)setModal(null);}}><div className="modal" onClick={e=>e.stopPropagation()}>
         <h2>Documentos adjuntos</h2>
-        <p className="sub">Ingresa tu código de firma para consultar y descargar los comprobantes de este expediente.</p>
+        <p className="sub">
+          Verifica tu identidad para consultar y descargar los comprobantes de este expediente.
+        </p>
+
+        {canBio && (<>
+          <button className="btn btn-primary" style={{width:"100%"}} disabled={bioBusy}
+            onClick={unlockFilesBio}>
+            {bioBusy ? "Esperando verificación…"
+              : `Desbloquear con ${deviceLabel()==="iPhone"||deviceLabel()==="iPad"?"Face ID":"tu biometría"}`}
+          </button>
+          <div className="fingerprint" onClick={()=>{ if(!bioBusy) unlockFilesBio(); }}><IcoFinger/></div>
+          <div className="sign-or"><span>o usa tu código</span></div>
+        </>)}
+
         <input className="inp" type="password" placeholder="Código de firma" value={pass}
-          onChange={e=>setPass(e.target.value)} autoFocus
+          onChange={e=>setPass(e.target.value)} autoFocus={!canBio}
           onKeyDown={e=>e.key==="Enter"&&unlockFiles()} />
         <div className="modal-row">
-          <button className="btn btn-secondary" onClick={()=>{setPass("");setModal(null);}}>Cancelar</button>
-          <button className="btn btn-primary" onClick={unlockFiles}>Desbloquear</button>
+          <button className="btn btn-secondary" disabled={bioBusy}
+            onClick={()=>{setPass("");setModal(null);}}>Cancelar</button>
+          <button className="btn btn-primary" onClick={unlockFiles} disabled={bioBusy}>Desbloquear</button>
         </div>
       </div></div>
-    );
+      );
+    }
 
     if(modal.t==="lock") return (
       <div className="ov" onClick={()=>setModal(null)}><div className="modal" onClick={e=>e.stopPropagation()}>
