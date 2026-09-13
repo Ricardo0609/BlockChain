@@ -9,7 +9,8 @@ import {
 import { db } from "./firebase";                                    // ← ACTUALIZADO
 import {                                                            // ← NUEVO
   signUp, signIn, logOut, resetPassword,
-  watchAuth, getProfile, saveProfile, authError
+  watchAuth, getProfile, saveProfile, authError,
+  findUserByEmail, publishDirectory                            // ← NUEVO
 } from "./auth";
 import {                                                            // ← NUEVO
   bioAvailable, bioRegister, bioAssert, bioVerify, bioError,
@@ -226,6 +227,11 @@ img,svg{max-width:100%}
 .sign-slot p{font-family:var(--f-p);font-weight:500;font-size:22px;color:var(--gris-300)}
 .sign-done{border-top:2px solid var(--negro)}
 .sign-done p{color:var(--negro)}
+/* ← NUEVO: sello de firma */
+.sign-slot.con-sello{border-top:none;padding-top:0}
+.sello{display:block;margin:0 auto 2px;max-height:180px;max-width:230px;
+  object-fit:contain;user-select:none;-webkit-user-drag:none}
+@media(max-width:760px){ .sello{max-height:66px;max-width:170px} }
 .sign-mark{font-family:'Inter',cursive;font-size:30px;font-style:italic;color:var(--negro);margin-bottom:4px}
 
 /* ── MODAL ── */
@@ -293,6 +299,19 @@ img,svg{max-width:100%}
   align-items:center;justify-content:center;white-space:nowrap;word-wrap:normal;
   direction:ltr;flex:0 0 auto;overflow:hidden;
   font-feature-settings:'liga';-webkit-font-smoothing:antialiased;user-select:none}
+
+/* ← NUEVO: compartir con verificación de correo */
+.share-err{background:rgba(194,65,12,.09);color:#c2410c;border-radius:9px;
+  padding:10px 12px;font-size:14px;margin-bottom:12px;text-align:left;line-height:1.4}
+.share-ok{display:flex;align-items:center;gap:11px;background:rgba(20,130,90,.08);
+  border-radius:9px;padding:10px 12px;margin-bottom:12px;text-align:left}
+.share-ok-n{font-weight:600;color:var(--negro);font-size:15px}
+.share-ok-m{font-size:13px;color:var(--gris-300)}
+.share-list{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+.share-row{display:flex;align-items:center;gap:10px;padding:8px 10px;
+  border:1px solid var(--bordes);border-radius:9px}
+.share-row-m{flex:1;text-align:left;font-size:14px;color:var(--gris-400);word-break:break-all}
+.avatar.sm{width:30px;height:30px;font-size:11px;flex:0 0 auto}
 
 /* ← NUEVO: sección de documentos adjuntos */
 .adj{margin-top:22px;border-top:1px solid var(--bordes);padding-top:16px}
@@ -704,6 +723,21 @@ const METHODS = [
 // ── PLANTILLAS VISUALES ───────────────────────────────────────
 // ← NUEVO: en vez de texto con corchetes, un esquema de campos que
 // se dibuja como formulario. Cada fila es un arreglo de campos.
+// ── SELLOS DE FIRMA ───────────────────────────────────────────
+// ← NUEVO: cada cuenta recibe un sello fijo la primera vez y no
+// vuelve a cambiar, aunque después agregues más imágenes al catálogo.
+// Las imágenes van en: public/sellos/LG1.png, LG2.png, …
+const SELLOS = ["LG1","LG2","LG3","LG4","LG5","LG6","LG7"];
+
+const selloUrl = (id) => `/sellos/${id}.png`;
+
+/** Deriva un sello desde el uid: estable, sin necesidad de azar. */
+function selloDesdeUid(uid=""){
+  let h = 0;
+  for(let i=0;i<uid.length;i++) h = (h*31 + uid.charCodeAt(i)) >>> 0;
+  return SELLOS[h % SELLOS.length];
+}
+
 const FORMS = {
   factura: {
     heading: "Factura",
@@ -801,8 +835,6 @@ function parseFactura(text){
   return f;
 }
 
-const CONTACTS = ["Felipe Jarias","Arturo Méndez","Marta Solís","Ramón Gil","Luis Alberto"];
-
 // ── PLANTILLA VISUAL ──────────────────────────────────────────
 // ← NUEVO: dibuja el esquema de FORMS como formulario.
 // En modo lectura muestra los valores; vacíos aparecen atenuados.
@@ -898,6 +930,7 @@ export default function ChainDoc(){
   const [pass,setPass]       = useState("");
   const [signCodeHash,setSignCodeHash] = useState(null); // ← ACTUALIZADO: hash, ya no texto plano
   const [bioCreds,setBioCreds] = useState([]);   // ← NUEVO: credenciales WebAuthn del perfil
+  const [selloId,setSelloId]   = useState(null); // ← NUEVO: sello de firma asignado
   const [bioOk,setBioOk]       = useState(false); // ← NUEVO: el dispositivo soporta biometría
   const [bioBusy,setBioBusy]   = useState(false); // ← NUEVO: esperando a Face ID
   const [title,setTitle]     = useState("");
@@ -922,6 +955,9 @@ export default function ChainDoc(){
   const [smartBusy,setSmartBusy]   = useState(false);
   const [smartErr,setSmartErr]     = useState("");
   const [filesOpen,setFilesOpen]   = useState(false); // ← NUEVO: adjuntos desbloqueados
+  const [shareErr,setShareErr]     = useState("");    // ← NUEVO
+  const [shareFound,setShareFound] = useState(null);  // ← NUEVO: cuenta encontrada
+  const [shareBusy,setShareBusy]   = useState(false); // ← NUEVO
   const [fields,setFields]   = useState({});   // valores de la plantilla visual
   const [filterF,setFilterF] = useState(null);
   const [openSec,setOpenSec] = useState({carp:true,docs:true,comp:true});
@@ -954,6 +990,7 @@ export default function ChainDoc(){
       if(!account){
         setUid(null); setUser(""); setAcctEmail(""); setSignCodeHash(null);
         setBioCreds([]);                                       // ← NUEVO
+        setSelloId(null);                                      // ← NUEVO
         setDocs([]); setD(null); setScreen("auth");
         return;
       }
@@ -964,6 +1001,22 @@ export default function ChainDoc(){
       setAcctEmail(account.email || "");
       setSignCodeHash(profile?.signCodeHash || null);
       setBioCreds(profile?.bioCreds || []);                    // ← NUEVO
+
+      // ← NUEVO: el sello se asigna una sola vez y se guarda en el perfil.
+      // Guardarlo (en vez de derivarlo siempre) evita que cambie si más
+      // adelante agregas o quitas imágenes del catálogo.
+      let sello = profile?.selloId;
+      if(!sello){
+        sello = selloDesdeUid(account.uid);
+        saveProfile(account.uid, { selloId: sello });
+      }
+      setSelloId(sello);
+
+      // ← NUEVO: las cuentas creadas antes del directorio se registran solas
+      if(account.email){
+        publishDirectory(account.uid, account.email,
+                         profile?.name || account.displayName || "");
+      }
 
       // Sin código de firma la cuenta está incompleta: mándalo a crearlo.
       // (Se evalúa el perfil, no el estado local, porque este callback
@@ -1188,6 +1241,7 @@ export default function ChainDoc(){
   const sign = async()=>{
     const last = d.chain[d.chain.length-1];
     const b = await mineBlock(last,"FIRMA","Firma",user);
+    b.sello = selloId;                       // ← NUEVO: queda en el bloque
     const up = {...d,chain:[...d.chain,b],lastModified:b.timestamp};
     const ok = await store.set(up.id,up);
     if(ok){ setD(up); setModal(null); setPass(""); notify(`✦ Firma de ${user} registrada`); }
@@ -1248,6 +1302,7 @@ export default function ChainDoc(){
         if(!valid){ notify("La firma biométrica no pudo verificarse","err"); return; }
       }
 
+      b.sello = selloId;                     // ← NUEVO
       b.signature = {
         method:"webauthn",
         credId: assertion.credId,
@@ -1426,13 +1481,56 @@ export default function ChainDoc(){
     }catch(e){ notify(storageError(e),"err"); }
   };
 
-  const doShare = async(who)=>{
+  // ← ACTUALIZADO: antes aceptaba cualquier texto. Ahora comprueba que
+  // el correo corresponda a una cuenta real antes de compartir.
+  const doShare = async()=>{
+    const correo = mIn.trim().toLowerCase();
+    setShareErr(""); setShareFound(null);
+
+    if(!correo){ setShareErr("Escribe un correo electrónico."); return; }
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)){
+      setShareErr("Ese correo no tiene un formato válido."); return;
+    }
+    if(correo===acctEmail.toLowerCase()){
+      setShareErr("Ese es tu propio correo."); return;
+    }
+    if((d.sharedWith||[]).includes(correo)){
+      setShareErr("Ya compartiste este documento con esa persona."); return;
+    }
+
+    setShareBusy(true);
+    try{
+      const cuenta = await findUserByEmail(correo);
+      if(!cuenta){
+        setShareErr(`No se encontró ninguna cuenta con «${correo}». Verifica que esté registrada en chaindoc.`);
+        return;
+      }
+
+      const last = d.chain[d.chain.length-1];
+      const b = await mineBlock(last,"COMPARTIDO",
+        `Compartido con ${cuenta.nombre||correo} (${correo})`,user);
+
+      const up = {...d,
+        sharedWith:[...(d.sharedWith||[]), correo],
+        chain:[...d.chain,b], lastModified:b.timestamp};
+
+      const ok = await store.set(up.id,up);
+      if(ok){
+        setD(up); setMIn(""); setShareFound(cuenta);
+        notify(`Compartido con ${cuenta.nombre||correo} ✓`);
+      } else setShareErr("No se pudo guardar. Inténtalo de nuevo.");
+    }catch(e){ console.error(e); setShareErr("Error al compartir."); }
+    finally{ setShareBusy(false); }
+  };
+
+  // ← NUEVO: retirar el acceso también queda asentado en la cadena
+  const revokeShare = async(correo)=>{
     const last = d.chain[d.chain.length-1];
-    const b = await mineBlock(last,"COMPARTIDO",`Compartido con: ${who}`,user);
-    // ← ACTUALIZADO: en minúsculas, porque así los busca store.list()
-    const up = {...d,sharedWith:[...(d.sharedWith||[]),who.toLowerCase()],chain:[...d.chain,b],lastModified:b.timestamp};
-    const ok = await store.set(up.id,up);
-    if(ok){ setD(up); setModal(null); setMIn(""); notify(`Compartido con ${who} ✓`); }
+    const b = await mineBlock(last,"COMPARTIDO",`Acceso retirado a ${correo}`,user);
+    const up = {...d,
+      sharedWith:(d.sharedWith||[]).filter(x=>x!==correo),
+      chain:[...d.chain,b], lastModified:b.timestamp};
+    if(await store.set(up.id,up)){ setD(up); notify(`Acceso retirado a ${correo}`); }
   };
 
   const setLock = async(pw)=>{
@@ -1958,10 +2056,17 @@ export default function ChainDoc(){
             <button className="fp-btn" onClick={()=>{setPass("");setModal({t:"sign"});}}><IcoFinger/></button>
           </div>
         )}
+        {/* ← ACTUALIZADO: sello de imagen en vez de la línea con el nombre.
+            Las firmas antiguas no traen sello, así que conservan el estilo viejo. */}
         {sigs.map((b,i)=>(
-          <div key={i} className="sign-slot sign-done">
-            <div className="sign-mark">{b.author}</div>
-            <p>Firmado por: {b.author}</p>
+          <div key={i} className={`sign-slot sign-done ${b.sello?"con-sello":""}`}>
+            {b.sello ? (
+              <img className="sello" src={selloUrl(b.sello)} alt={`Sello de ${b.author}`}
+                onError={e=>{e.currentTarget.style.display="none";}} />
+            ) : (
+              <div className="sign-mark">{b.author}</div>
+            )}
+            <p>-{b.author}-</p>
           </div>
         ))}
         {sigs.length===0 && <div className="sign-slot"><p>Firma pendiente</p></div>}
@@ -2419,28 +2524,55 @@ export default function ChainDoc(){
     );
 
     if(modal.t==="share") return (
-      <div className="ov" onClick={()=>setModal(null)}><div className="modal wide" onClick={e=>e.stopPropagation()}>
+      <div className="ov" onClick={()=>{if(!shareBusy)setModal(null);}}><div className="modal wide" onClick={e=>e.stopPropagation()}>
         <h2>Compartir documento</h2>
-        <p className="sub">Selecciona algún contacto o ingresa un correo electrónico.</p>
-        <input className="inp" placeholder="Correo electrónico" value={mIn}
-          onChange={e=>setMIn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&mIn.trim()&&doShare(mIn.trim())} />
-        <div className="rec-lbl">Recientes:</div>
-        <div className="contacts">
-          {CONTACTS.map(c=>(
-            <div key={c} className={`contact ${mIn===c?"sel":""}`} onClick={()=>setMIn(c)}>
-              <div className="avatar">{c.split(" ").map(w=>w[0]).join("").slice(0,2)}</div>
-              <span className="contact-n">{c}</span>
+        {/* ← ACTUALIZADO: los contactos eran ficticios. Ahora se busca
+            el correo en el directorio y sólo se comparte si existe. */}
+        <p className="sub">
+          Escribe el correo de la persona. Debe tener una cuenta en chaindoc
+          para poder abrirlo.
+        </p>
+
+        <input className="inp" type="email" placeholder="correo@ejemplo.com" value={mIn}
+          autoFocus disabled={shareBusy}
+          onChange={e=>{setMIn(e.target.value);setShareErr("");setShareFound(null);}}
+          onKeyDown={e=>e.key==="Enter"&&doShare()} />
+
+        {shareErr && <div className="share-err">{shareErr}</div>}
+        {shareFound && (
+          <div className="share-ok">
+            <div className="avatar">{(shareFound.nombre||shareFound.email).slice(0,2).toUpperCase()}</div>
+            <div>
+              <div className="share-ok-n">{shareFound.nombre||"Sin nombre"}</div>
+              <div className="share-ok-m">{shareFound.email}</div>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
+
+        {/* ← NUEVO: quiénes tienen acceso, con opción de retirarlo */}
         {(d.sharedWith||[]).length>0 && (<>
-          <div className="rec-lbl">Ya compartido con:</div>
-          <div className="chips">{d.sharedWith.map((s,i)=><span key={i} className="chip chip-f">{s}</span>)}</div>
+          <div className="rec-lbl">Con acceso ({d.sharedWith.length}):</div>
+          <div className="share-list">
+            {d.sharedWith.map(correo=>(
+              <div key={correo} className="share-row">
+                <div className="avatar sm">{correo.slice(0,2).toUpperCase()}</div>
+                <span className="share-row-m">{correo}</span>
+                {d.ownerUid===uid && (
+                  <button className="smart-x" title="Retirar acceso"
+                    onClick={()=>revokeShare(correo)}>×</button>
+                )}
+              </div>
+            ))}
+          </div>
         </>)}
+
         <div className="modal-row">
           <button className="btn btn-tertiary" onClick={()=>{copyLink();}}><IcoLink/> Copiar enlace</button>
-          <button className="btn btn-warning" onClick={()=>setModal(null)}>Cerrar</button>
-          <button className="btn btn-primary" onClick={()=>mIn.trim()&&doShare(mIn.trim())}>Compartir</button>
+          <button className="btn btn-warning" disabled={shareBusy}
+            onClick={()=>{setModal(null);setMIn("");setShareErr("");setShareFound(null);}}>Cerrar</button>
+          <button className="btn btn-primary" onClick={doShare} disabled={shareBusy||!mIn.trim()}>
+            {shareBusy ? "Verificando…" : "Compartir"}
+          </button>
         </div>
       </div></div>
     );
