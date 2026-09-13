@@ -31,6 +31,7 @@ export async function signUp(email, password, name) {
     signCodeHash: null,
     createdAt: new Date().toISOString(),
   });
+  await publishDirectory(cred.user.uid, email, name);   // ← NUEVO
   return cred.user;
 }
 
@@ -74,6 +75,41 @@ export async function saveProfile(uid, data) {
   } catch (e) {
     console.error(e);
     return false;
+  }
+}
+
+// ── Directorio público ────────────────────────────────────────
+// Colección aparte, a propósito: /users guarda el hash del código
+// de firma y las credenciales biométricas, así que no puede ser
+// legible por terceros. El directorio sólo expone nombre y correo,
+// que es lo mínimo para poder compartir un documento.
+
+const dirId = (email) => email.trim().toLowerCase();
+
+/** Publica o actualiza la entrada del usuario en el directorio. */
+export async function publishDirectory(uid, email, name) {
+  if (!uid || !email) return false;
+  try {
+    await setDoc(doc(db, "directorio", dirId(email)), {
+      uid, email: dirId(email), nombre: name || "",
+      actualizado: new Date().toISOString(),
+    });
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+}
+
+/** Busca una cuenta por correo. Devuelve null si no existe. */
+export async function findUserByEmail(email) {
+  if (!email?.trim()) return null;
+  try {
+    const snap = await getDoc(doc(db, "directorio", dirId(email)));
+    return snap.exists() ? snap.data() : null;
+  } catch (e) {
+    console.error(e);
+    return null;
   }
 }
 
