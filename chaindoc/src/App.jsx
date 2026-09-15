@@ -21,7 +21,7 @@ import {                                                            // ← NUEVO
 } from "./smartContract";
 import {                                                            // ← ACTUALIZADO
   uploadEvidence, deleteEvidence, openEvidence, storageError,
-  isPreviewable, LIMITE_KB
+  isPreviewable, LIMITE_KB, makeThumb                             // ← ACTUALIZADO
 } from "./storage";
 
 const store = {
@@ -229,7 +229,7 @@ img,svg{max-width:100%}
 .sign-done p{color:var(--negro)}
 /* ← NUEVO: sello de firma */
 .sign-slot.con-sello{border-top:none;padding-top:0}
-.sello{display:block;margin:0 auto 2px;max-height:180px;max-width:230px;
+.sello{display:block;margin:0 auto 2px;max-height:88px;max-width:230px;
   object-fit:contain;user-select:none;-webkit-user-drag:none}
 @media(max-width:760px){ .sello{max-height:66px;max-width:170px} }
 .sign-mark{font-family:'Inter',cursive;font-size:30px;font-style:italic;color:var(--negro);margin-bottom:4px}
@@ -299,6 +299,38 @@ img,svg{max-width:100%}
   align-items:center;justify-content:center;white-space:nowrap;word-wrap:normal;
   direction:ltr;flex:0 0 auto;overflow:hidden;
   font-feature-settings:'liga';-webkit-font-smoothing:antialiased;user-select:none}
+
+/* ← NUEVO: galería de evidencia visual */
+.galeria{max-width:860px;margin:26px auto 0;padding:20px;border:1px solid var(--bordes);
+  border-radius:16px;text-align:left}
+.gal-sub{font-size:14px;color:var(--gris-300);line-height:1.5;margin:0 0 16px}
+.gal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:16px}
+.gal-item{border:1px solid var(--bordes);border-radius:11px;overflow:hidden;background:#fff}
+.gal-thumb{display:block;width:100%;aspect-ratio:4/3;border:none;padding:0;cursor:pointer;
+  background:var(--gris-100,#f3f3f5);overflow:hidden}
+.gal-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.gal-thumb:hover img{opacity:.88}
+.gal-noimg{font-size:12px;color:var(--gris-300);display:flex;align-items:center;
+  justify-content:center;height:100%}
+.gal-n{font-size:13px;font-weight:600;color:var(--negro);padding:8px 10px 0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gal-m{font-size:11px;color:var(--gris-300);padding:2px 10px 0}
+.gal-acts{display:flex;align-items:center;justify-content:space-between;padding:4px 6px 6px}
+@media(max-width:760px){
+  .galeria{margin:18px 12px 0;padding:16px}
+  .gal-grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+}
+
+/* ← NUEVO: selector de expediente al adjuntar */
+.link-list{display:flex;flex-direction:column;gap:8px;max-height:330px;overflow-y:auto;
+  margin-bottom:14px;text-align:left}
+.link-row{display:flex;align-items:flex-start;gap:11px;padding:13px;border:1px solid var(--bordes);
+  border-radius:11px;cursor:pointer;transition:border-color .15s,background .15s}
+.link-row:hover{border-color:var(--negro);background:rgba(0,0,0,.02)}
+.link-row.ocupado{opacity:.62}
+.link-row-b{flex:1;min-width:0}
+.link-row-t{font-weight:600;font-size:16px;color:var(--negro)}
+.link-row-m{font-size:13px;color:var(--gris-300);margin:2px 0 5px;line-height:1.4}
 
 /* ← NUEVO: compartir con verificación de correo */
 .share-err{background:rgba(194,65,12,.09);color:#c2410c;border-radius:9px;
@@ -727,7 +759,7 @@ const METHODS = [
 // ← NUEVO: cada cuenta recibe un sello fijo la primera vez y no
 // vuelve a cambiar, aunque después agregues más imágenes al catálogo.
 // Las imágenes van en: public/sellos/LG1.png, LG2.png, …
-const SELLOS = ["LG1","LG2","LG3","LG4","LG5","LG6","LG7"];
+const SELLOS = ["LG1","LG2","LG3","LG4","LG5","LG6","LG7","LG8"];
 
 const selloUrl = (id) => `/sellos/${id}.png`;
 
@@ -958,6 +990,10 @@ export default function ChainDoc(){
   const [shareErr,setShareErr]     = useState("");    // ← NUEVO
   const [shareFound,setShareFound] = useState(null);  // ← NUEVO: cuenta encontrada
   const [shareBusy,setShareBusy]   = useState(false); // ← NUEVO
+  const [exps,setExps]             = useState(null);  // ← NUEVO: expedientes disponibles
+  const [linkExp,setLinkExp]       = useState(null);  // ← NUEVO: expediente elegido
+  const [linkErr,setLinkErr]       = useState("");    // ← NUEVO
+  const [linkBusy,setLinkBusy]     = useState(false); // ← NUEVO
   const [fields,setFields]   = useState({});   // valores de la plantilla visual
   const [filterF,setFilterF] = useState(null);
   const [openSec,setOpenSec] = useState({carp:true,docs:true,comp:true});
@@ -1414,7 +1450,9 @@ export default function ChainDoc(){
   // ← ACTUALIZADO: además de asentarlo, borra el archivo de Storage
   const removeEvidence = async(reqId)=>{
     const req = d.requisitos.find(r=>r.id===reqId);
-    if(req?.archivo?.path) await deleteEvidence(req.archivo.path);
+    // ← ACTUALIZADO: un documento enlazado no se borra, sólo se desvincula
+    if(req?.archivo?.origen!=="interno" && req?.archivo?.path)
+      await deleteEvidence(req.archivo.path);
     const last = d.chain[d.chain.length-1];
     const b = await mineBlock(last,"EVIDENCIA",
       `Retiro de evidencia en «${req?.titulo||reqId}»`,user);
@@ -1521,6 +1559,106 @@ export default function ChainDoc(){
       } else setShareErr("No se pudo guardar. Inténtalo de nuevo.");
     }catch(e){ console.error(e); setShareErr("Error al compartir."); }
     finally{ setShareBusy(false); }
+  };
+
+  // ── EVIDENCIA VISUAL DEL DOCUMENTO ──
+  // ← NUEVO: fotos que respaldan una factura o recibo (el ticket físico,
+  // el producto recibido, la pantalla de la transferencia…).
+  // La imagen completa va a Firestore; en el documento sólo queda una
+  // miniatura ligera para que la galería cargue de inmediato.
+  const MAX_IMGS = 12;
+
+  const addImage = async(file)=>{
+    if(!file || !d) return;
+    if(!(file.type||"").startsWith("image/")){
+      notify("Sólo se admiten imágenes aquí","err"); return;
+    }
+    if((d.imagenes||[]).length >= MAX_IMGS){
+      notify(`Máximo ${MAX_IMGS} imágenes por documento`,"err"); return;
+    }
+    setSaving(true);
+    try{
+      const hash  = await hashFile(file);          // huella del original
+      const thumb = await makeThumb(file);
+      const g     = await uploadEvidence({ uid, docId:d.id, reqId:"img", file });
+
+      const last = d.chain[d.chain.length-1];
+      const b = await mineBlock(last,"EVIDENCIA",
+        `Imagen adjunta «${file.name}» (${hash.slice(0,16)}…)`,user);
+
+      const imagenes = [...(d.imagenes||[]), {
+        path:g.path, nombre:file.name, tipo:g.tipo, tam:g.tam,
+        comprimida:g.comprimida, hash, thumb,
+        subidoEn:b.timestamp, subidoPor:user,
+      }];
+
+      const up = {...d, imagenes, chain:[...d.chain,b], lastModified:b.timestamp};
+      if(await store.set(up.id,up)){
+        setD(up);
+        notify(g.comprimida ? "Imagen adjunta ✓ (comprimida)" : "Imagen adjunta ✓");
+      } else notify("Error al adjuntar","err");
+    }catch(e){ console.error(e); notify(storageError(e),"err"); }
+    finally{ setSaving(false); }
+  };
+
+  // ← NUEVO: quitar una imagen también se asienta en la cadena
+  const removeImage = async(path)=>{
+    const img = (d.imagenes||[]).find(x=>x.path===path);
+    await deleteEvidence(path);
+    const last = d.chain[d.chain.length-1];
+    const b = await mineBlock(last,"EVIDENCIA",
+      `Imagen retirada «${img?.nombre||path}»`,user);
+    const up = {...d, imagenes:(d.imagenes||[]).filter(x=>x.path!==path),
+                chain:[...d.chain,b], lastModified:b.timestamp};
+    if(await store.set(up.id,up)){ setD(up); notify("Imagen retirada"); }
+  };
+
+  // ── ADJUNTAR A UN EXPEDIENTE ──
+  // ← NUEVO: trae los expedientes propios y los que me compartieron.
+  const openExpedientes = async()=>{
+    setExps(null);
+    const lista = await store.list(uid, acctEmail);
+    setExps(lista
+      .filter(x=>x.kind==="expediente")
+      .sort((a,b)=>new Date(b.lastModified)-new Date(a.lastModified)));
+  };
+
+  // ← NUEVO: enlaza ESTE documento como comprobante de un requisito.
+  // No se copia nada: el expediente guarda una referencia y la huella
+  // del último bloque, así se puede detectar si el documento cambió.
+  const linkToExpediente = async(exp, reqId)=>{
+    setLinkErr(""); setLinkBusy(true);
+    try{
+      const req = exp.requisitos.find(r=>r.id===reqId);
+      const cabeza = d.chain[d.chain.length-1];
+
+      const last = exp.chain[exp.chain.length-1];
+      const b = await mineBlock(last,"EVIDENCIA",
+        `${req?.titulo||reqId}: documento «${d.title}» (${d.numId})`,user);
+
+      const requisitos = exp.requisitos.map(r=> r.id!==reqId ? r : {
+        ...r, estado:"cumplido",
+        archivo:{ origen:"interno",
+                  docId:d.id, numId:d.numId, nombre:d.title,
+                  tipo:d.kind==="expediente"?"expediente":(d.tplId||"documento"),
+                  hash:cabeza.hash, bloques:d.chain.length,
+                  subidoEn:b.timestamp, subidoPor:user },
+      });
+
+      const up = {...exp, requisitos, chain:[...exp.chain,b], lastModified:b.timestamp};
+      const ok = await store.set(up.id,up);
+      if(!ok){ setLinkErr("No se pudo adjuntar. Inténtalo de nuevo."); return; }
+
+      // El documento fuente también asienta que quedó vinculado.
+      const b2 = await mineBlock(cabeza,"VINCULADO",
+        `Adjuntado al expediente «${exp.title}» como ${req?.titulo||reqId}`,user);
+      const src = {...d, chain:[...d.chain,b2], lastModified:b2.timestamp};
+      if(await store.set(src.id,src)) setD(src);
+
+      setModal(null); setLinkExp(null);
+      notify(`Adjuntado a «${exp.title}» ✓`);
+    }catch(e){ console.error(e); setLinkErr("Error al adjuntar."); }
+    finally{ setLinkBusy(false); }
   };
 
   // ← NUEVO: retirar el acceso también queda asentado en la cadena
@@ -1840,7 +1978,8 @@ export default function ChainDoc(){
   // ── RENDER: DOC ──
   const sigs = d.chain.filter(b=>b.action==="FIRMA");
   const eds  = d.chain.filter(b=>b.action==="EDICIÓN"||b.action==="CREACIÓN");
-  const shs  = d.chain.filter(b=>b.action==="COMPARTIDO");
+  // ← ACTUALIZADO: los vínculos a expedientes también salen en esta pestaña
+  const shs  = d.chain.filter(b=>b.action==="COMPARTIDO"||b.action==="VINCULADO");
   const iSigned = sigs.some(b=>b.author===user);
 
   if(d.password && !unlocked){
@@ -1893,6 +2032,14 @@ export default function ChainDoc(){
         )}
         {!editMode && <button className="btn btn-secondary" onClick={()=>setEdit(true)}>Editar</button>}
         {editMode && <button className="btn btn-primary" onClick={save} disabled={saving}>{saving?"Guardando…":"Guardar"}</button>}
+        {/* ← NUEVO: vincula este documento a un expediente como comprobante.
+            No aparece en los expedientes: uno no se adjunta a sí mismo. */}
+        {d.kind!=="expediente" && (
+          <button className="btn btn-secondary"
+            onClick={()=>{setLinkExp(null);setLinkErr("");setModal({t:"linkTo"});openExpedientes();}}>
+            Adjuntar a
+          </button>
+        )}
         <button className="btn btn-secondary" onClick={()=>{setMIn("");setModal({t:"share"});}}>Compartir</button>
         <button className="btn btn-secondary" onClick={()=>setHist(true)}>Ver historial</button>
         <button className="hamburger" onClick={()=>setMenu(true)}><span/><span/><span/></button>
@@ -1956,11 +2103,21 @@ export default function ChainDoc(){
 
                   {r.archivo ? (
                     <div className="exp-file">
-                      <div className="exp-file-n">{r.archivo.nombre}</div>
+                      <div className="exp-file-n">
+                        {/* ← NUEVO: distingue un documento de la plataforma */}
+                        {r.archivo.origen==="interno" && <span className="tag" style={{marginRight:6}}>chaindoc</span>}
+                        {r.archivo.nombre}
+                      </div>
                       <div className="exp-file-m">
-                        {(r.archivo.tam/1024).toFixed(0)} KB · {fmtFull(r.archivo.subidoEn)} · {r.archivo.subidoPor}
+                        {r.archivo.origen==="interno"
+                          ? `${r.archivo.numId} · ${r.archivo.bloques} bloques · ${fmtFull(r.archivo.subidoEn)} · ${r.archivo.subidoPor}`
+                          : `${(r.archivo.tam/1024).toFixed(0)} KB · ${fmtFull(r.archivo.subidoEn)} · ${r.archivo.subidoPor}`}
                       </div>
                       <div className="exp-file-h">SHA-256 {r.archivo.hash}</div>
+                      {r.archivo.origen==="interno" && (
+                        <button className="btn btn-tertiary" style={{marginRight:8}}
+                          onClick={()=>openDoc(r.archivo.docId)}>Abrir documento</button>
+                      )}
                       <button className="btn btn-tertiary" onClick={()=>removeEvidence(r.id)}>Retirar</button>
                     </div>
                   ) : (
@@ -2013,16 +2170,22 @@ export default function ChainDoc(){
                           <div className="adj-row-b">
                             <div className="adj-row-t">{r.archivo.nombre}</div>
                             <div className="adj-row-m">
-                              {r.titulo} · {(r.archivo.tam/1024).toFixed(0)} KB
-                              {r.archivo.comprimida && " (comprimida)"} · {fmtFull(r.archivo.subidoEn)}
+                              {r.titulo} · {r.archivo.origen==="interno"
+                                ? `documento ${r.archivo.numId}`
+                                : `${(r.archivo.tam/1024).toFixed(0)} KB${r.archivo.comprimida?" (comprimida)":""}`}
+                              {" · "}{fmtFull(r.archivo.subidoEn)}
                             </div>
                             <div className="exp-file-h">SHA-256 {r.archivo.hash}</div>
                           </div>
                           <div className="adj-acts">
-                            {isPreviewable(r.archivo.tipo) && (
-                              <button className="btn btn-tertiary" onClick={()=>getFile(r.archivo,false)}>Ver</button>
-                            )}
-                            <button className="btn btn-tertiary" onClick={()=>getFile(r.archivo,true)}>Descargar</button>
+                            {r.archivo.origen==="interno" ? (
+                              <button className="btn btn-tertiary" onClick={()=>openDoc(r.archivo.docId)}>Abrir</button>
+                            ) : (<>
+                              {isPreviewable(r.archivo.tipo) && (
+                                <button className="btn btn-tertiary" onClick={()=>getFile(r.archivo,false)}>Ver</button>
+                              )}
+                              <button className="btn btn-tertiary" onClick={()=>getFile(r.archivo,true)}>Descargar</button>
+                            </>)}
                           </div>
                         </div>
                       ))}
@@ -2049,6 +2212,56 @@ export default function ChainDoc(){
           : <div className={`paper-ro ${!d.content?"empty-txt":""}`}>{d.content||"Este documento aún no tiene contenido. Presiona «Editar» para comenzar."}</div>}
       </div>
 
+      {/* ← NUEVO: evidencia visual del documento (no aplica a expedientes,
+          que ya tienen su propia lista de comprobantes por requisito) */}
+      {d.kind!=="expediente" && (()=>{
+        const imgs = d.imagenes||[];
+        return (
+          <div className="galeria">
+            <div className="adj-h">
+              <span className="adj-t">Evidencia visual</span>
+              <span className="adj-n">{imgs.length}</span>
+            </div>
+            <p className="gal-sub">
+              Fotos que respaldan este documento: el ticket físico, el producto recibido,
+              el comprobante de la transferencia. Cada una queda registrada en la cadena con su huella.
+            </p>
+
+            {imgs.length>0 && (
+              <div className="gal-grid">
+                {imgs.map(img=>(
+                  <div key={img.path} className="gal-item">
+                    <button className="gal-thumb" onClick={()=>getFile(img,false)}
+                      title={`Ver ${img.nombre}`}>
+                      {img.thumb
+                        ? <img src={img.thumb} alt={img.nombre}/>
+                        : <span className="gal-noimg">Sin vista previa</span>}
+                    </button>
+                    <div className="gal-n" title={img.nombre}>{img.nombre}</div>
+                    <div className="gal-m">
+                      {(img.tam/1024).toFixed(0)} KB · {fmtShort(img.subidoEn)}
+                    </div>
+                    <div className="gal-acts">
+                      <button className="btn btn-tertiary" onClick={()=>getFile(img,true)}>Descargar</button>
+                      <button className="smart-x" title="Retirar"
+                        onClick={()=>removeImage(img.path)}>×</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {imgs.length<MAX_IMGS && (
+              <label className="exp-up">
+                <span>{saving ? "Procesando…" : "Adjuntar imagen"}</span>
+                <input type="file" accept="image/*" style={{display:"none"}} disabled={saving}
+                  onChange={e=>{ addImage(e.target.files?.[0]); e.target.value=""; }} />
+              </label>
+            )}
+          </div>
+        );
+      })()}
+
       <div className="sign-bar">
         {!iSigned && (
           <div className="sign-group">
@@ -2066,7 +2279,7 @@ export default function ChainDoc(){
             ) : (
               <div className="sign-mark">{b.author}</div>
             )}
-            <p>-{b.author}-</p>
+            <p>Firmado por: {b.author}</p>
           </div>
         ))}
         {sigs.length===0 && <div className="sign-slot"><p>Firma pendiente</p></div>}
@@ -2520,6 +2733,82 @@ export default function ChainDoc(){
           <button className="btn btn-warning" onClick={()=>setModal(null)}>Cancelar</button>
           <button className="btn btn-primary" onClick={()=>pass.trim()&&setLock(pass.trim())}>Proteger</button>
         </div>
+      </div></div>
+    );
+
+    // ← NUEVO: elegir expediente y después el requisito que cumple
+    if(modal.t==="linkTo") return (
+      <div className="ov" onClick={()=>{if(!linkBusy)setModal(null);}}><div className="modal wide" onClick={e=>e.stopPropagation()}>
+        <h2>Adjuntar a un expediente</h2>
+
+        {!linkExp ? (<>
+          <p className="sub">
+            Elige el contrato inteligente donde este documento servirá como comprobante.
+          </p>
+          {exps===null ? (
+            <div className="imp-msg"><span className="mini-spin"/>Buscando expedientes…</div>
+          ) : exps.length===0 ? (
+            <p className="adj-empty">
+              Todavía no tienes contratos inteligentes. Crea uno desde «Crear documento» → «Contrato inteligente».
+            </p>
+          ) : (
+            <div className="link-list">
+              {exps.map(x=>{
+                const st = expedienteStatus(x);
+                const ajeno = x.ownerUid!==uid;
+                return (
+                  <div key={x.id} className="link-row" onClick={()=>setLinkExp(x)}>
+                    <div className="link-row-b">
+                      <div className="link-row-t">{x.title}</div>
+                      <div className="link-row-m">
+                        {st.cumplidos}/{st.total} comprobantes
+                        {x.fechaLimite && ` · límite ${x.fechaLimite}`}
+                        {ajeno && ` · compartido por ${x.owner}`}
+                      </div>
+                    </div>
+                    <span className={`chip chip-exp ${st.estado}`}>
+                      {st.completo ? "Completo" : st.vencido ? "Vencido" : `${st.porcentaje}%`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="modal-row">
+            <button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button>
+          </div>
+        </>) : (<>
+          <p className="sub">
+            ¿Qué requisito de <strong>{linkExp.title}</strong> cumple este documento?
+          </p>
+          {linkErr && <div className="share-err">{linkErr}</div>}
+          <div className="link-list">
+            {linkExp.requisitos.map((r,i)=>(
+              <div key={r.id}
+                className={`link-row ${r.estado==="cumplido"?"ocupado":""}`}
+                onClick={()=>{ if(!linkBusy) linkToExpediente(linkExp,r.id); }}>
+                <span className="smart-num">{r.estado==="cumplido"?"✓":i+1}</span>
+                <div className="link-row-b">
+                  <div className="link-row-t">{r.titulo}</div>
+                  <div className="link-row-m">
+                    {r.estado==="cumplido"
+                      ? `Ya cubierto por «${r.archivo?.nombre||"un archivo"}» — se reemplazará`
+                      : r.descripcion}
+                  </div>
+                  <div className="smart-tags">
+                    <span className={`tag t-${r.tipo}`}>{r.tipo}</span>
+                    {r.monto!=null && <span className="tag">${r.monto.toLocaleString("es-MX")}</span>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="modal-row">
+            <button className="btn btn-secondary" disabled={linkBusy}
+              onClick={()=>{setLinkExp(null);setLinkErr("");}}>Atrás</button>
+            {linkBusy && <span className="imp-msg"><span className="mini-spin"/>Adjuntando…</span>}
+          </div>
+        </>)}
       </div></div>
     );
 
