@@ -137,6 +137,28 @@ export async function openEvidence(path, nombre, descargar) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
+/**
+ * Miniatura ligera en data URI, para mostrar la galería sin tener que
+ * leer el archivo completo desde Firestore. Se guarda dentro del propio
+ * documento, así que debe pesar poco.
+ */
+export async function makeThumb(file, lado = 160) {
+  if (!(file.type || "").startsWith("image/")) return null;
+  try {
+    const img = await loadImage(file);
+    let w = img.width, h = img.height;
+    const f = lado / Math.max(w, h);
+    if (f < 1) { w = Math.round(w * f); h = Math.round(h * f); }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL("image/jpeg", 0.6);
+  } catch {
+    return null;
+  }
+}
+
 export const storageError = (err) => {
   const c = err?.code;
   if (c === "permission-denied")
