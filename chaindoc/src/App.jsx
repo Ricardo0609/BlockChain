@@ -17,16 +17,38 @@ import {                                                            // ← NUEVO
   hexToBytes, deviceLabel
 } from "./biometric";
 import {                                                            // ← NUEVO
-  analyzeContract, aiConfigured, hashFile, expedienteStatus, listModels
+  analyzeContract, aiConfigured, hashFile, expedienteStatus, listModels,
+  calcularMontos, montoDeDocumento, fmtMonto,
+  archivosDe, aidDe, comprobadoDe                                // ← ACTUALIZADO
 } from "./smartContract";
 import {                                                            // ← ACTUALIZADO
   uploadEvidence, deleteEvidence, openEvidence, storageError,
   isPreviewable, LIMITE_KB, makeThumb                             // ← ACTUALIZADO
 } from "./storage";
 
+// ← NUEVO: elimina la clave `archivo` del formato antiguo. Se quita la
+// clave en vez de ponerla en undefined, que Firestore no admite.
+const quitarArchivoViejo = (r)=>{ const resto={...r}; delete resto.archivo; return resto; };
+
+// ← NUEVO: Firestore rechaza `undefined` (acepta `null`). Esto lo
+// limpia antes de guardar, para que un campo olvidado no tumbe el
+// guardado entero con «Unsupported field value: undefined».
+function sinUndefined(v){
+  if(Array.isArray(v)) return v.map(sinUndefined);
+  if(v && typeof v==="object" && !(v instanceof Date)){
+    const out = {};
+    for(const [k,val] of Object.entries(v)){
+      if(val === undefined) continue;
+      out[k] = sinUndefined(val);
+    }
+    return out;
+  }
+  return v;
+}
+
 const store = {
   async get(id){ try{const s=await getDoc(doc(db,"documents",id));return s.exists()?s.data():null;}catch{return null;} },
-  async set(id,d){ try{await setDoc(doc(db,"documents",id),d);return true;}catch(e){console.error(e);return false;} },
+  async set(id,d){ try{await setDoc(doc(db,"documents",id),sinUndefined(d));return true;}catch(e){console.error(e);return false;} },
   async del(id){ try{await deleteDoc(doc(db,"documents",id));return true;}catch{return false;} },
 
   // ← ACTUALIZADO: antes traía TODOS los documentos de la colección.
@@ -57,12 +79,22 @@ async function sha256(t){
   return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");
 }
 
-async function mineBlock(prev, action, content, author){
+// ← ACTUALIZADO: los bloques admiten `meta`, un objeto con datos
+// estructurados para que la línea de tiempo no tenga que adivinar
+// leyendo el texto de `content`.
+//
+// ⚠️ `meta` queda FUERA del hash a propósito: incluirlo cambiaría la
+// fórmula y todas las cadenas existentes dejarían de verificar. Se
+// integrará al hash en el refactor de Capa 0, cuando las cadenas se
+// reconstruyan de todos modos.
+async function mineBlock(prev, action, content, author, meta){
   const ts = new Date().toISOString();
   const idx = prev ? prev.index+1 : 0;
   const prevHash = prev ? prev.hash : "0".repeat(64);
   const hash = await sha256(`${idx}|${ts}|${action}|${content}|${author}|${prevHash}`);
-  return { index:idx, timestamp:ts, action, content, author, previousHash:prevHash, hash };
+  const b = { index:idx, timestamp:ts, action, content, author, previousHash:prevHash, hash };
+  if(meta) b.meta = meta;
+  return b;
 }
 
 async function verifyChain(chain){
@@ -77,6 +109,15 @@ async function verifyChain(chain){
 
 // ── Helpers ───────────────────────────────────────────────────
 const fmtFull  = iso => new Date(iso).toLocaleString("es-MX",{day:"numeric",month:"long",year:"numeric",hour:"numeric",minute:"2-digit",hour12:true});
+const fmtDia   = ymd => {
+  const hoy = new Date().toISOString().slice(0,10);
+  const ayer = new Date(Date.now()-86400000).toISOString().slice(0,10);
+  if(ymd===hoy)  return "Hoy";
+  if(ymd===ayer) return "Ayer";
+  return new Date(ymd+"T12:00:00").toLocaleDateString("es-MX",
+    {weekday:"long",day:"numeric",month:"long",year:"numeric"});
+};
+const fmtHora  = iso => new Date(iso).toLocaleTimeString("es-MX",{hour:"numeric",minute:"2-digit",hour12:true});
 const fmtShort = iso => new Date(iso).toLocaleDateString("es-MX",{day:"numeric",month:"short",year:"numeric"});
 
 const getUrlDoc = () => new URLSearchParams(window.location.search).get("doc") || null;
@@ -299,6 +340,69 @@ img,svg{max-width:100%}
   align-items:center;justify-content:center;white-space:nowrap;word-wrap:normal;
   direction:ltr;flex:0 0 auto;overflow:hidden;
   font-feature-settings:'liga';-webkit-font-smoothing:antialiased;user-select:none}
+
+/* ← NUEVO: contador de montos del expediente */
+.mnt{border:1px solid var(--bordes);border-radius:14px;padding:16px 18px;margin-bottom:18px}
+.mnt.excedido{border-color:rgba(194,65,12,.45);background:rgba(194,65,12,.04)}
+.mnt-fila{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:12px}
+.mnt-dato{display:flex;flex-direction:column;gap:2px;min-width:130px}
+.mnt-lbl{font-size:12px;color:var(--gris-300);text-transform:uppercase;letter-spacing:.4px}
+.mnt-val{font-size:19px;font-weight:600;color:var(--negro);font-variant-numeric:tabular-nums}
+.mnt-val.fuerte{color:#14825a}
+.mnt-val.malo{color:#c2410c}
+.mnt-bar{height:8px;border-radius:99px;background:var(--gris-100,#ececed);overflow:hidden}
+.mnt-fill{height:100%;background:#14825a;border-radius:99px;transition:width .35s}
+.mnt.excedido .mnt-fill{background:#c2410c}
+.mnt-pie{font-size:13px;color:var(--gris-300);margin-top:7px}
+.mnt-aviso{font-size:13px;color:var(--gris-400);background:rgba(0,0,0,.03);
+  border-radius:8px;padding:8px 11px;margin-top:9px;line-height:1.45}
+.mnt-aviso.malo{background:rgba(194,65,12,.1);color:#c2410c;font-weight:500}
+.exp-monto{display:flex;align-items:center;gap:8px;margin:8px 0;flex-wrap:wrap}
+.exp-monto-in{width:120px;border:1px solid var(--bordes);border-radius:8px;padding:6px 10px;
+  font-family:var(--f-p);font-size:14px;color:var(--negro);outline:none;
+  font-variant-numeric:tabular-nums;background:#fff}
+.exp-monto-in:focus{border-color:var(--negro)}
+@media(max-width:760px){
+  .mnt-fila{gap:14px}
+  .mnt-dato{min-width:104px}
+  .mnt-val{font-size:17px}
+}
+
+.req-avance{display:inline-block;font-size:13px;font-weight:500;color:var(--gris-400);
+  background:rgba(0,0,0,.04);border-radius:8px;padding:5px 10px;margin:8px 0 2px;
+  font-variant-numeric:tabular-nums}
+.req-avance.listo{background:rgba(20,130,90,.12);color:#14825a}
+.req-avance.sobre{background:rgba(194,65,12,.12);color:#c2410c}
+
+/* ← NUEVO: línea de tiempo de la operación */
+.tl-wrap summary{font-weight:600;color:var(--negro)}
+.tl{padding:16px 0 4px}
+.tl-vacio{font-size:14px;color:var(--gris-300);font-style:italic;padding:12px 0}
+.tl-dia{margin-bottom:6px}
+.tl-fecha{font-size:12px;font-weight:600;color:var(--gris-300);text-transform:uppercase;
+  letter-spacing:.5px;margin:14px 0 8px;padding-left:38px}
+.tl-item{display:flex;gap:14px;align-items:stretch}
+.tl-linea{position:relative;width:26px;flex:0 0 26px;display:flex;justify-content:center}
+.tl-linea::before{content:"";position:absolute;top:0;bottom:0;width:2px;background:var(--bordes)}
+.tl-item:last-child .tl-linea::before{bottom:auto;height:26px}
+.tl-punto{position:relative;z-index:1;width:26px;height:26px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;background:var(--gris-100,#f3f3f5);
+  color:var(--gris-400);flex:0 0 auto}
+.tl-cuerpo{flex:1;min-width:0;padding:0 0 18px}
+.tl-titulo{font-weight:600;font-size:15px;color:var(--negro);line-height:1.3}
+.tl-detalle{font-size:14px;color:var(--gris-400);margin-top:2px;line-height:1.45;word-break:break-word}
+.tl-pie{font-size:12px;color:var(--gris-300);margin-top:4px}
+.tono-inicio    .tl-punto{background:rgba(99,102,241,.14);color:#4f46e5}
+.tono-firma     .tl-punto{background:rgba(20,130,90,.14);color:#14825a}
+.tono-evidencia .tl-punto{background:rgba(234,88,12,.14);color:#c2410c}
+.tono-comparte  .tl-punto{background:rgba(14,116,144,.14);color:#0e7490}
+.tono-vinculo   .tl-punto{background:rgba(147,51,234,.14);color:#9333ea}
+@media(max-width:760px){
+  .tl-fecha{padding-left:30px}
+  .tl-item{gap:11px}
+  .tl-titulo{font-size:14px}
+  .tl-detalle{font-size:13px}
+}
 
 /* ← NUEVO: galería de evidencia visual */
 .galeria{max-width:860px;margin:26px auto 0;padding:20px;border:1px solid var(--bordes);
@@ -770,6 +874,68 @@ function selloDesdeUid(uid=""){
   return SELLOS[h % SELLOS.length];
 }
 
+// ── LÍNEA DE TIEMPO ───────────────────────────────────────────
+// ← NUEVO: registro de tipos de evento. Para soportar una acción
+// nueva (CONSULTA, SOLICITUD, ALERTA…) basta agregar una entrada
+// aquí; el componente de la línea de tiempo no se toca.
+//
+// `titulo` recibe el bloque completo, así que puede diferenciar
+// subtipos leyendo b.meta.tipo sin romper los bloques antiguos.
+const EVENTOS = {
+  "CREACIÓN": {
+    ico:"add_circle", tono:"inicio",
+    titulo:(b)=> b.meta?.tipo==="expediente" ? "Expediente abierto" : "Documento creado",
+  },
+  "EDICIÓN": {
+    ico:"edit", tono:"neutro",
+    titulo:()=> "Contenido editado",
+  },
+  "FIRMA": {
+    ico:"draw", tono:"firma",
+    titulo:(b)=> b.signature?.method==="webauthn" ? "Firma biométrica" : "Firma registrada",
+  },
+  "COMPARTIDO": {
+    ico:"group_add", tono:"comparte",
+    titulo:(b)=> b.meta?.tipo==="revocado" ? "Acceso retirado"
+               : /retirado/i.test(b.content||"") ? "Acceso retirado" : "Compartido",
+  },
+  "EVIDENCIA": {
+    ico:"attach_file", tono:"evidencia",
+    titulo:(b)=>{
+      const t = b.meta?.tipo;
+      if(t==="alta")     return "Comprobante adjuntado";
+      if(t==="baja")     return "Comprobante retirado";
+      if(t==="imagen")   return "Imagen adjuntada";
+      if(t==="imagen-baja") return "Imagen retirada";
+      if(t==="vinculo")  return "Documento vinculado";
+      // Bloques anteriores a `meta`: se deduce del texto.
+      if(/retirad|retiro/i.test(b.content||"")) return "Comprobante retirado";
+      if(/^imagen/i.test(b.content||""))        return "Imagen adjuntada";
+      return "Comprobante adjuntado";
+    },
+  },
+  "VINCULADO": {
+    ico:"link", tono:"vinculo",
+    titulo:()=> "Adjuntado a un expediente",
+  },
+};
+
+const EVENTO_DEFAULT = { ico:"history", tono:"neutro", titulo:(b)=>b.action };
+
+const eventoDe = (b) => EVENTOS[b.action] || EVENTO_DEFAULT;
+
+/** Agrupa los bloques por día, en orden cronológico. */
+function agruparPorDia(bloques){
+  const dias = [];
+  for(const b of [...bloques].sort((x,y)=>new Date(x.timestamp)-new Date(y.timestamp))){
+    const clave = (b.timestamp||"").slice(0,10);
+    const ultimo = dias[dias.length-1];
+    if(ultimo && ultimo.clave===clave) ultimo.bloques.push(b);
+    else dias.push({ clave, bloques:[b] });
+  }
+  return dias;
+}
+
 const FORMS = {
   factura: {
     heading: "Factura",
@@ -945,6 +1111,41 @@ function FormDoc({ formKey, fields, onChange, editable }){
 }
 
 // ── APP ───────────────────────────────────────────────────────
+// ← NUEVO: la historia de la operación en orden, no una lista de bloques.
+// Es la pantalla que hace visible la tesis: se valida la operación
+// completa, no cada documento por separado.
+function Timeline({ chain }){
+  const dias = agruparPorDia(chain||[]);
+  if(!dias.length) return <p className="tl-vacio">Todavía no hay actividad registrada.</p>;
+
+  return (
+    <div className="tl">
+      {dias.map(dia=>(
+        <div key={dia.clave} className="tl-dia">
+          <div className="tl-fecha">{fmtDia(dia.clave)}</div>
+          {dia.bloques.map(b=>{
+            const ev = eventoDe(b);
+            return (
+              <div key={b.hash} className={`tl-item tono-${ev.tono}`}>
+                <div className="tl-linea"><span className="tl-punto"><Icon n={ev.ico} size={17}/></span></div>
+                <div className="tl-cuerpo">
+                  <div className="tl-titulo">{ev.titulo(b)}</div>
+                  {b.content && b.action!=="EDICIÓN" && (
+                    <div className="tl-detalle">{b.content}</div>
+                  )}
+                  <div className="tl-pie">
+                    {b.author} · {fmtHora(b.timestamp)} · bloque #{b.index}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function ChainDoc(){
   const [screen,setScreen]   = useState("loading");
   const [authStep,setAuthStep] = useState(0);
@@ -970,7 +1171,7 @@ export default function ChainDoc(){
   const [dirty,setDirty]     = useState(false);
   const [saving,setSaving]   = useState(false);
   const [histOpen,setHist]   = useState(false);
-  const [histTab,setHistTab] = useState("Ediciones");
+  const [histTab,setHistTab] = useState("Línea de tiempo");  // ← ACTUALIZADO
   const [showHashes,setShowHashes] = useState({});
   const [menuOpen,setMenu]   = useState(false);
   const [verifyRes,setVerify]= useState(null);
@@ -1384,7 +1585,8 @@ export default function ChainDoc(){
     const id = genId();
     const numId = genNumId();
     const g = await mineBlock(null,"CREACIÓN",
-      `Apertura de expediente «${name}» con ${smartRes.requisitos.length} requisitos`,user);
+      `Apertura de expediente «${name}» con ${smartRes.requisitos.length} requisitos`,user,
+      { tipo:"expediente", requisitos:smartRes.requisitos.length });
 
     const nd = {
       id, numId, title:name, content:smartText, folder:mIn2||null,
@@ -1424,14 +1626,17 @@ export default function ChainDoc(){
 
       const last = d.chain[d.chain.length-1];
       const b = await mineBlock(last,"EVIDENCIA",
-        `${req?.titulo||reqId}: «${file.name}» (${hash.slice(0,16)}…)`,user);
+        `${req?.titulo||reqId}: «${file.name}» (${hash.slice(0,16)}…)`,user,
+        { tipo:"alta", requisito:reqId, archivo:file.name });
 
+      // ← ACTUALIZADO: se AGREGA a la lista, ya no reemplaza al anterior
+      const nuevo = { aid:genId(), nombre:file.name, tipo:guardado.tipo,
+                      tam:guardado.tam, tamOriginal:file.size,
+                      comprimida:guardado.comprimida, hash, path:guardado.path,
+                      subidoEn:b.timestamp, subidoPor:user };
       const requisitos = d.requisitos.map(r=> r.id!==reqId ? r : {
-        ...r, estado:"cumplido",
-        archivo:{ nombre:file.name, tipo:guardado.tipo, tam:guardado.tam,
-                  tamOriginal:file.size, comprimida:guardado.comprimida,
-                  hash, path:guardado.path,
-                  subidoEn:b.timestamp, subidoPor:user },
+        ...quitarArchivoViejo(r), estado:"cumplido",
+        archivos:[...archivosDe(r), nuevo],
       });
 
       const up = {...d, requisitos, chain:[...d.chain,b], lastModified:b.timestamp};
@@ -1448,17 +1653,28 @@ export default function ChainDoc(){
   };
 
   // ← ACTUALIZADO: además de asentarlo, borra el archivo de Storage
-  const removeEvidence = async(reqId)=>{
-    const req = d.requisitos.find(r=>r.id===reqId);
-    // ← ACTUALIZADO: un documento enlazado no se borra, sólo se desvincula
-    if(req?.archivo?.origen!=="interno" && req?.archivo?.path)
-      await deleteEvidence(req.archivo.path);
+  // ← ACTUALIZADO: retira UN comprobante, no vacía el requisito entero.
+  // Un documento enlazado sólo se desvincula; el original no se toca.
+  const removeEvidence = async(reqId, aid)=>{
+    const req   = d.requisitos.find(r=>r.id===reqId);
+    const lista = archivosDe(req);
+    const arch  = lista.find(a=>aidDe(a)===aid);
+    if(!arch) return;
+
+    if(arch.origen!=="interno" && arch.path) await deleteEvidence(arch.path);
+
     const last = d.chain[d.chain.length-1];
     const b = await mineBlock(last,"EVIDENCIA",
-      `Retiro de evidencia en «${req?.titulo||reqId}»`,user);
-    const requisitos = d.requisitos.map(r=> r.id!==reqId ? r : {...r,estado:"pendiente",archivo:null});
+      `Retiro de «${arch.nombre}» en «${req?.titulo||reqId}»`,user,
+      { tipo:"baja", requisito:reqId, archivo:arch.nombre });
+
+    const restantes = lista.filter(a=>aidDe(a)!==aid);
+    const requisitos = d.requisitos.map(r=> r.id!==reqId ? r : {
+      ...quitarArchivoViejo(r), archivos:restantes,
+      estado: restantes.length ? "cumplido" : "pendiente",
+    });
     const up = {...d, requisitos, chain:[...d.chain,b], lastModified:b.timestamp};
-    if(await store.set(up.id,up)){ setD(up); notify("Evidencia retirada"); }
+    if(await store.set(up.id,up)){ setD(up); notify("Comprobante retirado"); }
   };
 
   // ← NUEVO: verificación biométrica genérica, reutilizable por cualquier
@@ -1546,7 +1762,8 @@ export default function ChainDoc(){
 
       const last = d.chain[d.chain.length-1];
       const b = await mineBlock(last,"COMPARTIDO",
-        `Compartido con ${cuenta.nombre||correo} (${correo})`,user);
+        `Compartido con ${cuenta.nombre||correo} (${correo})`,user,
+        { tipo:"alta", correo });
 
       const up = {...d,
         sharedWith:[...(d.sharedWith||[]), correo],
@@ -1584,7 +1801,8 @@ export default function ChainDoc(){
 
       const last = d.chain[d.chain.length-1];
       const b = await mineBlock(last,"EVIDENCIA",
-        `Imagen adjunta «${file.name}» (${hash.slice(0,16)}…)`,user);
+        `Imagen adjunta «${file.name}» (${hash.slice(0,16)}…)`,user,
+        { tipo:"imagen", archivo:file.name });
 
       const imagenes = [...(d.imagenes||[]), {
         path:g.path, nombre:file.name, tipo:g.tipo, tam:g.tam,
@@ -1607,10 +1825,25 @@ export default function ChainDoc(){
     await deleteEvidence(path);
     const last = d.chain[d.chain.length-1];
     const b = await mineBlock(last,"EVIDENCIA",
-      `Imagen retirada «${img?.nombre||path}»`,user);
+      `Imagen retirada «${img?.nombre||path}»`,user,
+      { tipo:"imagen-baja", archivo:img?.nombre || null });
     const up = {...d, imagenes:(d.imagenes||[]).filter(x=>x.path!==path),
                 chain:[...d.chain,b], lastModified:b.timestamp};
     if(await store.set(up.id,up)){ setD(up); notify("Imagen retirada"); }
+  };
+
+  // ← NUEVO: permite anotar a mano el importe de un comprobante subido.
+  // Los documentos internos lo traen solos; un PDF escaneado no.
+  // ← ACTUALIZADO: el importe se anota por comprobante, no por requisito
+  const setMontoReq = async(reqId, aid, texto)=>{
+    const n = parseFloat(String(texto).replace(/[^0-9.-]/g,""));
+    const monto = Number.isFinite(n) ? n : null;
+    const requisitos = d.requisitos.map(r=> r.id!==reqId ? r : {
+      ...quitarArchivoViejo(r),
+      archivos: archivosDe(r).map(a=> aidDe(a)!==aid ? a : {...a, monto}),
+    });
+    const up = {...d, requisitos};
+    if(await store.set(up.id,up)) setD(up);
   };
 
   // ── ADJUNTAR A UN EXPEDIENTE ──
@@ -1634,15 +1867,19 @@ export default function ChainDoc(){
 
       const last = exp.chain[exp.chain.length-1];
       const b = await mineBlock(last,"EVIDENCIA",
-        `${req?.titulo||reqId}: documento «${d.title}» (${d.numId})`,user);
+        `${req?.titulo||reqId}: documento «${d.title}» (${d.numId})`,user,
+        { tipo:"vinculo", requisito:reqId, docId:d.id, numId:d.numId });
 
+      // ← ACTUALIZADO: se AGREGA a la lista del requisito
+      const nuevo = { aid:genId(), origen:"interno",
+                      docId:d.id, numId:d.numId, nombre:d.title,
+                      tipo:d.kind==="expediente"?"expediente":(d.tplId||"documento"),
+                      hash:cabeza.hash, bloques:d.chain.length,
+                      monto: montoDeDocumento(d),   // leído de su plantilla
+                      subidoEn:b.timestamp, subidoPor:user };
       const requisitos = exp.requisitos.map(r=> r.id!==reqId ? r : {
-        ...r, estado:"cumplido",
-        archivo:{ origen:"interno",
-                  docId:d.id, numId:d.numId, nombre:d.title,
-                  tipo:d.kind==="expediente"?"expediente":(d.tplId||"documento"),
-                  hash:cabeza.hash, bloques:d.chain.length,
-                  subidoEn:b.timestamp, subidoPor:user },
+        ...quitarArchivoViejo(r), estado:"cumplido",
+        archivos:[...archivosDe(r), nuevo],
       });
 
       const up = {...exp, requisitos, chain:[...exp.chain,b], lastModified:b.timestamp};
@@ -1664,7 +1901,8 @@ export default function ChainDoc(){
   // ← NUEVO: retirar el acceso también queda asentado en la cadena
   const revokeShare = async(correo)=>{
     const last = d.chain[d.chain.length-1];
-    const b = await mineBlock(last,"COMPARTIDO",`Acceso retirado a ${correo}`,user);
+    const b = await mineBlock(last,"COMPARTIDO",`Acceso retirado a ${correo}`,user,
+      { tipo:"revocado", correo });
     const up = {...d,
       sharedWith:(d.sharedWith||[]).filter(x=>x!==correo),
       chain:[...d.chain,b], lastModified:b.timestamp};
@@ -2066,6 +2304,7 @@ export default function ChainDoc(){
         {/* ← NUEVO: los expedientes se ven como lista de comprobantes, no como papel */}
         {d.kind==="expediente" ? (()=>{
           const st = expedienteStatus(d);
+          const mt = calcularMontos(d);   // ← NUEVO: derivado, no almacenado
           return (<div className="exp">
             <div className={`exp-head ${st.estado}`}>
               <div className="exp-bar-wrap">
@@ -2082,15 +2321,70 @@ export default function ChainDoc(){
 
             {d.resumen && <p className="exp-sum">{d.resumen}</p>}
 
+            {/* ← NUEVO: aritmética del expediente. Se recalcula al abrir,
+                nunca se guarda: así no puede quedar desactualizada. */}
+            {mt.base!=null && (
+              <div className={`mnt ${mt.excedido?"excedido":""}`}>
+                <div className="mnt-fila">
+                  <div className="mnt-dato">
+                    <span className="mnt-lbl">{mt.contrato!=null?"Contrato":"Presupuesto de requisitos"}</span>
+                    <span className="mnt-val">{fmtMonto(mt.base, mt.moneda)}</span>
+                  </div>
+                  <div className="mnt-dato">
+                    <span className="mnt-lbl">Comprobado</span>
+                    <span className="mnt-val fuerte">{fmtMonto(mt.comprobado ?? 0, mt.moneda)}</span>
+                  </div>
+                  <div className="mnt-dato">
+                    <span className="mnt-lbl">{mt.excedido?"Excedente":"Restante"}</span>
+                    <span className={`mnt-val ${mt.excedido?"malo":""}`}>
+                      {fmtMonto(Math.abs(mt.restante ?? mt.base), mt.moneda)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mnt-bar">
+                  <div className="mnt-fill" style={{width:`${Math.min(100, mt.porcentaje||0)}%`}}/>
+                </div>
+                <div className="mnt-pie">
+                  {mt.porcentaje!=null && `${mt.porcentaje}% comprobado`}
+                  {mt.sinImporte>0 && ` · ${mt.sinImporte} comprobante${mt.sinImporte===1?"":"s"} sin importe anotado`}
+                </div>
+
+                {mt.excedido && (
+                  <div className="mnt-aviso malo">
+                    Lo comprobado supera el monto del contrato en {fmtMonto(Math.abs(mt.restante), mt.moneda)}.
+                  </div>
+                )}
+                {mt.descuadre!=null && (
+                  <div className="mnt-aviso">
+                    Los requisitos suman {fmtMonto(mt.esperado, mt.moneda)}, pero el contrato dice {fmtMonto(mt.contrato, mt.moneda)}.
+                    Diferencia de {fmtMonto(Math.abs(mt.descuadre), mt.moneda)}.
+                  </div>
+                )}
+                {mt.desviaciones.map(dv=>(
+                  <div key={dv.id} className="mnt-aviso">
+                    «{dv.titulo}»: se pactó {fmtMonto(dv.esperado, mt.moneda)} y se comprobó {fmtMonto(dv.real, mt.moneda)}
+                    {dv.piezas>1 && ` en ${dv.piezas} comprobantes`}
+                    {" "}({dv.dif>0?"+":"−"}{fmtMonto(Math.abs(dv.dif), mt.moneda)}).
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="exp-chips">
               {d.fechaLimite && <span className="chip">Límite: {d.fechaLimite}</span>}
               {d.montoTotal!=null && <span className="chip">{d.moneda||"MXN"} ${d.montoTotal.toLocaleString("es-MX")}</span>}
               {(d.partes||[]).map((p,i)=><span key={i} className="chip">{p.rol}: {p.nombre}</span>)}
             </div>
 
-            {(d.requisitos||[]).map((r,i)=>(
-              <div key={r.id} className={`exp-item ${r.estado}`}>
-                <div className="exp-check">{r.estado==="cumplido" ? "✓" : i+1}</div>
+            {/* ← ACTUALIZADO: cada requisito admite varios comprobantes */}
+            {(d.requisitos||[]).map((r,i)=>{
+              const lista = archivosDe(r);
+              const suma  = comprobadoDe(r);
+              const listo = lista.length>0;
+              return (
+              <div key={r.id} className={`exp-item ${listo?"cumplido":"pendiente"}`}>
+                <div className="exp-check">{listo ? "✓" : i+1}</div>
                 <div className="exp-item-b">
                   <div className="exp-item-t">{r.titulo}</div>
                   <div className="exp-item-d">{r.descripcion}</div>
@@ -2099,37 +2393,71 @@ export default function ChainDoc(){
                     {r.monto!=null && <span className="tag">${r.monto.toLocaleString("es-MX")}</span>}
                     {r.fechaLimite && <span className="tag">{r.fechaLimite}</span>}
                     {!r.obligatorio && <span className="tag">opcional</span>}
+                    {lista.length>1 && <span className="tag">{lista.length} comprobantes</span>}
                   </div>
 
-                  {r.archivo ? (
-                    <div className="exp-file">
+                  {/* ← NUEVO: avance del requisito cuando el contrato fija un monto */}
+                  {r.monto!=null && suma!=null && (
+                    <div className={`req-avance ${suma>r.monto+1?"sobre":suma>=r.monto-1?"listo":""}`}>
+                      {fmtMonto(suma, d.moneda||"MXN")} de {fmtMonto(r.monto, d.moneda||"MXN")}
+                      {suma < r.monto-1 && ` · faltan ${fmtMonto(r.monto-suma, d.moneda||"MXN")}`}
+                      {suma > r.monto+1 && ` · ${fmtMonto(suma-r.monto, d.moneda||"MXN")} por encima`}
+                    </div>
+                  )}
+
+                  {lista.map(a=>{
+                    const aid = aidDe(a);
+                    return (
+                    <div key={aid} className="exp-file">
                       <div className="exp-file-n">
-                        {/* ← NUEVO: distingue un documento de la plataforma */}
-                        {r.archivo.origen==="interno" && <span className="tag" style={{marginRight:6}}>chaindoc</span>}
-                        {r.archivo.nombre}
+                        {a.origen==="interno" && <span className="tag" style={{marginRight:6}}>chaindoc</span>}
+                        {a.nombre}
                       </div>
                       <div className="exp-file-m">
-                        {r.archivo.origen==="interno"
-                          ? `${r.archivo.numId} · ${r.archivo.bloques} bloques · ${fmtFull(r.archivo.subidoEn)} · ${r.archivo.subidoPor}`
-                          : `${(r.archivo.tam/1024).toFixed(0)} KB · ${fmtFull(r.archivo.subidoEn)} · ${r.archivo.subidoPor}`}
+                        {a.origen==="interno"
+                          ? `${a.numId} · ${a.bloques} bloques · ${fmtFull(a.subidoEn)} · ${a.subidoPor}`
+                          : `${(a.tam/1024).toFixed(0)} KB · ${fmtFull(a.subidoEn)} · ${a.subidoPor}`}
                       </div>
-                      <div className="exp-file-h">SHA-256 {r.archivo.hash}</div>
-                      {r.archivo.origen==="interno" && (
+                      <div className="exp-file-h">SHA-256 {a.hash}</div>
+
+                      <div className="exp-monto">
+                        <span className="mnt-lbl">Importe:</span>
+                        <input className="exp-monto-in" inputMode="decimal" placeholder="0.00"
+                          defaultValue={a.monto ?? ""}
+                          onBlur={e=>setMontoReq(r.id, aid, e.target.value)}
+                          onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()} />
+                        {a.origen==="interno" && a.monto!=null &&
+                          <span className="tag">leído del documento</span>}
+                      </div>
+
+                      {a.origen==="interno" && (
                         <button className="btn btn-tertiary" style={{marginRight:8}}
-                          onClick={()=>openDoc(r.archivo.docId)}>Abrir documento</button>
+                          onClick={()=>openDoc(a.docId)}>Abrir documento</button>
                       )}
-                      <button className="btn btn-tertiary" onClick={()=>removeEvidence(r.id)}>Retirar</button>
+                      <button className="btn btn-tertiary"
+                        onClick={()=>removeEvidence(r.id, aid)}>Retirar</button>
                     </div>
-                  ) : (
-                    <label className="exp-up">
-                      <span>Adjuntar comprobante</span>
-                      <input type="file" style={{display:"none"}} disabled={saving}
-                        onChange={e=>{ attachEvidence(r.id, e.target.files?.[0]); e.target.value=""; }} />
-                    </label>
-                  )}
+                    );
+                  })}
+
+                  {/* ← ACTUALIZADO: siempre disponible. El límite lo marca
+                      el presupuesto, no el número de archivos. */}
+                  <label className="exp-up">
+                    <span>{listo ? "Agregar otro comprobante" : "Adjuntar comprobante"}</span>
+                    <input type="file" style={{display:"none"}} disabled={saving}
+                      onChange={e=>{ attachEvidence(r.id, e.target.files?.[0]); e.target.value=""; }} />
+                  </label>
                 </div>
               </div>
-            ))}
+              );
+            })}
+
+            {/* ← NUEVO: la historia de la operación, abierta por defecto.
+                Es lo que distingue un expediente de una carpeta de archivos. */}
+            <details className="exp-src tl-wrap" open>
+              <summary>Línea de tiempo de la operación</summary>
+              <Timeline chain={d.chain}/>
+            </details>
 
             <details className="exp-src">
               <summary>Ver contrato base</summary>
@@ -2138,7 +2466,9 @@ export default function ChainDoc(){
 
             {/* ← NUEVO: documentos adjuntos, protegidos por el código de firma */}
             {(()=>{
-              const conArchivo = (d.requisitos||[]).filter(r=>r.archivo);
+              // ← ACTUALIZADO: se aplanan todos los comprobantes de todos los requisitos
+              const conArchivo = (d.requisitos||[]).flatMap(r=>
+                archivosDe(r).map(a=>({ ...a, reqId:r.id, reqTitulo:r.titulo })));
               return (
                 <div className="adj">
                   <div className="adj-h">
@@ -2165,26 +2495,27 @@ export default function ChainDoc(){
                     </div>
                   ) : (
                     <>
-                      {conArchivo.map(r=>(
-                        <div key={r.id} className="adj-row">
+                      {conArchivo.map(a=>(
+                        <div key={aidDe(a)} className="adj-row">
                           <div className="adj-row-b">
-                            <div className="adj-row-t">{r.archivo.nombre}</div>
+                            <div className="adj-row-t">{a.nombre}</div>
                             <div className="adj-row-m">
-                              {r.titulo} · {r.archivo.origen==="interno"
-                                ? `documento ${r.archivo.numId}`
-                                : `${(r.archivo.tam/1024).toFixed(0)} KB${r.archivo.comprimida?" (comprimida)":""}`}
-                              {" · "}{fmtFull(r.archivo.subidoEn)}
+                              {a.reqTitulo} · {a.origen==="interno"
+                                ? `documento ${a.numId}`
+                                : `${(a.tam/1024).toFixed(0)} KB${a.comprimida?" (comprimida)":""}`}
+                              {a.monto!=null && ` · ${fmtMonto(a.monto, d.moneda||"MXN")}`}
+                              {" · "}{fmtFull(a.subidoEn)}
                             </div>
-                            <div className="exp-file-h">SHA-256 {r.archivo.hash}</div>
+                            <div className="exp-file-h">SHA-256 {a.hash}</div>
                           </div>
                           <div className="adj-acts">
-                            {r.archivo.origen==="interno" ? (
-                              <button className="btn btn-tertiary" onClick={()=>openDoc(r.archivo.docId)}>Abrir</button>
+                            {a.origen==="interno" ? (
+                              <button className="btn btn-tertiary" onClick={()=>openDoc(a.docId)}>Abrir</button>
                             ) : (<>
-                              {isPreviewable(r.archivo.tipo) && (
-                                <button className="btn btn-tertiary" onClick={()=>getFile(r.archivo,false)}>Ver</button>
+                              {isPreviewable(a.tipo) && (
+                                <button className="btn btn-tertiary" onClick={()=>getFile(a,false)}>Ver</button>
                               )}
-                              <button className="btn btn-tertiary" onClick={()=>getFile(r.archivo,true)}>Descargar</button>
+                              <button className="btn btn-tertiary" onClick={()=>getFile(a,true)}>Descargar</button>
                             </>)}
                           </div>
                         </div>
@@ -2295,12 +2626,15 @@ export default function ChainDoc(){
         <div className="hist" onClick={e=>e.stopPropagation()}>
           <h2 className="hist-title">Historial</h2>
           <div className="tabs">
-            {["Ediciones","Firmas","Compartidos"].map(t=>(
+            {["Línea de tiempo","Ediciones","Firmas","Compartidos"].map(t=>(
               <button key={t} className={`tab ${histTab===t?"on":""}`} onClick={()=>setHistTab(t)}>{t}</button>
             ))}
           </div>
           <div className="hist-list">
-            {(histTab==="Ediciones"?eds:histTab==="Firmas"?sigs:shs).slice().reverse().map(b=>(
+            {/* ← NUEVO: vista cronológica completa, en vez de listas por tipo */}
+            {histTab==="Línea de tiempo" && <Timeline chain={d.chain}/>}
+            {histTab!=="Línea de tiempo" &&
+             (histTab==="Ediciones"?eds:histTab==="Firmas"?sigs:shs).slice().reverse().map(b=>(
               <div key={b.index} className="hcard">
                 <div className="hcard-a">{b.author}</div>
                 <div className="hcard-d">{fmtFull(b.timestamp)}</div>
@@ -2330,7 +2664,8 @@ export default function ChainDoc(){
                 )}
               </div>
             ))}
-            {(histTab==="Ediciones"?eds:histTab==="Firmas"?sigs:shs).length===0 &&
+            {histTab!=="Línea de tiempo" &&
+             (histTab==="Ediciones"?eds:histTab==="Firmas"?sigs:shs).length===0 &&
               <div className="empty">Sin registros en esta categoría.</div>}
           </div>
           <button className="btn btn-warning" onClick={()=>setHist(false)}>Cerrar</button>
@@ -2783,25 +3118,43 @@ export default function ChainDoc(){
           </p>
           {linkErr && <div className="share-err">{linkErr}</div>}
           <div className="link-list">
-            {linkExp.requisitos.map((r,i)=>(
+            {/* ← ACTUALIZADO: un requisito con comprobantes ya no se ve
+                bloqueado; ahora se le pueden sumar más. */}
+            {linkExp.requisitos.map((r,i)=>{
+              const lista = archivosDe(r);
+              const suma  = comprobadoDe(r);
+              const listo = lista.length>0;
+              const mio   = lista.some(a=>a.docId===d.id);
+              return (
               <div key={r.id}
-                className={`link-row ${r.estado==="cumplido"?"ocupado":""}`}
-                onClick={()=>{ if(!linkBusy) linkToExpediente(linkExp,r.id); }}>
-                <span className="smart-num">{r.estado==="cumplido"?"✓":i+1}</span>
+                className={`link-row ${mio?"ocupado":""}`}
+                onClick={()=>{ if(!linkBusy && !mio) linkToExpediente(linkExp,r.id); }}>
+                <span className="smart-num">{listo?"✓":i+1}</span>
                 <div className="link-row-b">
                   <div className="link-row-t">{r.titulo}</div>
                   <div className="link-row-m">
-                    {r.estado==="cumplido"
-                      ? `Ya cubierto por «${r.archivo?.nombre||"un archivo"}» — se reemplazará`
-                      : r.descripcion}
+                    {mio
+                      ? "Este documento ya está adjuntado aquí"
+                      : listo
+                        ? `Ya tiene ${lista.length} comprobante${lista.length===1?"":"s"} — se agregará uno más`
+                        : r.descripcion}
                   </div>
                   <div className="smart-tags">
                     <span className={`tag t-${r.tipo}`}>{r.tipo}</span>
                     {r.monto!=null && <span className="tag">${r.monto.toLocaleString("es-MX")}</span>}
+                    {/* ← NUEVO: cuánto falta para cubrir el monto pactado */}
+                    {r.monto!=null && suma!=null && (
+                      <span className={`tag ${suma>=r.monto-1?"t-documento":""}`}>
+                        {suma>=r.monto-1
+                          ? "cubierto"
+                          : `faltan $${(r.monto-suma).toLocaleString("es-MX")}`}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
           <div className="modal-row">
             <button className="btn btn-secondary" disabled={linkBusy}
