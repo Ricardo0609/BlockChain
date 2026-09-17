@@ -222,11 +222,104 @@ export async function hashFile(file) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Estado global del expediente, calculado sin IA: son puras reglas. */
+/**
+ * Un requisito admite VARIOS comprobantes: una barda de concreto necesita
+ * el recibo del cemento, el de los ladrillos y el de la grava.
+ *
+ * Los expedientes viejos guardaban un solo `archivo`; esta función
+ * unifica ambas formas para que nada del código tenga que distinguirlas.
+ */
+export const archivosDe = (r) =>
+  Array.isArray(r?.archivos) ? r.archivos : (r?.archivo ? [r.archivo] : []);
+
+/** Identificador estable de un comprobante dentro de su requisito. */
+export const aidDe = (a) => a?.aid || a?.path || a?.docId || a?.nombre || "";
+
+/** Suma de los importes anotados en los comprobantes de un requisito. */
+export function comprobadoDe(r) {
+  const lista = archivosDe(r).filter((a) => typeof a.monto === "number");
+  return lista.length ? lista.reduce((s, a) => s + a.monto, 0) : null;
+}
+
+/** Formatea un importe con su moneda. */
+export const fmtMonto = (n, moneda = "MXN") =>
+  n == null ? "—" : `$${Number(n).toLocaleString("es-MX", {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  })} ${moneda}`;
+
+/**
+ * Lee el importe de un documento con plantilla visual (factura o recibo).
+ * Los campos son texto libre, así que se limpian antes de convertir.
+ */
+export function montoDeDocumento(doc) {
+  const f = doc?.fields;
+  if (!f) return null;
+  const crudo = f.total ?? f.cantidad ?? f.subtotal ?? null;
+  if (crudo == null || crudo === "") return null;
+  const n = parseFloat(String(crudo).replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Aritmética del expediente. Sin IA: sólo suma lo que hay.
+ *
+ * - esperado:   lo que el contrato dice que debe gastarse
+ * - comprobado: lo que realmente respaldan los comprobantes adjuntos
+ * - desviaciones: requisitos donde lo comprobado no cuadra con lo pactado
+ */
+export function calcularMontos(exp) {
+  const reqs = exp?.requisitos || [];
+  const moneda = exp?.moneda || "MXN";
+  const contrato = typeof exp?.montoTotal === "number" ? exp.montoTotal : null;
+
+  let esperado = 0, comprobado = 0;
+  let hayEsperado = false, hayComprobado = false;
+  const desviaciones = [];
+  let sinImporte = 0;
+
+  for (const r of reqs) {
+    if (typeof r.monto === "number") { esperado += r.monto; hayEsperado = true; }
+
+    // ← ACTUALIZADO: se suman TODOS los comprobantes del requisito
+    const lista = archivosDe(r);
+    const real = comprobadoDe(r);
+    if (real != null) { comprobado += real; hayComprobado = true; }
+    sinImporte += lista.filter((a) => typeof a.monto !== "number").length;
+
+    // Sólo tiene sentido comparar cuando existen ambos lados.
+    if (typeof r.monto === "number" && real != null) {
+      const dif = real - r.monto;
+      // Tolerancia de un peso: evita marcar diferencias por redondeo.
+      if (Math.abs(dif) > 1) {
+        desviaciones.push({
+          id: r.id, titulo: r.titulo, esperado: r.monto, real, dif,
+          piezas: lista.length,
+        });
+      }
+    }
+  }
+
+  const base = contrato ?? (hayEsperado ? esperado : null);
+  const restante = base != null && hayComprobado ? base - comprobado : null;
+
+  return {
+    moneda, contrato,
+    esperado: hayEsperado ? esperado : null,
+    comprobado: hayComprobado ? comprobado : null,
+    base, restante, sinImporte, desviaciones,
+    porcentaje: base && base > 0 ? Math.min(999, Math.round((comprobado / base) * 100)) : null,
+    excedido: base != null && comprobado > base + 1,
+    // Aplica cuando el contrato fija un total pero los requisitos suman otra cosa.
+    descuadre: contrato != null && hayEsperado && Math.abs(esperado - contrato) > 1
+      ? esperado - contrato : null,
+  };
+}
+
 export function expedienteStatus(exp) {
   const reqs = exp?.requisitos || [];
   const obligatorios = reqs.filter((r) => r.obligatorio);
-  const cumplidos = obligatorios.filter((r) => r.estado === "cumplido").length;
+  // ← ACTUALIZADO: se deriva de los comprobantes, no del campo guardado
+  const cumplidos = obligatorios.filter((r) => archivosDe(r).length > 0).length;
   const total = obligatorios.length;
 
   const hoy = new Date().toISOString().slice(0, 10);
