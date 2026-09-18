@@ -241,6 +241,63 @@ export function comprobadoDe(r) {
   return lista.length ? lista.reduce((s, a) => s + a.monto, 0) : null;
 }
 
+// ── INTEGRIDAD DE LOS VÍNCULOS ────────────────────────────────
+
+/**
+ * Compara un comprobante enlazado contra el estado actual del documento
+ * al que apunta. Al vincular guardamos el hash de su último bloque; aquí
+ * se averigua qué pasó con esa huella desde entonces.
+ *
+ * La distinción clave: que a una factura le agreguen una firma después
+ * de adjuntarla es normal, y su historia sigue intacta. Que la huella
+ * registrada ya no aparezca en su cadena significa que la historia se
+ * reescribió, y eso sí es una alerta.
+ */
+export function estadoVinculo(archivo, docActual) {
+  if (!archivo || archivo.origen !== "interno") return null;
+  if (!archivo.hash) return { estado: "sinHuella", texto: "Se adjuntó sin registrar huella." };
+  if (!docActual) {
+    return { estado: "faltante", texto: "El documento ya no existe o perdiste el acceso." };
+  }
+
+  const cadena = docActual.chain || [];
+  const cabeza = cadena[cadena.length - 1];
+  if (!cabeza) return { estado: "faltante", texto: "El documento no tiene historial." };
+
+  if (cabeza.hash === archivo.hash) {
+    return { estado: "vigente", texto: "Sin cambios desde que se adjuntó." };
+  }
+
+  // ¿La huella guardada sigue formando parte de su historia?
+  const pos = cadena.findIndex((b) => b.hash === archivo.hash);
+  if (pos >= 0) {
+    const posteriores = cadena.slice(pos + 1);
+    const acciones = [...new Set(posteriores.map((b) => b.action))];
+    const n = posteriores.length;
+    return {
+      estado: "ampliado", nuevos: n, acciones,
+      hashActual: cabeza.hash, desde: posteriores[0]?.timestamp || null,
+      texto: `${n} bloque${n === 1 ? "" : "s"} nuevo${n === 1 ? "" : "s"} desde que se adjuntó: ${acciones.join(", ").toLowerCase()}.`,
+    };
+  }
+
+  return {
+    estado: "alterado", hashActual: cabeza.hash,
+    texto: "La huella registrada ya no aparece en la historia de este documento. Su cadena fue reescrita o reemplazada.",
+  };
+}
+
+/** Cuenta los estados de un mapa de vínculos, para la cabecera. */
+export function resumenVinculos(mapa) {
+  const vals = Object.values(mapa || {}).filter(Boolean);
+  return {
+    alterados: vals.filter((v) => v.estado === "alterado").length,
+    faltantes: vals.filter((v) => v.estado === "faltante").length,
+    ampliados: vals.filter((v) => v.estado === "ampliado").length,
+    vigentes:  vals.filter((v) => v.estado === "vigente").length,
+  };
+}
+
 /** Formatea un importe con su moneda. */
 export const fmtMonto = (n, moneda = "MXN") =>
   n == null ? "—" : `$${Number(n).toLocaleString("es-MX", {
@@ -343,4 +400,287 @@ export function expedienteStatus(exp) {
     dias,
     estado: completo ? "completo" : vencido ? "vencido" : "abierto",
   };
+}
+
+// ── BITÁCORA DE CONSULTAS ─────────────────────────────────────
+// ← NUEVO: registra quién abrió un documento compartido.
+//
+// Riesgo acotado a propósito: si cada apertura generara un bloque, la
+// cadena crecería sin control (abrir un expediente 20 veces al día lo
+// llenaría de ruido y encarecería cada lectura de Firestore).
+//
+// Por eso se registra UNA consulta por persona y día, y sólo en
+// documentos compartidos: en uno privado, saber que el dueño lo abrió
+// no aporta transparencia a nadie.
+
+/** ¿Hay que asentar una consulta de esta persona ahora mismo? */
+export function debeRegistrarConsulta(doc, uid, email) {
+  if (!doc || !uid) return false;
+  if (!(doc.sharedWith || []).length) return false;     // sin terceros, no hay a quién informar
+
+  const hoy = new Date().toISOString().slice(0, 10);
+  const yaHoy = (doc.chain || []).some(
+    (b) => b.action === "CONSULTA" &&
+           b.meta?.uid === uid &&
+           (b.timestamp || "").slice(0, 10) === hoy
+  );
+  if (yaHoy) return false;
+
+  // Sólo se registra a quien no es el dueño, o al dueño de un
+  // expediente que ya comparte con otros.
+  return doc.ownerUid !== uid || Boolean(email);
+}
+
+/** Agrupa las consultas por persona, para leerlas de un vistazo. */
+export function resumenConsultas(chain = []) {
+  const porPersona = new Map();
+  for (const b of chain) {
+    if (b.action !== "CONSULTA") continue;
+    const clave = b.meta?.email || b.author || "desconocido";
+    const prev = porPersona.get(clave) || { quien: b.author || clave, email: b.meta?.email || null, veces: 0, ultima: null };
+    prev.veces += 1;
+    if (!prev.ultima || b.timestamp > prev.ultima) prev.ultima = b.timestamp;
+    porPersona.set(clave, prev);
+  }
+  return [...porPersona.values()].sort((a, b) => (b.ultima || "").localeCompare(a.ultima || ""));
+}
+
+// ── DETECCIÓN DE DUPLICADOS ───────────────────────────────────
+// ← NUEVO: ya calculamos el SHA-256 de cada archivo al adjuntarlo.
+// Con eso se detecta el mismo comprobante usado en dos lugares, que
+// es un vector real de error y de comprobación duplicada de gastos.
+// No hace falta índice aparte: se recorre lo que ya está cargado.
+
+/**
+ * Índice identidad → dónde aparece.
+ *
+ * ⚠️ La identidad depende del origen, y esto importa:
+ *
+ * - Un archivo subido se identifica por su SHA-256: dos PDF con el
+ *   mismo contenido son el mismo comprobante aunque los renombren.
+ *
+ * - Un documento de chaindoc se identifica por su `docId`, NO por su
+ *   hash. El hash que guardamos es el de su último bloque al momento
+ *   de adjuntarlo: si adjuntas la misma factura a dos expedientes en
+ *   días distintos y entre medias la firmaste, los hashes difieren
+ *   aunque sea la misma factura. Comparar por hash no la detectaría.
+ */
+export function indiceHuellas(docs = []) {
+  const idx = new Map();
+
+  const anotar = (clave, ubi) => {
+    if (!clave) return;
+    if (!idx.has(clave)) idx.set(clave, []);
+    idx.get(clave).push(ubi);
+  };
+
+  for (const doc of docs) {
+    for (const r of doc.requisitos || []) {
+      for (const a of archivosDe(r)) {
+        const interno = a.origen === "interno";
+        anotar(interno ? `doc:${a.docId}` : `sha:${a.hash}`, {
+          docId: doc.id, docTitulo: doc.title,
+          tipo: interno ? "documento" : "comprobante",
+          reqId: r.id, reqTitulo: r.titulo,
+          nombre: a.nombre, monto: a.monto ?? null, subidoEn: a.subidoEn,
+          fuenteId: interno ? a.docId : null, numId: a.numId || null,
+        });
+      }
+    }
+    for (const img of doc.imagenes || []) {
+      anotar(`sha:${img.hash}`, {
+        docId: doc.id, docTitulo: doc.title, tipo: "imagen",
+        nombre: img.nombre, monto: null, subidoEn: img.subidoEn,
+      });
+    }
+  }
+  return idx;
+}
+
+/**
+ * Comprobantes que aparecen en más de un lugar.
+ *
+ * `alcance` marca la gravedad:
+ * - entre-expedientes: el mismo gasto comprobado en dos operaciones.
+ *   Es el caso grave y el que sube al panel de inicio.
+ * - mismo-expediente: repetido en dos requisitos de la misma
+ *   operación. Puede ser legítimo (una factura que cubre dos
+ *   conceptos), pero su importe se cuenta doble en el presupuesto.
+ */
+export function duplicados(docs = []) {
+  const grupos = [];
+  for (const [clave, ubis] of indiceHuellas(docs)) {
+    if (ubis.length < 2) continue;
+    const docsDistintos = new Set(ubis.map((u) => u.docId));
+    grupos.push({
+      clave, hash: clave.startsWith("sha:") ? clave.slice(4) : null,
+      esInterno: clave.startsWith("doc:"),
+      ubicaciones: ubis,
+      veces: ubis.length,
+      nombre: ubis[0].nombre,
+      numId: ubis[0].numId || null,
+      monto: ubis.find((u) => u.monto != null)?.monto ?? null,
+      alcance: docsDistintos.size > 1 ? "entre-expedientes" : "mismo-expediente",
+    });
+  }
+  // Los que cruzan expedientes primero: son los que importan.
+  return grupos.sort((a, b) =>
+    (a.alcance === b.alcance ? b.veces - a.veces : a.alcance === "entre-expedientes" ? -1 : 1));
+}
+
+/** ¿Este documento ya está adjunto a algún expediente? Devuelve dónde. */
+export function dondeEstaAdjunto(docId, docs = []) {
+  const sitios = [];
+  for (const doc of docs) {
+    if (doc.id === docId) continue;
+    for (const r of doc.requisitos || []) {
+      for (const a of archivosDe(r)) {
+        if (a.origen === "interno" && a.docId === docId) {
+          sitios.push({ expId: doc.id, expTitulo: doc.title, reqId: r.id, reqTitulo: r.titulo });
+        }
+      }
+    }
+  }
+  return sitios;
+}
+
+/** Duplicados que tocan un expediente concreto. */
+export const duplicadosDe = (grupos, docId) =>
+  grupos.filter((g) => g.ubicaciones.some((u) => u.docId === docId));
+
+// ── PANEL DE VENCIMIENTOS ─────────────────────────────────────
+
+/** Días desde la última actividad registrada. */
+export function diasInactivo(doc) {
+  if (!doc?.lastModified) return null;
+  const ms = Date.now() - new Date(doc.lastModified).getTime();
+  return Math.floor(ms / 86400000);
+}
+
+/**
+ * Cruza todos los expedientes y los reparte en cubetas accionables.
+ * Responde: qué urge, qué está detenido, qué ya cerró.
+ */
+export function panelExpedientes(docs = [], opciones = {}) {
+  const { diasAviso = 7, diasQuieto = 14 } = opciones;
+  const exps = docs.filter((x) => x.kind === "expediente");
+  const dups = duplicados(docs);
+
+  const filas = exps.map((x) => {
+    const st = expedienteStatus(x);
+    const mt = calcularMontos(x);
+    return {
+      doc: x, st, mt,
+      inactivo: diasInactivo(x),
+      duplicados: duplicadosDe(dups, x.id).length,
+    };
+  });
+
+  const vencidos   = filas.filter((f) => f.st.vencido && !f.st.completo);
+  const porVencer  = filas.filter((f) => !f.st.vencido && !f.st.completo &&
+                                          f.st.dias != null && f.st.dias <= diasAviso);
+  const completos  = filas.filter((f) => f.st.completo);
+  const detenidos  = filas.filter((f) => !f.st.completo && !f.st.vencido &&
+                                          (f.st.dias == null || f.st.dias > diasAviso) &&
+                                          f.inactivo != null && f.inactivo >= diasQuieto);
+  const enCurso    = filas.filter((f) => !f.st.completo && !f.st.vencido &&
+                                          !porVencer.includes(f) && !detenidos.includes(f));
+
+  return {
+    total: filas.length,
+    vencidos: vencidos.sort((a, b) => a.st.dias - b.st.dias),
+    porVencer: porVencer.sort((a, b) => a.st.dias - b.st.dias),
+    detenidos: detenidos.sort((a, b) => b.inactivo - a.inactivo),
+    enCurso, completos,
+    duplicados: dups,
+    // Lo que exige atención hoy.
+    alertas: vencidos.length + porVencer.length + dups.filter((d) => d.alcance === "entre-expedientes").length,
+  };
+}
+
+// ── SOLICITUDES DE EVIDENCIA ──────────────────────────────────
+// ← NUEVO: pedirle un comprobante a otra persona.
+//
+// Las solicitudes viven DENTRO del expediente, no en una colección
+// aparte: quien recibe la petición necesita acceso al expediente de
+// todos modos, así que pedir implica compartir. Un solo lugar, un
+// solo permiso, y la lista de pendientes sale de los expedientes
+// que ya se cargan.
+
+export const ESTADOS_SOL = ["pendiente", "cumplida", "cancelada"];
+
+/** Arma la solicitud que se guarda en el expediente. */
+export function nuevaSolicitud({ reqId, reqTitulo, paraUid, paraEmail, paraNombre,
+                                 deUid, deNombre, mensaje }) {
+  return {
+    sid: `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    reqId, reqTitulo,
+    paraUid: paraUid || null,
+    paraEmail: (paraEmail || "").toLowerCase(),
+    paraNombre: paraNombre || null,
+    deUid, deNombre,
+    mensaje: (mensaje || "").trim() || null,
+    estado: "pendiente",
+    creadaEn: new Date().toISOString(),
+    resueltaEn: null,
+  };
+}
+
+/** Solicitudes vivas de un requisito. */
+export const solicitudesDe = (exp, reqId) =>
+  (exp?.solicitudes || []).filter((s) => s.reqId === reqId && s.estado === "pendiente");
+
+/**
+ * Lo que a esta persona le pidieron, cruzando todos sus expedientes.
+ * Incluye los vencidos y los ordena por urgencia.
+ */
+export function misPendientes(docs = [], uid, email) {
+  const mail = (email || "").toLowerCase();
+  const out = [];
+
+  for (const doc of docs) {
+    for (const s of doc.solicitudes || []) {
+      if (s.estado !== "pendiente") continue;
+      const paraMi = (s.paraUid && s.paraUid === uid) || (mail && s.paraEmail === mail);
+      if (!paraMi) continue;
+
+      const req = (doc.requisitos || []).find((r) => r.id === s.reqId);
+      const st = expedienteStatus(doc);
+      out.push({
+        sol: s, doc, req,
+        limite: req?.fechaLimite || doc.fechaLimite || null,
+        dias: st.dias, vencido: st.vencido,
+      });
+    }
+  }
+  // Sin fecha al final; entre los que tienen, el más urgente primero.
+  return out.sort((a, b) => {
+    if (a.dias == null) return 1;
+    if (b.dias == null) return -1;
+    return a.dias - b.dias;
+  });
+}
+
+/** Solicitudes que yo hice y sigo esperando. */
+export function misEsperas(docs = [], uid) {
+  const out = [];
+  for (const doc of docs) {
+    for (const s of doc.solicitudes || []) {
+      if (s.estado !== "pendiente" || s.deUid !== uid) continue;
+      out.push({ sol: s, doc });
+    }
+  }
+  return out.sort((a, b) => (a.sol.creadaEn || "").localeCompare(b.sol.creadaEn || ""));
+}
+
+/** Marca como cumplidas las solicitudes de un requisito ya comprobado. */
+export function cerrarSolicitudes(exp, reqId, porQuien) {
+  const ahora = new Date().toISOString();
+  let cerradas = 0;
+  const solicitudes = (exp.solicitudes || []).map((s) => {
+    if (s.reqId !== reqId || s.estado !== "pendiente") return s;
+    cerradas++;
+    return { ...s, estado: "cumplida", resueltaEn: ahora, cumplidaPor: porQuien || null };
+  });
+  return { solicitudes, cerradas };
 }
