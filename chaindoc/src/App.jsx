@@ -19,12 +19,18 @@ import {                                                            // ← NUEVO
 import {                                                            // ← NUEVO
   analyzeContract, aiConfigured, hashFile, expedienteStatus, listModels,
   calcularMontos, montoDeDocumento, fmtMonto,
-  archivosDe, aidDe, comprobadoDe                                // ← ACTUALIZADO
+  archivosDe, aidDe, comprobadoDe,
+  estadoVinculo, resumenVinculos,
+  duplicados, duplicadosDe, panelExpedientes, dondeEstaAdjunto,   // ← ACTUALIZADO
+  debeRegistrarConsulta, resumenConsultas,
+  nuevaSolicitud, solicitudesDe, misPendientes, misEsperas,
+  cerrarSolicitudes                                              // ← NUEVO
 } from "./smartContract";
 import {                                                            // ← ACTUALIZADO
   uploadEvidence, deleteEvidence, openEvidence, storageError,
   isPreviewable, LIMITE_KB, makeThumb                             // ← ACTUALIZADO
 } from "./storage";
+import { descargarPaquete } from "./paquete";                      // ← NUEVO
 
 // ← NUEVO: elimina la clave `archivo` del formato antiguo. Se quita la
 // clave en vez de ponerla en undefined, que Firestore no admite.
@@ -340,6 +346,78 @@ img,svg{max-width:100%}
   align-items:center;justify-content:center;white-space:nowrap;word-wrap:normal;
   direction:ltr;flex:0 0 auto;overflow:hidden;
   font-feature-settings:'liga';-webkit-font-smoothing:antialiased;user-select:none}
+
+/* ← NUEVO: solicitudes de evidencia */
+.pv.pend{border-color:rgba(202,138,4,.4);background:rgba(202,138,4,.04)}
+.sol-row{display:flex;align-items:flex-start;gap:9px;background:rgba(202,138,4,.09);
+  color:#a16207;border-radius:9px;padding:9px 11px;margin-top:8px;font-size:13px}
+.sol-b{flex:1;min-width:0}
+.sol-t{font-weight:600}
+.sol-m{color:var(--gris-400);margin-top:2px;line-height:1.4}
+.sol-d{color:var(--gris-300);font-size:12px;margin-top:2px}
+.exp-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.exp-acts .exp-up{margin-top:0}
+.como-btn{font-family:var(--f-p);font-size:14px;background:none}
+.tono-solicitud .tl-punto{background:rgba(202,138,4,.16);color:#a16207}
+
+/* ← NUEVO: panel de vencimientos */
+.pv{border:1px solid var(--bordes);border-radius:16px;padding:16px 18px;margin-bottom:26px;text-align:left}
+.pv-h{display:flex;align-items:center;gap:9px;margin-bottom:12px;color:var(--negro)}
+.pv-titulo{font-family:var(--f-t);font-weight:600;font-size:19px;flex:1}
+.pv-row{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:10px;
+  cursor:pointer;transition:background .15s;border:1px solid transparent}
+.pv-row:hover{background:rgba(0,0,0,.03);border-color:var(--bordes)}
+.pv-row.dup{cursor:default}
+.pv-row.dup:hover{background:none;border-color:transparent}
+.pv-b{flex:1;min-width:0}
+.pv-t{font-weight:600;font-size:15px;color:var(--negro);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.pv-m{font-size:12px;color:var(--gris-300);margin-top:2px}
+.pv-chip{font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px;
+  white-space:nowrap;flex:0 0 auto;background:var(--gris-100,#f3f3f5);color:var(--gris-400)}
+.pv-chip.vencido{background:rgba(194,65,12,.12);color:#c2410c}
+.pv-chip.urgente{background:rgba(202,138,4,.14);color:#a16207}
+.pv-chip.quieto{background:rgba(0,0,0,.05);color:var(--gris-400)}
+.pv-chip.dup{background:rgba(147,51,234,.12);color:#9333ea}
+.pv-pie{font-size:12px;color:var(--gris-300);margin-top:10px;padding-top:9px;
+  border-top:1px solid var(--bordes)}
+.dup-linea{font-size:13px;color:var(--gris-400);font-weight:400;margin-top:5px;line-height:1.45}
+.dup-grave{color:#c2410c;font-weight:600}
+
+/* ← NUEVO: bitácora de consultas */
+.cons{padding:12px 0 4px}
+.cons-row{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--bordes)}
+.cons-row:last-of-type{border-bottom:none}
+.cons-b{flex:1;min-width:0}
+.cons-n{font-weight:600;font-size:15px;color:var(--negro)}
+.cons-m{font-size:12px;color:var(--gris-300);word-break:break-all}
+.cons-d{font-size:12px;color:var(--gris-300);text-align:right;flex:0 0 auto}
+.cons-v{color:var(--gris-400);margin-top:1px}
+.cons-nota{font-size:12px;color:var(--gris-300);font-style:italic;margin-top:10px}
+.tono-consulta .tl-punto{background:rgba(120,113,108,.14);color:#78716c}
+@media(max-width:760px){
+  .pv{padding:14px;margin-bottom:20px}
+  .pv-row{gap:8px;padding:9px 8px}
+  .pv-chip{font-size:11px;padding:3px 8px}
+  .cons-d{font-size:11px}
+}
+
+/* ← NUEVO: integridad de los documentos vinculados */
+.vin{display:flex;align-items:flex-start;gap:7px;font-size:13px;line-height:1.4;
+  border-radius:8px;padding:7px 10px;margin:8px 0 2px}
+.vin-vigente{background:rgba(20,130,90,.09);color:#14825a}
+.vin-ampliado{background:rgba(14,116,144,.1);color:#0e7490}
+.vin-alterado{background:rgba(194,65,12,.12);color:#c2410c;font-weight:500}
+.vin-faltante,.vin-sinHuella{background:rgba(0,0,0,.05);color:var(--gris-400)}
+.vin-cargando{background:rgba(0,0,0,.03);color:var(--gris-300);align-items:center}
+.exp-file.vin-malo{border-color:rgba(194,65,12,.5);background:rgba(194,65,12,.03)}
+.vin-alerta{display:flex;align-items:flex-start;gap:11px;border:1px solid rgba(194,65,12,.45);
+  background:rgba(194,65,12,.07);color:#c2410c;border-radius:12px;padding:13px 15px;
+  margin-bottom:16px;font-size:14px;line-height:1.45}
+.vin-alerta-s{color:var(--gris-400);font-weight:400;margin-top:3px}
+.vin-nota{display:flex;align-items:center;gap:9px;background:rgba(14,116,144,.08);
+  color:#0e7490;border-radius:10px;padding:10px 13px;margin-bottom:16px;
+  font-size:13px;line-height:1.45}
 
 /* ← NUEVO: contador de montos del expediente */
 .mnt{border:1px solid var(--bordes);border-radius:14px;padding:16px 18px;margin-bottom:18px}
@@ -918,6 +996,21 @@ const EVENTOS = {
     ico:"link", tono:"vinculo",
     titulo:()=> "Adjuntado a un expediente",
   },
+  // ← NUEVO: basta una entrada aquí para que la línea de tiempo lo dibuje
+  "CONSULTA": {
+    ico:"visibility", tono:"consulta",
+    titulo:()=> "Documento consultado",
+  },
+  "SOLICITUD": {
+    ico:"forward_to_inbox", tono:"solicitud",
+    titulo:(b)=> b.meta?.tipo==="cancelada" ? "Solicitud cancelada"
+               : b.meta?.tipo==="cumplida"  ? "Solicitud atendida"
+               : "Evidencia solicitada",
+  },
+  "EXPORTACIÓN": {
+    ico:"download", tono:"neutro",
+    titulo:()=> "Paquete de evidencia generado",
+  },
 };
 
 const EVENTO_DEFAULT = { ico:"history", tono:"neutro", titulo:(b)=>b.action };
@@ -1188,6 +1281,8 @@ export default function ChainDoc(){
   const [smartBusy,setSmartBusy]   = useState(false);
   const [smartErr,setSmartErr]     = useState("");
   const [filesOpen,setFilesOpen]   = useState(false); // ← NUEVO: adjuntos desbloqueados
+  const [vinculos,setVinculos]     = useState({});    // ← NUEVO: aid → estado del vínculo
+  const [verifVin,setVerifVin]     = useState(false); // ← NUEVO: verificación en curso
   const [shareErr,setShareErr]     = useState("");    // ← NUEVO
   const [shareFound,setShareFound] = useState(null);  // ← NUEVO: cuenta encontrada
   const [shareBusy,setShareBusy]   = useState(false); // ← NUEVO
@@ -1195,6 +1290,10 @@ export default function ChainDoc(){
   const [linkExp,setLinkExp]       = useState(null);  // ← NUEVO: expediente elegido
   const [linkErr,setLinkErr]       = useState("");    // ← NUEVO
   const [linkBusy,setLinkBusy]     = useState(false); // ← NUEVO
+  const [solReq,setSolReq]         = useState(null);  // ← NUEVO: requisito a solicitar
+  const [solMsg,setSolMsg]         = useState("");    // ← NUEVO
+  const [solErr,setSolErr]         = useState("");    // ← NUEVO
+  const [solBusy,setSolBusy]       = useState(false); // ← NUEVO
   const [fields,setFields]   = useState({});   // valores de la plantilla visual
   const [filterF,setFilterF] = useState(null);
   const [openSec,setOpenSec] = useState({carp:true,docs:true,comp:true});
@@ -1218,6 +1317,35 @@ export default function ChainDoc(){
     const l = await store.list(id, mail);
     l.sort((a,b)=>new Date(b.lastModified)-new Date(a.lastModified));
     setDocs(l);
+  };
+
+  // ── INTEGRIDAD DE LOS VÍNCULOS ──
+  // ← NUEVO: al adjuntar un documento guardamos el hash de su último
+  // bloque. Aquí se compara contra su estado actual para detectar si
+  // cambió —o si le reescribieron la cadena— desde entonces.
+  //
+  // Es estado DERIVADO: se recalcula al abrir, nunca se guarda. Así no
+  // puede quedar una advertencia obsoleta contradiciendo a los datos.
+  const verificarVinculos = async(exp)=>{
+    if(exp?.kind!=="expediente"){ setVinculos({}); return; }
+
+    const internos = (exp.requisitos||[])
+      .flatMap(r=>archivosDe(r))
+      .filter(a=>a.origen==="interno" && a.docId);
+    if(!internos.length){ setVinculos({}); return; }
+
+    setVerifVin(true);
+    try{
+      // Un solo fetch por documento aunque esté adjunto en varios requisitos.
+      const ids = [...new Set(internos.map(a=>a.docId))];
+      const docs = await Promise.all(ids.map(id=>store.get(id)));
+      const porId = Object.fromEntries(ids.map((id,i)=>[id, docs[i]]));
+
+      const mapa = {};
+      for(const a of internos) mapa[aidDe(a)] = estadoVinculo(a, porId[a.docId]);
+      setVinculos(mapa);
+    }catch(e){ console.error(e); setVinculos({}); }
+    finally{ setVerifVin(false); }
   };
 
   // ← ACTUALIZADO: la sesión ya no se deduce de localStorage.
@@ -1267,7 +1395,13 @@ export default function ChainDoc(){
         const dd = await store.get(id);
         if(dd){
           setD(dd); setTitle(dd.title); setContent(dd.content||"");
-          setUnlocked(!dd.password); setScreen("doc"); return;
+          setFields(dd.fields||{});
+          setUnlocked(!dd.password); setScreen("doc");
+          verificarVinculos(dd);                                 // ← NUEVO
+          // ← NUEVO: al entrar por enlace directo la lista queda vacía y
+          // la detección de duplicados no tendría con qué comparar.
+          refresh(account.uid, account.email);
+          return;
         }
       }
       await refresh(account.uid, account.email);
@@ -1639,13 +1773,19 @@ export default function ChainDoc(){
         archivos:[...archivosDe(r), nuevo],
       });
 
-      const up = {...d, requisitos, chain:[...d.chain,b], lastModified:b.timestamp};
+      // ← NUEVO: si alguien había pedido este comprobante, queda atendido
+      const { solicitudes, cerradas } = cerrarSolicitudes(d, reqId, user);
+
+      const up = {...d, requisitos, solicitudes,
+                  chain:[...d.chain,b], lastModified:b.timestamp};
       const ok = await store.set(up.id,up);
       if(ok){
         setD(up);
-        notify(guardado.comprimida
-          ? "Evidencia registrada ✓ (imagen comprimida para caber)"
-          : "Evidencia registrada en la cadena ✓");
+        notify(cerradas
+          ? `Evidencia registrada ✓ ${cerradas} solicitud${cerradas===1?"":"es"} atendida${cerradas===1?"":"s"}`
+          : guardado.comprimida
+            ? "Evidencia registrada ✓ (imagen comprimida para caber)"
+            : "Evidencia registrada en la cadena ✓");
       }
       else notify("Error al registrar","err");
     }catch(e){ console.error(e); notify(storageError(e),"err"); }
@@ -1846,6 +1986,91 @@ export default function ChainDoc(){
     if(await store.set(up.id,up)) setD(up);
   };
 
+  // ── SOLICITAR EVIDENCIA ──
+  // ← NUEVO: pedirle un comprobante a otra persona. Pedir implica
+  // compartir: quien recibe la petición necesita ver el expediente
+  // para poder atenderla, así que ambas cosas ocurren juntas.
+  const pedirEvidencia = async()=>{
+    const correo = mIn.trim().toLowerCase();
+    setSolErr("");
+
+    if(!correo){ setSolErr("Escribe el correo de la persona."); return; }
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)){
+      setSolErr("Ese correo no tiene un formato válido."); return; }
+    if(correo===acctEmail.toLowerCase()){
+      setSolErr("Ese es tu propio correo."); return; }
+
+    const yaPedido = (d.solicitudes||[]).some(
+      x=>x.reqId===solReq.id && x.paraEmail===correo && x.estado==="pendiente");
+    if(yaPedido){ setSolErr("Ya le pediste este comprobante a esa persona."); return; }
+
+    setSolBusy(true);
+    try{
+      const cuenta = await findUserByEmail(correo);
+      if(!cuenta){
+        setSolErr(`No se encontró ninguna cuenta con «${correo}». Debe registrarse en chaindoc para poder responder.`);
+        return;
+      }
+
+      const sol = nuevaSolicitud({
+        reqId: solReq.id, reqTitulo: solReq.titulo,
+        paraUid: cuenta.uid, paraEmail: correo, paraNombre: cuenta.nombre,
+        deUid: uid, deNombre: user, mensaje: solMsg,
+      });
+
+      const last = d.chain[d.chain.length-1];
+      const b = await mineBlock(last,"SOLICITUD",
+        `Se pidió «${solReq.titulo}» a ${cuenta.nombre||correo}`,user,
+        { tipo:"alta", sid:sol.sid, requisito:solReq.id, correo });
+
+      // Pedir implica compartir: sin acceso no podría responder.
+      const compartidos = (d.sharedWith||[]).includes(correo)
+        ? d.sharedWith : [...(d.sharedWith||[]), correo];
+
+      const up = {...d,
+        solicitudes:[...(d.solicitudes||[]), sol],
+        sharedWith: compartidos,
+        chain:[...d.chain,b], lastModified:b.timestamp};
+
+      if(await store.set(up.id,up)){
+        setD(up); setModal(null); setMIn(""); setSolMsg(""); setSolReq(null);
+        notify(`Se le pidió a ${cuenta.nombre||correo} ✓`);
+      } else setSolErr("No se pudo guardar. Inténtalo de nuevo.");
+    }catch(e){ console.error(e); setSolErr("Error al enviar la solicitud."); }
+    finally{ setSolBusy(false); }
+  };
+
+  // ← NUEVO: retirar una solicitud que ya no aplica
+  const cancelarSolicitud = async(sid)=>{
+    const sol = (d.solicitudes||[]).find(x=>x.sid===sid);
+    if(!sol) return;
+    const last = d.chain[d.chain.length-1];
+    const b = await mineBlock(last,"SOLICITUD",
+      `Se canceló la petición de «${sol.reqTitulo}» a ${sol.paraNombre||sol.paraEmail}`,user,
+      { tipo:"cancelada", sid, requisito:sol.reqId });
+    const up = {...d,
+      solicitudes:(d.solicitudes||[]).map(x=> x.sid!==sid ? x
+        : {...x, estado:"cancelada", resueltaEn:b.timestamp}),
+      chain:[...d.chain,b], lastModified:b.timestamp};
+    if(await store.set(up.id,up)){ setD(up); notify("Solicitud cancelada"); }
+  };
+
+  // ── PAQUETE DE EVIDENCIA ──
+  // ← NUEVO: exporta el expediente como HTML autocontenido que un
+  // tercero verifica sin cuenta, sin internet y sin confiar en nosotros.
+  const exportarPaquete = async()=>{
+    try{
+      const nombre = descargarPaquete(d);
+      const last = d.chain[d.chain.length-1];
+      const b = await mineBlock(last,"EXPORTACIÓN",
+        `Se generó el paquete de evidencia «${nombre}»`,user,
+        { tipo:"paquete", archivo:nombre, bloques:d.chain.length });
+      const up = {...d, chain:[...d.chain,b]};   // no toca lastModified
+      if(await store.set(up.id,up)) setD(up);
+      notify("Paquete de evidencia descargado ✓");
+    }catch(e){ console.error(e); notify("No se pudo generar el paquete","err"); }
+  };
+
   // ── ADJUNTAR A UN EXPEDIENTE ──
   // ← NUEVO: trae los expedientes propios y los que me compartieron.
   const openExpedientes = async()=>{
@@ -1882,7 +2107,11 @@ export default function ChainDoc(){
         archivos:[...archivosDe(r), nuevo],
       });
 
-      const up = {...exp, requisitos, chain:[...exp.chain,b], lastModified:b.timestamp};
+      // ← NUEVO: cierra las solicitudes que este documento atiende
+      const { solicitudes } = cerrarSolicitudes(exp, reqId, user);
+
+      const up = {...exp, requisitos, solicitudes,
+                  chain:[...exp.chain,b], lastModified:b.timestamp};
       const ok = await store.set(up.id,up);
       if(!ok){ setLinkErr("No se pudo adjuntar. Inténtalo de nuevo."); return; }
 
@@ -1928,13 +2157,31 @@ export default function ChainDoc(){
     await refresh(); setModal(null); notify(`Movido a "${f||"Sin carpeta"}"`);
   };
 
+  // ← NUEVO: asienta que alguien abrió un documento compartido.
+  // Una vez por persona y día: ver `debeRegistrarConsulta`.
+  const registrarConsulta = async(doc)=>{
+    if(!debeRegistrarConsulta(doc, uid, acctEmail)) return doc;
+    try{
+      const last = doc.chain[doc.chain.length-1];
+      const b = await mineBlock(last,"CONSULTA",
+        `${user} consultó el documento`,user,
+        { uid, email:acctEmail || null });
+      const up = {...doc, chain:[...doc.chain,b]};   // no toca lastModified
+      if(await store.set(up.id,up)){ setD(up); return up; }
+    }catch(e){ console.error(e); }   // nunca debe impedir abrir el documento
+    return doc;
+  };
+
   const openDoc = async(id)=>{
     const dd = await store.get(id); if(!dd){ notify("No encontrado","err"); return; }
     setD(dd); setTitle(dd.title); setContent(dd.content||"");
     setFields(dd.fields||{});                                   // ← NUEVO
     setFilesOpen(false);                                        // ← NUEVO: se re-bloquea al abrir otro
+    setVinculos({});                                            // ← NUEVO: limpia el anterior
     setUnlocked(!dd.password); setEdit(false); setDirty(false);
     setUrlDoc(id); setScreen("doc");
+    verificarVinculos(dd);                                      // ← NUEVO: sin await, no bloquea
+    registrarConsulta(dd);                                      // ← NUEVO: en segundo plano
   };
 
   const goHome = async()=>{
@@ -2121,6 +2368,117 @@ export default function ChainDoc(){
 
       <div className="page">
         {view==="inicio" && (<>
+          {/* ← NUEVO: lo que otras personas te pidieron. Va primero
+              porque es trabajo de alguien más esperando por ti. */}
+          {(()=>{
+            const pend = misPendientes(docs, uid, acctEmail);
+            const esperas = misEsperas(docs, uid);
+            if(!pend.length && !esperas.length) return null;
+            return (
+              <div className="pv pend">
+                {pend.length>0 && (<>
+                  <div className="pv-h">
+                    <Icon n="assignment_late" size={20}/>
+                    <span className="pv-titulo">Te pidieron</span>
+                    <span className="adj-n">{pend.length}</span>
+                  </div>
+                  {pend.map(({sol,doc,req,dias,vencido})=>(
+                    <div key={sol.sid} className="pv-row" onClick={()=>openDoc(doc.id)}>
+                      <div className="pv-b">
+                        <div className="pv-t">{sol.reqTitulo}</div>
+                        <div className="pv-m">
+                          {doc.title} · lo pidió {sol.deNombre}
+                          {req?.monto!=null && ` · ${fmtMonto(req.monto, doc.moneda||"MXN")}`}
+                          {sol.mensaje && ` — «${sol.mensaje}»`}
+                        </div>
+                      </div>
+                      <span className={`pv-chip ${vencido?"vencido":dias!=null&&dias<=7?"urgente":""}`}>
+                        {vencido ? "vencido" : dias!=null ? (dias===0?"hoy":`en ${dias} d`) : "sin fecha"}
+                      </span>
+                    </div>
+                  ))}
+                </>)}
+
+                {esperas.length>0 && (<>
+                  <div className="pv-h" style={{marginTop:pend.length?16:0}}>
+                    <Icon n="hourglass_empty" size={20}/>
+                    <span className="pv-titulo">Esperas respuesta</span>
+                    <span className="adj-n">{esperas.length}</span>
+                  </div>
+                  {esperas.map(({sol,doc})=>(
+                    <div key={sol.sid} className="pv-row" onClick={()=>openDoc(doc.id)}>
+                      <div className="pv-b">
+                        <div className="pv-t">{sol.reqTitulo}</div>
+                        <div className="pv-m">
+                          {doc.title} · se lo pediste a {sol.paraNombre||sol.paraEmail}
+                        </div>
+                      </div>
+                      <span className="pv-chip">{fmtShort(sol.creadaEn)}</span>
+                    </div>
+                  ))}
+                </>)}
+              </div>
+            );
+          })()}
+
+          {/* ← NUEVO: panel de vencimientos. Lo que exige atención hoy,
+              cruzando todos los expedientes. Sólo aparece si hay algo. */}
+          {(()=>{
+            const pl = panelExpedientes(docs);
+            if(!pl.total) return null;
+            const urgentes = [...pl.vencidos, ...pl.porVencer];
+            const dupGraves = pl.duplicados.filter(g=>g.alcance==="entre-expedientes");
+            if(!urgentes.length && !pl.detenidos.length && !dupGraves.length) return null;
+
+            const Fila = (f, tono)=>(
+              <div key={f.doc.id} className={`pv-row ${tono}`} onClick={()=>openDoc(f.doc.id)}>
+                <div className="pv-b">
+                  <div className="pv-t">{f.doc.title}</div>
+                  <div className="pv-m">
+                    {f.st.cumplidos}/{f.st.total} comprobantes
+                    {f.mt.base!=null && ` · ${fmtMonto(f.mt.comprobado ?? 0, f.mt.moneda)} de ${fmtMonto(f.mt.base, f.mt.moneda)}`}
+                  </div>
+                </div>
+                <span className={`pv-chip ${tono}`}>
+                  {tono==="vencido"  ? `venció hace ${Math.abs(f.st.dias)} d`
+                 : tono==="urgente"  ? (f.st.dias===0 ? "vence hoy" : `en ${f.st.dias} d`)
+                 : `${f.inactivo} d sin actividad`}
+                </span>
+              </div>
+            );
+
+            return (
+              <div className="pv">
+                <div className="pv-h">
+                  <Icon n="notifications" size={20}/>
+                  <span className="pv-titulo">Requiere atención</span>
+                  <span className="adj-n">{pl.alertas}</span>
+                </div>
+
+                {pl.vencidos.map(f=>Fila(f,"vencido"))}
+                {pl.porVencer.map(f=>Fila(f,"urgente"))}
+                {pl.detenidos.map(f=>Fila(f,"quieto"))}
+
+                {dupGraves.map(g=>(
+                  <div key={g.hash} className="pv-row dup">
+                    <div className="pv-b">
+                      <div className="pv-t">«{g.nombre}» en {g.veces} expedientes</div>
+                      <div className="pv-m">
+                        {g.ubicaciones.map(u=>u.docTitulo).join(" · ")}
+                        {g.monto!=null && ` — ${fmtMonto(g.monto,"MXN")} c/u`}
+                      </div>
+                    </div>
+                    <span className="pv-chip dup">huella repetida</span>
+                  </div>
+                ))}
+
+                <div className="pv-pie">
+                  {pl.enCurso.length} en curso · {pl.completos.length} completo{pl.completos.length===1?"":"s"}
+                </div>
+              </div>
+            );
+          })()}
+
           <h2 className="page-title">Recientes</h2>
 
           <div className="sec-h" onClick={()=>setOpenSec({...openSec,carp:!openSec.carp})}>
@@ -2305,6 +2663,8 @@ export default function ChainDoc(){
         {d.kind==="expediente" ? (()=>{
           const st = expedienteStatus(d);
           const mt = calcularMontos(d);   // ← NUEVO: derivado, no almacenado
+          const rv = resumenVinculos(vinculos);   // ← NUEVO
+          const dups = duplicadosDe(duplicados(docs), d.id);   // ← NUEVO
           return (<div className="exp">
             <div className={`exp-head ${st.estado}`}>
               <div className="exp-bar-wrap">
@@ -2318,6 +2678,52 @@ export default function ChainDoc(){
                  : "En curso"}
               </div>
             </div>
+
+            {/* ← NUEVO: alerta de integridad. Sólo aparece cuando hay algo
+                que reportar; el caso normal no dice nada. */}
+            {(rv.alterados>0 || rv.faltantes>0) && (
+              <div className="vin-alerta">
+                <Icon n="warning" size={20}/>
+                <div>
+                  <strong>
+                    {rv.alterados>0 && `${rv.alterados} comprobante${rv.alterados===1?"":"s"} con la cadena reescrita`}
+                    {rv.alterados>0 && rv.faltantes>0 && " · "}
+                    {rv.faltantes>0 && `${rv.faltantes} sin acceso`}
+                  </strong>
+                  <div className="vin-alerta-s">
+                    La huella que se registró al adjuntarlos ya no corresponde con su historia actual.
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* ← NUEVO: el mismo archivo comprobando dos gastos distintos */}
+            {dups.length>0 && (
+              <div className="vin-alerta">
+                <Icon n="content_copy" size={20}/>
+                <div>
+                  <strong>
+                    {dups.length} comprobante{dups.length===1?"":"s"} con huella repetida
+                  </strong>
+                  {dups.map(g=>(
+                    <div key={g.hash} className="dup-linea">
+                      «{g.nombre}»{g.numId && ` (${g.numId})`} aparece {g.veces} veces
+                      {g.monto!=null && ` (${fmtMonto(g.monto, d.moneda||"MXN")} c/u)`}:
+                      {" "}{g.ubicaciones.map(u=>`${u.docTitulo}${u.reqTitulo?" → "+u.reqTitulo:""}`).join(" · ")}
+                      {g.alcance==="entre-expedientes" &&
+                        <span className="dup-grave"> en expedientes distintos</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {rv.ampliados>0 && rv.alterados===0 && rv.faltantes===0 && (
+              <div className="vin-nota">
+                <Icon n="update" size={18}/>
+                {rv.ampliados} documento{rv.ampliados===1?"":"s"} {rv.ampliados===1?"tuvo":"tuvieron"} actividad
+                nueva desde que se {rv.ampliados===1?"adjuntó":"adjuntaron"}. Su historia sigue intacta.
+              </div>
+            )}
 
             {d.resumen && <p className="exp-sum">{d.resumen}</p>}
 
@@ -2408,17 +2814,34 @@ export default function ChainDoc(){
                   {lista.map(a=>{
                     const aid = aidDe(a);
                     return (
-                    <div key={aid} className="exp-file">
+                    <div key={aid} className={`exp-file ${vinculos[aid]?.estado==="alterado"?"vin-malo":""}`}>
                       <div className="exp-file-n">
                         {a.origen==="interno" && <span className="tag" style={{marginRight:6}}>chaindoc</span>}
                         {a.nombre}
                       </div>
                       <div className="exp-file-m">
                         {a.origen==="interno"
-                          ? `${a.numId} · ${a.bloques} bloques · ${fmtFull(a.subidoEn)} · ${a.subidoPor}`
+                          ? `${a.numId} · ${a.bloques} bloques al adjuntar · ${fmtFull(a.subidoEn)} · ${a.subidoPor}`
                           : `${(a.tam/1024).toFixed(0)} KB · ${fmtFull(a.subidoEn)} · ${a.subidoPor}`}
                       </div>
                       <div className="exp-file-h">SHA-256 {a.hash}</div>
+
+                      {/* ← NUEVO: qué pasó con este documento desde que se adjuntó */}
+                      {vinculos[aid] && (
+                        <div className={`vin vin-${vinculos[aid].estado}`}>
+                          <Icon n={
+                            vinculos[aid].estado==="vigente"  ? "verified" :
+                            vinculos[aid].estado==="ampliado" ? "update"   :
+                            vinculos[aid].estado==="alterado" ? "warning"  : "help"
+                          } size={16}/>
+                          <span>{vinculos[aid].texto}</span>
+                        </div>
+                      )}
+                      {verifVin && a.origen==="interno" && !vinculos[aid] && (
+                        <div className="vin vin-cargando">
+                          <span className="mini-spin"/> Verificando integridad…
+                        </div>
+                      )}
 
                       <div className="exp-monto">
                         <span className="mnt-lbl">Importe:</span>
@@ -2440,13 +2863,36 @@ export default function ChainDoc(){
                     );
                   })}
 
-                  {/* ← ACTUALIZADO: siempre disponible. El límite lo marca
-                      el presupuesto, no el número de archivos. */}
-                  <label className="exp-up">
-                    <span>{listo ? "Agregar otro comprobante" : "Adjuntar comprobante"}</span>
-                    <input type="file" style={{display:"none"}} disabled={saving}
-                      onChange={e=>{ attachEvidence(r.id, e.target.files?.[0]); e.target.value=""; }} />
-                  </label>
+                  {/* ← NUEVO: a quién se le pidió este comprobante */}
+                  {solicitudesDe(d, r.id).map(sl=>(
+                    <div key={sl.sid} className="sol-row">
+                      <Icon n="forward_to_inbox" size={16}/>
+                      <div className="sol-b">
+                        <span className="sol-t">Pedido a {sl.paraNombre||sl.paraEmail}</span>
+                        {sl.mensaje && <div className="sol-m">«{sl.mensaje}»</div>}
+                        <div className="sol-d">{fmtShort(sl.creadaEn)}</div>
+                      </div>
+                      {sl.deUid===uid &&
+                        <button className="smart-x" title="Cancelar"
+                          onClick={()=>cancelarSolicitud(sl.sid)}>×</button>}
+                    </div>
+                  ))}
+
+                  <div className="exp-acts">
+                    {/* ← ACTUALIZADO: siempre disponible. El límite lo marca
+                        el presupuesto, no el número de archivos. */}
+                    <label className="exp-up">
+                      <span>{listo ? "Agregar otro comprobante" : "Adjuntar comprobante"}</span>
+                      <input type="file" style={{display:"none"}} disabled={saving}
+                        onChange={e=>{ attachEvidence(r.id, e.target.files?.[0]); e.target.value=""; }} />
+                    </label>
+                    {/* ← NUEVO */}
+                    <button className="exp-up como-btn"
+                      onClick={()=>{ setSolReq(r); setMIn(""); setSolMsg(""); setSolErr("");
+                                     setModal({t:"pedir"}); }}>
+                      Pedir a alguien
+                    </button>
+                  </div>
                 </div>
               </div>
               );
@@ -2458,6 +2904,35 @@ export default function ChainDoc(){
               <summary>Línea de tiempo de la operación</summary>
               <Timeline chain={d.chain}/>
             </details>
+
+            {/* ← NUEVO: quién ha consultado este expediente */}
+            {(()=>{
+              const cs = resumenConsultas(d.chain);
+              if(!cs.length) return null;
+              return (
+                <details className="exp-src">
+                  <summary>Quién lo ha consultado ({cs.length})</summary>
+                  <div className="cons">
+                    {cs.map(c=>(
+                      <div key={c.email||c.quien} className="cons-row">
+                        <div className="avatar sm">{(c.quien||"?").slice(0,2).toUpperCase()}</div>
+                        <div className="cons-b">
+                          <div className="cons-n">{c.quien}</div>
+                          {c.email && <div className="cons-m">{c.email}</div>}
+                        </div>
+                        <div className="cons-d">
+                          {fmtFull(c.ultima)}
+                          {c.veces>1 && <div className="cons-v">{c.veces} días distintos</div>}
+                        </div>
+                      </div>
+                    ))}
+                    <p className="cons-nota">
+                      Se registra una consulta por persona y día, sólo en documentos compartidos.
+                    </p>
+                  </div>
+                </details>
+              );
+            })()}
 
             <details className="exp-src">
               <summary>Ver contrato base</summary>
@@ -2618,6 +3093,19 @@ export default function ChainDoc(){
 
       <div style={{display:"flex",justifyContent:"center",paddingBottom:40}}>
         <button className="btn btn-secondary" onClick={doVerify}>⬡ Verificar integridad</button>
+        {/* ← NUEVO: revisa de nuevo los documentos adjuntos */}
+        {d.kind==="expediente" && (
+          <button className="btn btn-secondary" disabled={verifVin}
+            onClick={()=>verificarVinculos(d)} style={{marginLeft:10}}>
+            {verifVin ? "Revisando…" : "Revisar adjuntos"}
+          </button>
+        )}
+        {/* ← NUEVO: el paquete que un tercero verifica por su cuenta */}
+        {d.kind==="expediente" && (
+          <button className="btn btn-primary" onClick={exportarPaquete} style={{marginLeft:10}}>
+            <Icon n="download" size={18}/> Exportar evidencia
+          </button>
+        )}
       </div>
     </div>
 
@@ -3072,6 +3560,40 @@ export default function ChainDoc(){
     );
 
     // ← NUEVO: elegir expediente y después el requisito que cumple
+    // ← NUEVO: pedirle un comprobante a otra persona
+    if(modal.t==="pedir") return (
+      <div className="ov" onClick={()=>{if(!solBusy)setModal(null);}}><div className="modal" onClick={e=>e.stopPropagation()}>
+        <h2>Pedir un comprobante</h2>
+        <p className="sub">
+          <strong>{solReq?.titulo}</strong>
+          {solReq?.monto!=null && ` · ${fmtMonto(solReq.monto, d.moneda||"MXN")}`}
+          <br/>
+          La persona recibirá acceso a este expediente para poder adjuntarlo.
+        </p>
+
+        <input className="inp" type="email" placeholder="correo@ejemplo.com"
+          value={mIn} autoFocus disabled={solBusy}
+          onChange={e=>{setMIn(e.target.value);setSolErr("");}}
+          onKeyDown={e=>e.key==="Enter"&&pedirEvidencia()} />
+
+        <textarea className="inp" style={{minHeight:74,resize:"vertical"}}
+          placeholder="Mensaje (opcional): qué necesitas exactamente"
+          value={solMsg} disabled={solBusy}
+          onChange={e=>setSolMsg(e.target.value)} />
+
+        {solErr && <div className="share-err">{solErr}</div>}
+
+        <div className="modal-row">
+          <button className="btn btn-secondary" disabled={solBusy}
+            onClick={()=>{setModal(null);setMIn("");setSolMsg("");setSolReq(null);}}>Cancelar</button>
+          <button className="btn btn-primary" onClick={pedirEvidencia}
+            disabled={solBusy||!mIn.trim()}>
+            {solBusy ? "Enviando…" : "Pedir comprobante"}
+          </button>
+        </div>
+      </div></div>
+    );
+
     if(modal.t==="linkTo") return (
       <div className="ov" onClick={()=>{if(!linkBusy)setModal(null);}}><div className="modal wide" onClick={e=>e.stopPropagation()}>
         <h2>Adjuntar a un expediente</h2>
@@ -3117,6 +3639,23 @@ export default function ChainDoc(){
             ¿Qué requisito de <strong>{linkExp.title}</strong> cumple este documento?
           </p>
           {linkErr && <div className="share-err">{linkErr}</div>}
+
+          {/* ← NUEVO: avisa ANTES de adjuntar si este documento ya está
+              comprobando un gasto en otro expediente. */}
+          {(()=>{
+            const otros = dondeEstaAdjunto(d.id, docs).filter(s=>s.expId!==linkExp.id);
+            if(!otros.length) return null;
+            return (
+              <div className="share-err" style={{marginBottom:14}}>
+                <strong>Este documento ya comprueba otro gasto.</strong>
+                <div style={{marginTop:4,fontWeight:400}}>
+                  Está adjunto en {otros.map(s=>`${s.expTitulo} → ${s.reqTitulo}`).join(" · ")}.
+                  Si lo adjuntas aquí también, el mismo comprobante justificará dos operaciones distintas.
+                </div>
+              </div>
+            );
+          })()}
+
           <div className="link-list">
             {/* ← ACTUALIZADO: un requisito con comprobantes ya no se ve
                 bloqueado; ahora se le pueden sumar más. */}
