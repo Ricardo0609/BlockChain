@@ -21,7 +21,9 @@ import {                                                            // ← NUEVO
   calcularMontos, montoDeDocumento, fmtMonto,
   archivosDe, aidDe, comprobadoDe,
   estadoVinculo, resumenVinculos,
-  duplicados, duplicadosDe, panelExpedientes, dondeEstaAdjunto,   // ← ACTUALIZADO
+  duplicados, duplicadosDe, panelExpedientes, dondeEstaAdjunto,
+  claveDup, destinoDuplicado,
+  estadoFases, faseActual,                                       // ← NUEVO
   debeRegistrarConsulta, resumenConsultas,
   nuevaSolicitud, solicitudesDe, misPendientes, misEsperas,
   cerrarSolicitudes                                              // ← NUEVO
@@ -122,6 +124,13 @@ const fmtDia   = ymd => {
   if(ymd===ayer) return "Ayer";
   return new Date(ymd+"T12:00:00").toLocaleDateString("es-MX",
     {weekday:"long",day:"numeric",month:"long",year:"numeric"});
+};
+// ← NUEVO: fecha corta ("23 sep"; con año si no es el actual)
+const fmtFecha = ymd => {
+  if(!ymd) return "—";
+  const f = new Date(ymd+"T12:00:00");
+  const mismoAnio = f.getFullYear()===new Date().getFullYear();
+  return f.toLocaleDateString("es-MX",{day:"numeric",month:"short",...(mismoAnio?{}:{year:"numeric"})});
 };
 const fmtHora  = iso => new Date(iso).toLocaleTimeString("es-MX",{hour:"numeric",minute:"2-digit",hour12:true});
 const fmtShort = iso => new Date(iso).toLocaleDateString("es-MX",{day:"numeric",month:"short",year:"numeric"});
@@ -360,6 +369,125 @@ img,svg{max-width:100%}
 .como-btn{font-family:var(--f-p);font-size:14px;background:none}
 .tono-solicitud .tl-punto{background:rgba(202,138,4,.16);color:#a16207}
 
+/* ← NUEVO: navegación desde avisos de duplicado */
+.dup-lugares{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.dup-lugar{font-family:var(--f-p);font-size:12px;font-weight:600;border:1px solid rgba(194,65,12,.35);
+  background:#fff;color:#c2410c;border-radius:99px;padding:5px 11px;cursor:pointer;
+  text-align:left;max-width:100%;overflow-wrap:anywhere;line-height:1.3}
+.dup-lugar:hover{background:rgba(194,65,12,.08)}
+.dup-lugar.aqui{border-style:dashed;color:var(--gris-400);border-color:var(--bordes)}
+span.dup-lugar.aqui{cursor:default}
+.dup-foco-banner{border:2px solid #c2410c;background:rgba(194,65,12,.06);border-radius:14px;
+  padding:14px 16px;margin-bottom:16px;color:#c2410c;animation:dupIn .35s ease}
+.dup-foco-h{display:flex;align-items:center;gap:9px}
+.dup-foco-h strong{flex:1;font-size:15px;line-height:1.35}
+.dup-foco-banner p{color:var(--gris-400);font-size:14px;line-height:1.5;margin:8px 0 2px}
+.dup-tag-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0 2px}
+.dup-tag{font-size:11px;font-weight:700;background:rgba(194,65,12,.12);color:#c2410c;
+  border-radius:6px;padding:3px 8px;text-transform:uppercase;letter-spacing:.3px}
+.exp-file.es-dup{border-color:rgba(194,65,12,.4)}
+.exp-file.dup-foco{border:2px solid #c2410c;box-shadow:0 0 0 4px rgba(194,65,12,.12);
+  animation:dupPulso 1.6s ease 2}
+@keyframes dupIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+@keyframes dupPulso{0%,100%{box-shadow:0 0 0 4px rgba(194,65,12,.12)}50%{box-shadow:0 0 0 9px rgba(194,65,12,.05)}}
+.pv-ir{font-size:12px;font-weight:600;color:#9333ea;margin-top:4px}
+.adjunto-en{max-width:860px;margin:0 auto 18px;border:1px solid var(--bordes);border-radius:14px;
+  padding:13px 16px;text-align:left}
+.adjunto-en.grave{border-color:rgba(194,65,12,.45);background:rgba(194,65,12,.05)}
+.adjunto-en-h{display:flex;align-items:center;gap:8px;color:var(--gris-400)}
+.adjunto-en.grave .adjunto-en-h{color:#c2410c}
+.adjunto-en p{font-size:13px;color:var(--gris-400);margin:5px 0 0}
+
+/* ← NUEVO: fases del contrato */
+.fases{border:1px solid var(--bordes);border-radius:14px;padding:14px 16px;margin-bottom:16px;text-align:left}
+.fases-h{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+.fases-t{font-weight:600;font-size:15px;color:var(--negro);flex:1}
+.fases-lista{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
+.fase{flex:1 1 0;min-width:150px;display:flex;gap:10px;align-items:flex-start;text-align:left;
+  font-family:var(--f-p);background:#fff;border:1px solid var(--bordes);border-radius:12px;
+  padding:11px 12px;cursor:pointer;position:relative;transition:border-color .15s,box-shadow .15s}
+.fase:hover{border-color:var(--gris-300)}
+.fase.actual{border:2px solid var(--negro);padding:10px 11px}
+.fase.sel{box-shadow:0 0 0 3px rgba(99,102,241,.25);border-color:#4f46e5}
+.fase.cumplida{background:rgba(20,130,90,.05);border-color:rgba(20,130,90,.35)}
+.fase.vencida{background:rgba(194,65,12,.05);border-color:rgba(194,65,12,.45)}
+.fase-num{flex:0 0 24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;background:var(--gris-100,#f3f3f5);color:var(--gris-400)}
+.fase.actual .fase-num{background:var(--negro);color:#fff}
+.fase.cumplida .fase-num{background:#14825a;color:#fff}
+.fase.vencida .fase-num{background:#c2410c;color:#fff}
+.fase-b{display:flex;flex-direction:column;gap:2px;min-width:0}
+.fase-t{font-weight:600;font-size:14px;color:var(--negro);line-height:1.3;overflow-wrap:anywhere}
+.fase-m{font-size:12px;color:var(--gris-300)}
+.fase-cont{font-size:12px;font-weight:600;margin-top:3px;color:var(--gris-400)}
+.fase-cont.cumplida{color:#14825a}
+.fase-cont.vencida{color:#c2410c}
+.fase.actual .fase-cont.pendiente{color:var(--negro)}
+.fase-aviso{font-size:11px;color:#a16207;margin-top:2px}
+.fases-filtro{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  margin-top:10px;font-size:13px;color:#4f46e5;background:rgba(99,102,241,.07);
+  border-radius:9px;padding:6px 6px 6px 11px}
+.exp-hito{font-weight:600;color:var(--negro)}
+.exp-hito.mal{color:#c2410c}
+.tag.t-fase{background:rgba(99,102,241,.1);color:#4f46e5}
+.tag.t-fase.mal{background:rgba(194,65,12,.12);color:#c2410c}
+.pv-fase{font-size:12px;font-weight:600;color:#4f46e5;margin-top:3px}
+.rev-fases{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.rev-fase{display:flex;align-items:center;gap:10px;border:1px solid var(--bordes);border-radius:10px;padding:8px 10px}
+.rev-fase-b{flex:1;min-width:0}
+.rev-fase-t{font-weight:600;font-size:14px;color:var(--negro)}
+.rev-fase-m{font-size:12px;color:var(--gris-300)}
+@media(max-width:768px){
+  /* En teléfono, las fases se apilan: una fila horizontal obligaría a deslizar */
+  .fases{padding:12px}
+  .fases-lista{flex-direction:column;overflow:visible}
+  .fase{min-width:0;width:100%}
+}
+
+/* ← NUEVO: bloqueo de comprobante ya adjunto */
+.bloqueo{border:2px solid #c2410c;background:rgba(194,65,12,.06);border-radius:13px;
+  padding:13px 15px;margin-bottom:16px;text-align:left}
+.bloqueo-h{display:flex;align-items:center;gap:9px;color:#c2410c}
+.bloqueo-h strong{font-size:15px;line-height:1.35}
+.bloqueo p{font-size:14px;color:var(--gris-400);line-height:1.5;margin:7px 0 2px}
+.link-row.bloqueado{opacity:.45;cursor:not-allowed}
+.link-row.bloqueado:hover{border-color:var(--bordes);background:none}
+.chip-bloq{background:rgba(0,0,0,.06);color:var(--gris-400);font-weight:600;white-space:nowrap}
+
+/* ← NUEVO: oferta de convertir a contrato inteligente */
+.convertir{max-width:860px;margin:0 auto 18px;display:flex;align-items:center;gap:16px;
+  justify-content:space-between;border:1px solid rgba(99,102,241,.35);
+  background:rgba(99,102,241,.06);border-radius:14px;padding:14px 16px;text-align:left}
+.convertir-b{display:flex;gap:11px;align-items:flex-start;color:#4f46e5;min-width:0}
+.convertir-b strong{display:block;color:var(--negro);font-size:15px}
+.convertir-b span{display:block;font-size:13px;color:var(--gris-400);line-height:1.45;margin-top:2px}
+.convertir .btn{flex:0 0 auto;white-space:nowrap}
+@media(max-width:768px){
+  .convertir{flex-direction:column;align-items:stretch;margin:0 0 14px}
+  .convertir .btn{width:100%;white-space:normal}
+}
+
+/* ← NUEVO: fila final de acciones del documento */
+.acc-final{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;padding-bottom:40px}
+
+/* ← NUEVO: ajustes móviles */
+html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral */
+@media(max-width:768px){
+  /* El menú ☰ quedaba al final de la fila deslizable, fuera de pantalla.
+     Ahora se fija arriba a la derecha, junto al título. */
+  .nav{padding-right:62px}
+  .nav .hamburger{position:absolute;top:12px;right:14px}
+  .acc-final{display:grid;grid-template-columns:1fr 1fr;padding:0 16px 32px}
+  .acc-final .btn{width:100%;justify-content:center;display:inline-flex;align-items:center;gap:6px}
+  .acc-final .btn-primary{grid-column:1 / -1}
+  .galeria{margin:18px 0 0}
+  .adjunto-en{margin:0 0 14px}
+  .dup-foco-banner{padding:12px 13px}
+  .modal{padding:20px 16px}
+  .modal-row{flex-wrap:wrap}
+  .link-list{max-height:55vh}
+}
+
 /* ← NUEVO: panel de vencimientos */
 .pv{border:1px solid var(--bordes);border-radius:16px;padding:16px 18px;margin-bottom:26px;text-align:left}
 .pv-h{display:flex;align-items:center;gap:9px;margin-bottom:12px;color:var(--negro)}
@@ -390,7 +518,7 @@ img,svg{max-width:100%}
 .cons-row:last-of-type{border-bottom:none}
 .cons-b{flex:1;min-width:0}
 .cons-n{font-weight:600;font-size:15px;color:var(--negro)}
-.cons-m{font-size:12px;color:var(--gris-300);word-break:break-all}
+.cons-m{font-size:12px;color:var(--gris-300);overflow-wrap:anywhere}
 .cons-d{font-size:12px;color:var(--gris-300);text-align:right;flex:0 0 auto}
 .cons-v{color:var(--gris-400);margin-top:1px}
 .cons-nota{font-size:12px;color:var(--gris-300);font-style:italic;margin-top:10px}
@@ -524,7 +652,7 @@ img,svg{max-width:100%}
 .share-list{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
 .share-row{display:flex;align-items:center;gap:10px;padding:8px 10px;
   border:1px solid var(--bordes);border-radius:9px}
-.share-row-m{flex:1;text-align:left;font-size:14px;color:var(--gris-400);word-break:break-all}
+.share-row-m{flex:1;text-align:left;font-size:14px;color:var(--gris-400);overflow-wrap:anywhere}
 .avatar.sm{width:30px;height:30px;font-size:11px;flex:0 0 auto}
 
 /* ← NUEVO: sección de documentos adjuntos */
@@ -538,7 +666,7 @@ img,svg{max-width:100%}
 .adj-row{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;
   padding:12px;border:1px solid var(--bordes);border-radius:10px;margin-bottom:8px;flex-wrap:wrap}
 .adj-row-b{flex:1;min-width:180px}
-.adj-row-t{font-weight:600;font-size:15px;color:var(--negro);word-break:break-all}
+.adj-row-t{font-weight:600;font-size:15px;color:var(--negro);overflow-wrap:anywhere}
 .adj-row-m{font-size:12px;color:var(--gris-300);margin-top:2px}
 .adj-acts{display:flex;gap:6px;align-items:center;flex:0 0 auto}
 
@@ -594,7 +722,7 @@ img,svg{max-width:100%}
   padding:9px 14px;font-size:14px;color:var(--gris-400);cursor:pointer;transition:border-color .15s,color .15s}
 .exp-up:hover{border-color:var(--negro);color:var(--negro)}
 .exp-file{margin-top:10px;border:1px solid var(--bordes);border-radius:10px;padding:12px;background:rgba(20,130,90,.04)}
-.exp-file-n{font-weight:600;font-size:15px;color:var(--negro);word-break:break-all}
+.exp-file-n{font-weight:600;font-size:15px;color:var(--negro);overflow-wrap:anywhere}
 .exp-file-m{font-size:12px;color:var(--gris-300);margin-top:2px}
 .exp-file-h{font-family:var(--f-m,ui-monospace,monospace);font-size:11px;color:var(--gris-300);
   word-break:break-all;margin:6px 0 8px}
@@ -1007,6 +1135,11 @@ const EVENTOS = {
                : b.meta?.tipo==="cumplida"  ? "Solicitud atendida"
                : "Evidencia solicitada",
   },
+  // ← NUEVO: un documento normal que pasó a ser contrato inteligente
+  "CONVERSIÓN": {
+    ico:"rule", tono:"inicio",
+    titulo:()=> "Convertido en contrato inteligente",
+  },
   "EXPORTACIÓN": {
     ico:"download", tono:"neutro",
     titulo:()=> "Paquete de evidencia generado",
@@ -1280,8 +1413,11 @@ export default function ChainDoc(){
   const [smartRes,setSmartRes]     = useState(null);  // ← NUEVO: análisis de la IA
   const [smartBusy,setSmartBusy]   = useState(false);
   const [smartErr,setSmartErr]     = useState("");
+  const [smartMsg,setSmartMsg]     = useState("");    // ← NUEVO: estado de reintentos de la IA
   const [filesOpen,setFilesOpen]   = useState(false); // ← NUEVO: adjuntos desbloqueados
   const [vinculos,setVinculos]     = useState({});    // ← NUEVO: aid → estado del vínculo
+  const [focoDup,setFocoDup]       = useState(null);  // ← NUEVO: duplicado al que se llegó desde un aviso
+  const [faseSel,setFaseSel]       = useState(null);  // ← NUEVO: fase elegida para filtrar requisitos
   const [verifVin,setVerifVin]     = useState(false); // ← NUEVO: verificación en curso
   const [shareErr,setShareErr]     = useState("");    // ← NUEVO
   const [shareFound,setShareFound] = useState(null);  // ← NUEVO: cuenta encontrada
@@ -1290,6 +1426,7 @@ export default function ChainDoc(){
   const [linkExp,setLinkExp]       = useState(null);  // ← NUEVO: expediente elegido
   const [linkErr,setLinkErr]       = useState("");    // ← NUEVO
   const [linkBusy,setLinkBusy]     = useState(false); // ← NUEVO
+  const [linkSitios,setLinkSitios] = useState([]);    // ← NUEVO: dónde está ya adjunto este documento
   const [solReq,setSolReq]         = useState(null);  // ← NUEVO: requisito a solicitar
   const [solMsg,setSolMsg]         = useState("");    // ← NUEVO
   const [solErr,setSolErr]         = useState("");    // ← NUEVO
@@ -1312,6 +1449,17 @@ export default function ChainDoc(){
 
   // ← NUEVO: se pregunta una vez si el dispositivo tiene Face ID / huella
   useEffect(()=>{ bioAvailable().then(setBioOk); },[]);
+
+  // ← NUEVO: al llegar desde un aviso de duplicado, lleva la vista al
+  // comprobante señalado. Espera un momento a que termine de dibujarse.
+  useEffect(()=>{
+    if(!focoDup) return;
+    const t = setTimeout(()=>{
+      document.getElementById("foco-dup")
+        ?.scrollIntoView({ behavior:"smooth", block:"center" });
+    }, 350);
+    return ()=>clearTimeout(t);
+  },[focoDup, d?.id]);
 
   const refresh = async(id=uid, mail=acctEmail)=>{             // ← ACTUALIZADO
     const l = await store.list(id, mail);
@@ -1700,15 +1848,92 @@ export default function ChainDoc(){
   const runAnalysis = async()=>{
     setSmartErr(""); setSmartBusy(true); setSmartRes(null);
     try{
-      const res = await analyzeContract(smartText);
+      setSmartMsg("");
+      const res = await analyzeContract(smartText, setSmartMsg);   // ← ACTUALIZADO: avisa si reintenta
       setSmartRes(res);
       if(!mIn.trim()) setMIn(res.titulo);
     }catch(err){
       setSmartErr(err.message);
-    }finally{ setSmartBusy(false); }
+    }finally{ setSmartBusy(false); setSmartMsg(""); }
+  };
+
+  // ── CONVERTIR UN DOCUMENTO EN CONTRATO INTELIGENTE ──
+  // ← NUEVO: sólo documentos de texto. Facturas y recibos tienen plantilla
+  // y no son contratos; los expedientes ya lo son.
+  const puedeConvertir = (doc)=>
+    Boolean(doc) && doc.kind!=="expediente" && !(doc.tplId && FORMS[doc.tplId]);
+
+  const iniciarConversion = async()=>{
+    // Un documento que funciona como comprobante de otro contrato no
+    // debería volverse contrato él mismo: el vínculo quedaría sin sentido.
+    const sitios = dondeEstaAdjunto(d.id, docs);
+    if(sitios.length){
+      notify(`Está adjunto como comprobante en «${sitios[0].expTitulo}». Retíralo de ahí antes de convertirlo.`,"err");
+      return;
+    }
+    setSmartRes(null); setSmartErr(""); setModal({t:"convertir"});
+    setSmartBusy(true);
+    try{
+      setSmartMsg("");
+      const res = await analyzeContract(content, setSmartMsg);   // el texto tal como está en el editor
+      setSmartRes(res);
+    }catch(err){ setSmartErr(err.message); }
+    finally{ setSmartBusy(false); setSmartMsg(""); }
+  };
+
+  // Se convierte EN SU LUGAR: mismo ID, misma cadena, mismas firmas.
+  // No se crea un expediente nuevo, así el historial no se parte en dos.
+  const confirmarConversion = async()=>{
+    if(!smartRes?.requisitos?.length) return;
+    setSaving(true);
+    try{
+      let chain = d.chain;
+      let last  = chain[chain.length-1];
+      const texto = content;
+
+      // Si había cambios sin guardar en el editor, primero se sellan.
+      if(texto !== (d.content||"")){
+        const be = await mineBlock(last,"EDICIÓN",texto.slice(0,200),user);
+        chain = [...chain, be]; last = be;
+      }
+
+      const b = await mineBlock(last,"CONVERSIÓN",
+        `Convertido en contrato inteligente con ${smartRes.requisitos.length} requisitos`,user,
+        { tipo:"expediente", requisitos:smartRes.requisitos.length, fases:(smartRes.fases||[]).length, modelo:smartRes.modelo });
+
+      const up = {...d,
+        title: title.trim() || d.title,
+        content: texto,
+        kind: "expediente", tplId: null, fields: null,
+        requisitos: smartRes.requisitos,
+        fases: smartRes.fases || [],   // ← NUEVO
+        fechaLimite: smartRes.fechaLimite,
+        montoTotal: smartRes.montoTotal,
+        moneda: smartRes.moneda,
+        partes: smartRes.partes,
+        resumen: smartRes.resumen,
+        analisis: { modelo:smartRes.modelo, fecha:smartRes.analizadoEn },
+        convertidoDe: d.source || "documento",
+        chain: [...chain, b], lastModified: b.timestamp,
+      };
+
+      if(await store.set(up.id,up)){
+        setD(up); setTitle(up.title); setContent(texto);
+        setEdit(false); setDirty(false); setModal(null); setSmartRes(null);
+        refresh();
+        notify(`Contrato inteligente con ${up.requisitos.length} requisitos ✓`);
+      } else notify("No se pudo convertir","err");
+    }catch(e){ console.error(e); notify("No se pudo convertir","err"); }
+    finally{ setSaving(false); }
   };
 
   // ← NUEVO: quitar un requisito que la IA sacó de más, antes de confirmar
+  // ← NUEVO: quitar una fase que la IA sacó de más; sus requisitos quedan sin fase
+  const dropFase = (id)=>
+    setSmartRes(r=>({ ...r,
+      fases:(r.fases||[]).filter(f=>f.id!==id),
+      requisitos:r.requisitos.map(q=> q.fase===id ? {...q, fase:null} : q) }));
+
   const dropReq = (id)=>
     setSmartRes(r=>({ ...r, requisitos:r.requisitos.filter(x=>x.id!==id) }));
 
@@ -1720,7 +1945,7 @@ export default function ChainDoc(){
     const numId = genNumId();
     const g = await mineBlock(null,"CREACIÓN",
       `Apertura de expediente «${name}» con ${smartRes.requisitos.length} requisitos`,user,
-      { tipo:"expediente", requisitos:smartRes.requisitos.length });
+      { tipo:"expediente", requisitos:smartRes.requisitos.length, fases:(smartRes.fases||[]).length });
 
     const nd = {
       id, numId, title:name, content:smartText, folder:mIn2||null,
@@ -1728,6 +1953,7 @@ export default function ChainDoc(){
       kind:"expediente",                       // ← lo distingue de un documento normal
       tplId:null, fields:null,
       requisitos: smartRes.requisitos,
+        fases: smartRes.fases || [],   // ← NUEVO
       fechaLimite: smartRes.fechaLimite,
       montoTotal: smartRes.montoTotal,
       moneda: smartRes.moneda,
@@ -2074,8 +2300,11 @@ export default function ChainDoc(){
   // ── ADJUNTAR A UN EXPEDIENTE ──
   // ← NUEVO: trae los expedientes propios y los que me compartieron.
   const openExpedientes = async()=>{
-    setExps(null);
+    setExps(null); setLinkSitios([]);
     const lista = await store.list(uid, acctEmail);
+    // ← NUEVO: se revisa con la lista recién leída, no con la del inicio,
+    // para que un vínculo hecho hace un momento también cuente.
+    setLinkSitios(dondeEstaAdjunto(d.id, lista));
     setExps(lista
       .filter(x=>x.kind==="expediente")
       .sort((a,b)=>new Date(b.lastModified)-new Date(a.lastModified)));
@@ -2085,7 +2314,16 @@ export default function ChainDoc(){
   // No se copia nada: el expediente guarda una referencia y la huella
   // del último bloque, así se puede detectar si el documento cambió.
   const linkToExpediente = async(exp, reqId)=>{
-    setLinkErr(""); setLinkBusy(true);
+    setLinkErr("");
+    // ← NUEVO: regla dura. Un comprobante justifica UN solo contrato.
+    // Se valida aquí además de en la interfaz, para que no dependa de
+    // que el botón esté deshabilitado.
+    const enOtro = dondeEstaAdjunto(d.id, exps||[]).filter(x=>x.expId!==exp.id);
+    if(enOtro.length){
+      setLinkErr(`Ya está adjuntado a «${enOtro[0].expTitulo}». Retíralo de ahí antes de adjuntarlo a otro contrato.`);
+      return;
+    }
+    setLinkBusy(true);
     try{
       const req = exp.requisitos.find(r=>r.id===reqId);
       const cabeza = d.chain[d.chain.length-1];
@@ -2122,6 +2360,7 @@ export default function ChainDoc(){
       if(await store.set(src.id,src)) setD(src);
 
       setModal(null); setLinkExp(null);
+      refresh();   // ← NUEVO: así el aviso de duplicado aparece de inmediato
       notify(`Adjuntado a «${exp.title}» ✓`);
     }catch(e){ console.error(e); setLinkErr("Error al adjuntar."); }
     finally{ setLinkBusy(false); }
@@ -2172,19 +2411,33 @@ export default function ChainDoc(){
     return doc;
   };
 
-  const openDoc = async(id)=>{
+  // ← ACTUALIZADO: `foco` marca el comprobante duplicado que hay que resaltar
+  const openDoc = async(id, foco=null)=>{
     const dd = await store.get(id); if(!dd){ notify("No encontrado","err"); return; }
+    setFocoDup(foco);
     setD(dd); setTitle(dd.title); setContent(dd.content||"");
     setFields(dd.fields||{});                                   // ← NUEVO
     setFilesOpen(false);                                        // ← NUEVO: se re-bloquea al abrir otro
     setVinculos({});                                            // ← NUEVO: limpia el anterior
+    setFaseSel(null);                                           // ← NUEVO
     setUnlocked(!dd.password); setEdit(false); setDirty(false);
     setUrlDoc(id); setScreen("doc");
     verificarVinculos(dd);                                      // ← NUEVO: sin await, no bloquea
     registrarConsulta(dd);                                      // ← NUEVO: en segundo plano
   };
 
+  // ← NUEVO: desde un aviso de duplicado, ir al lugar donde se adjuntó
+  // más recientemente (el que probablemente sobra) y resaltarlo ahí.
+  const irADuplicado = (grupo, ubicacion=null)=>{
+    const dest = ubicacion || destinoDuplicado(grupo);
+    if(!dest){ notify("No se encontró el documento","err"); return; }
+    setModal(null);
+    window.scrollTo({ top:0 });
+    openDoc(dest.docId, grupo.clave);
+  };
+
   const goHome = async()=>{
+    setFocoDup(null);
     setUrlDoc(null); setD(null); setHist(false); setVerify(null); setEdit(false);
     setScreen("loading"); await refresh(); setScreen("home");
   };
@@ -2438,10 +2691,15 @@ export default function ChainDoc(){
                     {f.st.cumplidos}/{f.st.total} comprobantes
                     {f.mt.base!=null && ` · ${fmtMonto(f.mt.comprobado ?? 0, f.mt.moneda)} de ${fmtMonto(f.mt.base, f.mt.moneda)}`}
                   </div>
+                  {/* ← NUEVO: cuando lo que apremia es una fase intermedia, se dice cuál */}
+                  {f.hito && tono!=="quieto" && (
+                    <div className="pv-fase">Fase {f.hito.n}: {f.hito.titulo}</div>
+                  )}
                 </div>
                 <span className={`pv-chip ${tono}`}>
-                  {tono==="vencido"  ? `venció hace ${Math.abs(f.st.dias)} d`
-                 : tono==="urgente"  ? (f.st.dias===0 ? "vence hoy" : `en ${f.st.dias} d`)
+                  {/* ← ACTUALIZADO: usa los días de la fase más apremiante si la hay */}
+                  {tono==="vencido"  ? `venció hace ${Math.abs(f.dias)} d`
+                 : tono==="urgente"  ? (f.dias===0 ? "vence hoy" : `en ${f.dias} d`)
                  : `${f.inactivo} d sin actividad`}
                 </span>
               </div>
@@ -2459,18 +2717,23 @@ export default function ChainDoc(){
                 {pl.porVencer.map(f=>Fila(f,"urgente"))}
                 {pl.detenidos.map(f=>Fila(f,"quieto"))}
 
-                {dupGraves.map(g=>(
-                  <div key={g.hash} className="pv-row dup">
+                {/* ← ACTUALIZADO: ahora lleva al último lugar donde se adjuntó */}
+                {dupGraves.map(g=>{
+                  const dest = destinoDuplicado(g);
+                  return (
+                  <div key={g.clave} className="pv-row dup" onClick={()=>irADuplicado(g)}>
                     <div className="pv-b">
                       <div className="pv-t">«{g.nombre}» en {g.veces} expedientes</div>
                       <div className="pv-m">
                         {g.ubicaciones.map(u=>u.docTitulo).join(" · ")}
                         {g.monto!=null && ` — ${fmtMonto(g.monto,"MXN")} c/u`}
                       </div>
+                      {dest && <div className="pv-ir">Ver en «{dest.docTitulo}» →</div>}
                     </div>
                     <span className="pv-chip dup">huella repetida</span>
                   </div>
-                ))}
+                  );
+                })}
 
                 <div className="pv-pie">
                   {pl.enCurso.length} en curso · {pl.completos.length} completo{pl.completos.length===1?"":"s"}
@@ -2650,6 +2913,26 @@ export default function ChainDoc(){
           : <h1 className="doc-title">{d.title}</h1>}
       </div>
 
+      {/* ← NUEVO: en edición, un documento de texto puede volverse contrato inteligente */}
+      {editMode && puedeConvertir(d) && (
+        <div className="convertir">
+          <div className="convertir-b">
+            <Icon n="rule" size={22}/>
+            <div>
+              <strong>¿Es un contrato?</strong>
+              <span>
+                Conviértelo en contrato inteligente: la IA extrae los comprobantes que habrá que
+                reunir y el documento conserva su historial, firmas e ID.
+              </span>
+            </div>
+          </div>
+          <button className="btn btn-primary" onClick={iniciarConversion}
+            disabled={smartBusy || saving || !aiConfigured()}>
+            Convertir a contrato inteligente
+          </button>
+        </div>
+      )}
+
       {verifyRes && (
         <div className={`vban ${verifyRes.valid?"ok":"bad"}`}>
           {verifyRes.valid
@@ -2664,7 +2947,15 @@ export default function ChainDoc(){
           const st = expedienteStatus(d);
           const mt = calcularMontos(d);   // ← NUEVO: derivado, no almacenado
           const rv = resumenVinculos(vinculos);   // ← NUEVO
-          const dups = duplicadosDe(duplicados(docs), d.id);   // ← NUEVO
+          // ← ACTUALIZADO: se usa la versión viva del expediente abierto, no la
+          // copia de la lista, para que un vínculo recién hecho ya cuente.
+          const docsVivos = docs.some(x=>x.id===d.id) ? docs.map(x=>x.id===d.id?d:x) : [...docs, d];
+          const dups = duplicadosDe(duplicados(docsVivos), d.id);
+          const dupPorClave = Object.fromEntries(dups.map(g=>[g.clave, g]));
+          const focoGrupo = focoDup ? dupPorClave[focoDup] : null;
+          const fases = estadoFases(d);          // ← NUEVO
+          const fActual = faseActual(d);         // ← NUEVO
+          const faseSelOk = faseSel && fases.some(f=>f.id===faseSel) ? faseSel : null;
           return (<div className="exp">
             <div className={`exp-head ${st.estado}`}>
               <div className="exp-bar-wrap">
@@ -2676,6 +2967,14 @@ export default function ChainDoc(){
                  : st.vencido ? "Fecha límite vencida"
                  : st.dias!=null ? `Faltan ${st.dias} día${st.dias===1?"":"s"}`
                  : "En curso"}
+                {/* ← NUEVO: el siguiente hito, si vence antes que el contrato */}
+                {!st.completo && fActual && fActual.dias!=null && (
+                  <span className={`exp-hito ${fActual.vencida?"mal":""}`}>
+                    {" · "}Fase {fActual.n} «{fActual.titulo}»{" "}
+                    {fActual.vencida ? `venció hace ${Math.abs(fActual.dias)} d`
+                      : fActual.dias===0 ? "vence hoy" : `en ${fActual.dias} d`}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -2697,20 +2996,104 @@ export default function ChainDoc(){
               </div>
             )}
             {/* ← NUEVO: el mismo archivo comprobando dos gastos distintos */}
-            {dups.length>0 && (
+            {/* ← NUEVO: fases del contrato, cada una con su propio contador.
+                Tocar una fase filtra los requisitos que le corresponden. */}
+            {fases.length>0 && (
+              <div className="fases">
+                <div className="fases-h">
+                  <span className="fases-t">Fases del contrato</span>
+                  <span className="adj-n">{fases.filter(f=>f.completa).length}/{fases.length}</span>
+                </div>
+                <div className="fases-lista">
+                  {fases.map(f=>{
+                    const actual = fActual && fActual.id===f.id;
+                    return (
+                      <button key={f.id}
+                        className={`fase ${f.estado} ${actual?"actual":""} ${faseSelOk===f.id?"sel":""}`}
+                        onClick={()=>setFaseSel(faseSelOk===f.id ? null : f.id)}>
+                        <span className="fase-num">{f.completa ? "✓" : f.n}</span>
+                        <span className="fase-b">
+                          <span className="fase-t">{f.titulo}</span>
+                          <span className="fase-m">
+                            {f.fechaLimite ? fmtFecha(f.fechaLimite) : "Sin fecha"}
+                            {!f.sinRequisitos && ` · ${f.hechos}/${f.total}`}
+                          </span>
+                          <span className={`fase-cont ${f.estado}`}>
+                            {f.completa
+                              ? (f.retraso ? `Cumplida con ${f.retraso} d de retraso` : "Cumplida a tiempo")
+                              : f.vencida ? `Venció hace ${Math.abs(f.dias)} día${Math.abs(f.dias)===1?"":"s"}`
+                              : f.dias==null ? "Sin fecha límite"
+                              : f.dias===0 ? "Vence hoy"
+                              : `Faltan ${f.dias} día${f.dias===1?"":"s"}`}
+                          </span>
+                          {f.sinRequisitos && <span className="fase-aviso">Sin comprobantes asignados</span>}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {faseSelOk && (
+                  <div className="fases-filtro">
+                    Mostrando sólo los comprobantes de la fase {fases.find(f=>f.id===faseSelOk)?.n}.
+                    <button className="btn btn-tertiary" onClick={()=>setFaseSel(null)}>Ver todos</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ← NUEVO: anuncio cuando se llega desde un aviso de duplicado */}
+            {focoGrupo && (
+              <div className="dup-foco-banner">
+                <div className="dup-foco-h">
+                  <Icon n="content_copy" size={20}/>
+                  <strong>
+                    «{focoGrupo.nombre}» está adjuntado {focoGrupo.veces} veces
+                  </strong>
+                  <button className="smart-x" title="Cerrar" onClick={()=>setFocoDup(null)}>×</button>
+                </div>
+                <p>
+                  {focoGrupo.alcance==="entre-expedientes"
+                    ? "El mismo comprobante está justificando gastos en expedientes distintos. Revisa cuál de los dos le corresponde y retíralo del otro."
+                    : "Está adjunto en dos requisitos de este mismo expediente, así que su importe se cuenta dos veces en el presupuesto."}
+                  {focoGrupo.monto!=null && ` Importe: ${fmtMonto(focoGrupo.monto, d.moneda||"MXN")} cada vez.`}
+                </p>
+                <div className="dup-lugares">
+                  {focoGrupo.ubicaciones.map((u,i)=>(
+                    u.docId===d.id
+                      ? <span key={i} className="dup-lugar aqui">Aquí · {u.reqTitulo||u.tipo}</span>
+                      : <button key={i} className="dup-lugar" onClick={()=>irADuplicado(focoGrupo, u)}>
+                          {u.docTitulo}{u.reqTitulo ? ` → ${u.reqTitulo}` : ""} ↗
+                        </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ← ACTUALIZADO: cada lugar del aviso es un enlace */}
+            {dups.length>0 && !focoGrupo && (
               <div className="vin-alerta">
                 <Icon n="content_copy" size={20}/>
-                <div>
+                <div style={{minWidth:0,flex:1}}>
                   <strong>
                     {dups.length} comprobante{dups.length===1?"":"s"} con huella repetida
                   </strong>
                   {dups.map(g=>(
-                    <div key={g.hash} className="dup-linea">
+                    <div key={g.clave} className="dup-linea">
                       «{g.nombre}»{g.numId && ` (${g.numId})`} aparece {g.veces} veces
-                      {g.monto!=null && ` (${fmtMonto(g.monto, d.moneda||"MXN")} c/u)`}:
-                      {" "}{g.ubicaciones.map(u=>`${u.docTitulo}${u.reqTitulo?" → "+u.reqTitulo:""}`).join(" · ")}
+                      {g.monto!=null && ` (${fmtMonto(g.monto, d.moneda||"MXN")} c/u)`}
                       {g.alcance==="entre-expedientes" &&
                         <span className="dup-grave"> en expedientes distintos</span>}
+                      <div className="dup-lugares">
+                        {g.ubicaciones.map((u,i)=>(
+                          u.docId===d.id
+                            ? <button key={i} className="dup-lugar aqui" onClick={()=>setFocoDup(g.clave)}>
+                                Aquí · {u.reqTitulo||u.tipo}
+                              </button>
+                            : <button key={i} className="dup-lugar" onClick={()=>irADuplicado(g, u)}>
+                                {u.docTitulo}{u.reqTitulo ? ` → ${u.reqTitulo}` : ""} ↗
+                              </button>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -2785,9 +3168,11 @@ export default function ChainDoc(){
 
             {/* ← ACTUALIZADO: cada requisito admite varios comprobantes */}
             {(d.requisitos||[]).map((r,i)=>{
+              if(faseSelOk && r.fase!==faseSelOk) return null;   // ← NUEVO: filtro por fase
               const lista = archivosDe(r);
               const suma  = comprobadoDe(r);
               const listo = lista.length>0;
+              const faseR = fases.find(f=>f.id===r.fase);          // ← NUEVO
               return (
               <div key={r.id} className={`exp-item ${listo?"cumplido":"pendiente"}`}>
                 <div className="exp-check">{listo ? "✓" : i+1}</div>
@@ -2800,6 +3185,9 @@ export default function ChainDoc(){
                     {r.fechaLimite && <span className="tag">{r.fechaLimite}</span>}
                     {!r.obligatorio && <span className="tag">opcional</span>}
                     {lista.length>1 && <span className="tag">{lista.length} comprobantes</span>}
+                    {/* ← NUEVO */}
+                    {faseR && <span className={`tag t-fase ${faseR.vencida && !listo ? "mal":""}`}>
+                      Fase {faseR.n} · {faseR.titulo}</span>}
                   </div>
 
                   {/* ← NUEVO: avance del requisito cuando el contrato fija un monto */}
@@ -2814,11 +3202,29 @@ export default function ChainDoc(){
                   {lista.map(a=>{
                     const aid = aidDe(a);
                     return (
-                    <div key={aid} className={`exp-file ${vinculos[aid]?.estado==="alterado"?"vin-malo":""}`}>
+                    <div key={aid}
+                      id={focoDup && claveDup(a)===focoDup ? "foco-dup" : undefined}
+                      className={`exp-file ${vinculos[aid]?.estado==="alterado"?"vin-malo":""}
+                        ${dupPorClave[claveDup(a)]?"es-dup":""} ${focoDup && claveDup(a)===focoDup?"dup-foco":""}`}>
                       <div className="exp-file-n">
                         {a.origen==="interno" && <span className="tag" style={{marginRight:6}}>chaindoc</span>}
                         {a.nombre}
                       </div>
+                      {/* ← NUEVO: marca el comprobante repetido y lleva a su otra aparición */}
+                      {dupPorClave[claveDup(a)] && (()=>{
+                        const g = dupPorClave[claveDup(a)];
+                        const otro = destinoDuplicado(g, d.id);
+                        return (
+                          <div className="dup-tag-row">
+                            <span className="dup-tag">Adjuntado {g.veces} veces</span>
+                            {otro && (
+                              <button className="dup-lugar" onClick={()=>irADuplicado(g, otro)}>
+                                Ver en «{otro.docTitulo}» ↗
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <div className="exp-file-m">
                         {a.origen==="interno"
                           ? `${a.numId} · ${a.bloques} bloques al adjuntar · ${fmtFull(a.subidoEn)} · ${a.subidoPor}`
@@ -3018,6 +3424,38 @@ export default function ChainDoc(){
           : <div className={`paper-ro ${!d.content?"empty-txt":""}`}>{d.content||"Este documento aún no tiene contenido. Presiona «Editar» para comenzar."}</div>}
       </div>
 
+      {/* ← NUEVO: dónde está adjunto este documento. Si comprueba gastos
+          en más de un expediente, se avisa y se puede ir a cada uno. */}
+      {d.kind!=="expediente" && (()=>{
+        const sitios = dondeEstaAdjunto(d.id, docs);
+        if(!sitios.length) return null;
+        const exps = new Set(sitios.map(x=>x.expId));
+        const grave = exps.size>1 || sitios.length>1;
+        return (
+          <div className={`adjunto-en ${grave?"grave":""}`}>
+            <div className="adjunto-en-h">
+              <Icon n={grave?"content_copy":"link"} size={18}/>
+              <strong>
+                {grave
+                  ? `Este documento está adjuntado ${sitios.length} veces`
+                  : "Adjuntado como comprobante"}
+              </strong>
+            </div>
+            {grave
+              ? <p>El mismo comprobante está justificando más de un gasto.</p>
+              : <p>Mientras esté aquí no puede adjuntarse a otro contrato. Para moverlo, retíralo primero de ese expediente.</p>}
+            <div className="dup-lugares">
+              {sitios.map((x,i)=>(
+                <button key={i} className="dup-lugar"
+                  onClick={()=>openDoc(x.expId, grave ? `doc:${d.id}` : null)}>
+                  {x.expTitulo} → {x.reqTitulo} ↗
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ← NUEVO: evidencia visual del documento (no aplica a expedientes,
           que ya tienen su propia lista de comprobantes por requisito) */}
       {d.kind!=="expediente" && (()=>{
@@ -3091,18 +3529,19 @@ export default function ChainDoc(){
         {sigs.length===0 && <div className="sign-slot"><p>Firma pendiente</p></div>}
       </div>
 
-      <div style={{display:"flex",justifyContent:"center",paddingBottom:40}}>
+      {/* ← ACTUALIZADO: antes no podía saltar de línea y ensanchaba toda la página en móvil */}
+      <div className="acc-final">
         <button className="btn btn-secondary" onClick={doVerify}>⬡ Verificar integridad</button>
         {/* ← NUEVO: revisa de nuevo los documentos adjuntos */}
         {d.kind==="expediente" && (
           <button className="btn btn-secondary" disabled={verifVin}
-            onClick={()=>verificarVinculos(d)} style={{marginLeft:10}}>
+            onClick={()=>verificarVinculos(d)}>
             {verifVin ? "Revisando…" : "Revisar adjuntos"}
           </button>
         )}
         {/* ← NUEVO: el paquete que un tercero verifica por su cuenta */}
         {d.kind==="expediente" && (
-          <button className="btn btn-primary" onClick={exportarPaquete} style={{marginLeft:10}}>
+          <button className="btn btn-primary" onClick={exportarPaquete}>
             <Icon n="download" size={18}/> Exportar evidencia
           </button>
         )}
@@ -3263,7 +3702,7 @@ export default function ChainDoc(){
             <button className="btn btn-primary" style={{width:"100%"}}
               disabled={smartBusy || smartText.trim().length<80}
               onClick={runAnalysis}>
-              {smartBusy ? "Leyendo el contrato…" : "Analizar contrato"}
+              {smartBusy ? (smartMsg || "Leyendo el contrato…") : "Analizar contrato"}
             </button>
             {smartBusy && <div className="imp-bar" style={{marginTop:12}}><div className="imp-fill indet"/></div>}
           </>)}
@@ -3285,6 +3724,25 @@ export default function ChainDoc(){
                 {smartRes.partes.map((p,i)=><span key={i} className="chip">{p.rol}: {p.nombre}</span>)}
               </div>
 
+              {/* ← NUEVO: fases detectadas en el contrato */}
+              {(smartRes.fases||[]).length>0 && (<>
+                <div className="smart-list-t">Fases del contrato ({smartRes.fases.length})</div>
+                <div className="rev-fases">
+                  {smartRes.fases.map((f,i)=>(
+                    <div key={f.id} className="rev-fase">
+                      <span className="fase-num">{i+1}</span>
+                      <div className="rev-fase-b">
+                        <div className="rev-fase-t">{f.titulo}</div>
+                        <div className="rev-fase-m">
+                          {f.fechaLimite ? `Límite ${fmtFecha(f.fechaLimite)}` : "Sin fecha en el contrato"}
+                          {` · ${smartRes.requisitos.filter(r=>r.fase===f.id).length} comprobante(s)`}
+                        </div>
+                      </div>
+                      <button className="smart-x" onClick={()=>dropFase(f.id)} title="Quitar fase">×</button>
+                    </div>
+                  ))}
+                </div>
+              </>)}
               <div className="smart-list-t">Comprobantes que se pedirán ({smartRes.requisitos.length})</div>
               {smartRes.requisitos.map((r,i)=>(
                 <div key={r.id} className="smart-item">
@@ -3297,6 +3755,8 @@ export default function ChainDoc(){
                       {r.monto!=null && <span className="tag">${r.monto.toLocaleString("es-MX")}</span>}
                       {r.fechaLimite && <span className="tag">{r.fechaLimite}</span>}
                       {!r.obligatorio && <span className="tag">opcional</span>}
+                      {r.fase && (smartRes.fases||[]).some(f=>f.id===r.fase) &&
+                        <span className="tag t-fase">Fase {(smartRes.fases||[]).findIndex(f=>f.id===r.fase)+1}</span>}
                     </div>
                   </div>
                   <button className="smart-x" onClick={()=>dropReq(r.id)} title="Quitar">×</button>
@@ -3594,13 +4054,134 @@ export default function ChainDoc(){
       </div></div>
     );
 
+    // ← NUEVO: revisar lo que propone la IA antes de convertir el documento
+    if(modal.t==="convertir") return (
+      <div className="ov" onClick={()=>{if(!smartBusy&&!saving)setModal(null);}}><div className="modal wide" onClick={e=>e.stopPropagation()}>
+        <h2>Convertir a contrato inteligente</h2>
+        <p className="sub">
+          La IA lee <strong>{title||d.title}</strong> y propone los comprobantes que habrá que
+          reunir. Revísalos antes de confirmar: estos requisitos regirán el expediente.
+        </p>
+
+        {smartBusy && (<>
+          <div className="imp-msg"><span className="mini-spin"/>{smartMsg || "Leyendo el contrato…"}</div>
+          <div className="imp-bar" style={{marginTop:12}}><div className="imp-fill indet"/></div>
+        </>)}
+
+        {smartErr && !smartBusy && (
+          <div className="imp-error">
+            {smartErr}
+            <div style={{marginTop:10}}>
+              <button className="btn btn-secondary" style={{padding:"8px 16px",fontSize:14}}
+                onClick={iniciarConversion}>Reintentar</button>
+            </div>
+          </div>
+        )}
+
+        {smartRes && !smartBusy && (
+          <div className="smart-res">
+            <div className="smart-res-h">
+              <div>
+                <div className="smart-res-t">{smartRes.titulo}</div>
+                <div className="smart-res-s">{smartRes.resumen}</div>
+              </div>
+            </div>
+            <div className="smart-chips">
+              {smartRes.fechaLimite && <span className="chip">Límite: {smartRes.fechaLimite}</span>}
+              {smartRes.montoTotal!=null && <span className="chip">{smartRes.moneda} ${smartRes.montoTotal.toLocaleString("es-MX")}</span>}
+              {smartRes.partes.map((p,i)=><span key={i} className="chip">{p.rol}: {p.nombre}</span>)}
+            </div>
+            {/* ← NUEVO: fases detectadas en el contrato */}
+              {(smartRes.fases||[]).length>0 && (<>
+                <div className="smart-list-t">Fases del contrato ({smartRes.fases.length})</div>
+                <div className="rev-fases">
+                  {smartRes.fases.map((f,i)=>(
+                    <div key={f.id} className="rev-fase">
+                      <span className="fase-num">{i+1}</span>
+                      <div className="rev-fase-b">
+                        <div className="rev-fase-t">{f.titulo}</div>
+                        <div className="rev-fase-m">
+                          {f.fechaLimite ? `Límite ${fmtFecha(f.fechaLimite)}` : "Sin fecha en el contrato"}
+                          {` · ${smartRes.requisitos.filter(r=>r.fase===f.id).length} comprobante(s)`}
+                        </div>
+                      </div>
+                      <button className="smart-x" onClick={()=>dropFase(f.id)} title="Quitar fase">×</button>
+                    </div>
+                  ))}
+                </div>
+              </>)}
+              <div className="smart-list-t">Comprobantes que se pedirán ({smartRes.requisitos.length})</div>
+            {smartRes.requisitos.map((r,i)=>(
+              <div key={r.id} className="smart-item">
+                <span className="smart-num">{i+1}</span>
+                <div className="smart-item-b">
+                  <div className="smart-item-t">{r.titulo}</div>
+                  <div className="smart-item-d">{r.descripcion}</div>
+                  <div className="smart-tags">
+                    <span className={`tag t-${r.tipo}`}>{r.tipo}</span>
+                    {r.monto!=null && <span className="tag">${r.monto.toLocaleString("es-MX")}</span>}
+                    {r.fechaLimite && <span className="tag">{r.fechaLimite}</span>}
+                    {!r.obligatorio && <span className="tag">opcional</span>}
+                    {r.fase && (smartRes.fases||[]).some(f=>f.id===r.fase) &&
+                      <span className="tag t-fase">Fase {(smartRes.fases||[]).findIndex(f=>f.id===r.fase)+1}</span>}
+                  </div>
+                </div>
+                <button className="smart-x" onClick={()=>dropReq(r.id)} title="Quitar">×</button>
+              </div>
+            ))}
+            <p className="imp-hint" style={{marginTop:14}}>
+              El documento no se duplica: conserva su ID, su historial y sus firmas.
+              La conversión queda registrada como un bloque más de su cadena.
+            </p>
+          </div>
+        )}
+
+        <div className="modal-row">
+          <button className="btn btn-secondary" disabled={smartBusy||saving}
+            onClick={()=>{setModal(null);setSmartRes(null);setSmartErr("");}}>Cancelar</button>
+          <button className="btn btn-primary" onClick={confirmarConversion}
+            disabled={!smartRes || !smartRes.requisitos.length || smartBusy || saving}>
+            {saving ? "Convirtiendo…" : "Convertir"}
+          </button>
+        </div>
+      </div></div>
+    );
+
     if(modal.t==="linkTo") return (
       <div className="ov" onClick={()=>{if(!linkBusy)setModal(null);}}><div className="modal wide" onClick={e=>e.stopPropagation()}>
         <h2>Adjuntar a un expediente</h2>
 
         {!linkExp ? (<>
+          {/* ← NUEVO: si ya justifica un contrato, no puede justificar otro */}
+          {exps!==null && linkSitios.length>0 && (()=>{
+            const que = d.tplId==="recibo" ? "Este recibo" : d.tplId==="factura" ? "Esta factura" : "Este documento";
+            return (
+              <div className="bloqueo">
+                <div className="bloqueo-h">
+                  <Icon n="block" size={20}/>
+                  <strong>{que} ya está adjuntado a un contrato</strong>
+                </div>
+                <p>
+                  Un comprobante sólo puede justificar un contrato. Si lo adjuntaras a otro,
+                  el mismo gasto quedaría comprobado dos veces. Para moverlo, primero
+                  retíralo de donde está.
+                </p>
+                <div className="dup-lugares">
+                  {linkSitios.map((x,i)=>(
+                    <button key={i} className="dup-lugar"
+                      onClick={()=>{ setModal(null); openDoc(x.expId, `doc:${d.id}`); }}>
+                      {x.expTitulo} → {x.reqTitulo} ↗
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           <p className="sub">
-            Elige el contrato inteligente donde este documento servirá como comprobante.
+            {linkSitios.length
+              ? "Sólo puedes agregarlo a otro requisito del mismo contrato."
+              : "Elige el contrato inteligente donde este documento servirá como comprobante."}
           </p>
           {exps===null ? (
             <div className="imp-msg"><span className="mini-spin"/>Buscando expedientes…</div>
@@ -3613,8 +4194,12 @@ export default function ChainDoc(){
               {exps.map(x=>{
                 const st = expedienteStatus(x);
                 const ajeno = x.ownerUid!==uid;
+                // ← NUEVO: con el documento ya adjunto, sólo queda disponible su propio contrato
+                const bloqueado = linkSitios.length>0 && !linkSitios.some(z=>z.expId===x.id);
                 return (
-                  <div key={x.id} className="link-row" onClick={()=>setLinkExp(x)}>
+                  <div key={x.id} className={`link-row ${bloqueado?"bloqueado":""}`}
+                    aria-disabled={bloqueado}
+                    onClick={()=>{ if(!bloqueado) setLinkExp(x); }}>
                     <div className="link-row-b">
                       <div className="link-row-t">{x.title}</div>
                       <div className="link-row-m">
@@ -3623,9 +4208,11 @@ export default function ChainDoc(){
                         {ajeno && ` · compartido por ${x.owner}`}
                       </div>
                     </div>
-                    <span className={`chip chip-exp ${st.estado}`}>
-                      {st.completo ? "Completo" : st.vencido ? "Vencido" : `${st.porcentaje}%`}
-                    </span>
+                    {bloqueado
+                      ? <span className="chip chip-bloq">No disponible</span>
+                      : <span className={`chip chip-exp ${st.estado}`}>
+                          {st.completo ? "Completo" : st.vencido ? "Vencido" : `${st.porcentaje}%`}
+                        </span>}
                   </div>
                 );
               })}
@@ -3649,8 +4236,16 @@ export default function ChainDoc(){
               <div className="share-err" style={{marginBottom:14}}>
                 <strong>Este documento ya comprueba otro gasto.</strong>
                 <div style={{marginTop:4,fontWeight:400}}>
-                  Está adjunto en {otros.map(s=>`${s.expTitulo} → ${s.reqTitulo}`).join(" · ")}.
                   Si lo adjuntas aquí también, el mismo comprobante justificará dos operaciones distintas.
+                </div>
+                {/* ← ACTUALIZADO: cada lugar lleva a ese expediente */}
+                <div className="dup-lugares">
+                  {otros.map((x,i)=>(
+                    <button key={i} className="dup-lugar"
+                      onClick={()=>{ setModal(null); openDoc(x.expId, `doc:${d.id}`); }}>
+                      {x.expTitulo} → {x.reqTitulo} ↗
+                    </button>
+                  ))}
                 </div>
               </div>
             );
