@@ -12,7 +12,7 @@
 // campo nuevo que deba ser auditable tiene que añadirse aquí también.
 // ─────────────────────────────────────────────────────────────
 
-import { archivosDe, expedienteStatus, calcularMontos, resumenConsultas } from "./smartContract";
+import { archivosDe, expedienteStatus, calcularMontos, resumenConsultas, estadoFases } from "./smartContract";
 
 export const FORMATO = "chaindoc-evidencia/1";
 
@@ -41,8 +41,15 @@ export function armarManifiesto(exp) {
       completo: st.completo, vencido: st.vencido,
       comprobado: mt.comprobado, base: mt.base,
     },
+    // ← NUEVO: fases con su fecha y si se cumplieron a tiempo
+    fases: estadoFases(exp).map((f) => ({
+      n: f.n, titulo: f.titulo, fechaLimite: f.fechaLimite || null,
+      estado: f.estado, comprobantes: `${f.hechos}/${f.total}`,
+      cumplidaEn: f.cumplidaEn, retrasoDias: f.retraso,
+    })),
     requisitos: (exp.requisitos || []).map((r) => ({
       id: r.id, titulo: r.titulo, descripcion: r.descripcion,
+      fase: r.fase ? (exp.fases || []).findIndex((f) => f.id === r.fase) + 1 || null : null,
       tipo: r.tipo, obligatorio: r.obligatorio !== false,
       monto: r.monto ?? null, fechaLimite: r.fechaLimite || null,
       comprobantes: archivosDe(r).map((a) => ({
@@ -103,6 +110,7 @@ export function generarHTML(exp) {
         <div class="req-d">${esc(r.descripcion)}</div>
         <div class="tags">
           <span class="tag">${esc(r.tipo)}</span>
+          ${r.fase ? `<span class="tag">fase ${r.fase}</span>` : ""}
           ${r.monto != null ? `<span class="tag">${dinero(r.monto, e.moneda)}</span>` : ""}
           ${r.obligatorio ? "" : '<span class="tag">opcional</span>'}
         </div>
@@ -221,6 +229,21 @@ export function generarHTML(exp) {
     </div>
     ${e.partes.length ? `<p class="mut" style="margin-top:14px">${e.partes.map((p) => `${esc(p.rol)}: <strong>${esc(p.nombre)}</strong>`).join(" · ")}</p>` : ""}
   </div>
+
+  ${m.fases.length ? `<h2>Fases del contrato</h2>
+  <div class="caja">${m.fases.map((f) => `
+    <div class="req ${f.estado === "cumplida" ? "ok" : "falta"}">
+      <div class="req-n">${f.estado === "cumplida" ? "✓" : f.n}</div>
+      <div class="req-b">
+        <div class="req-t">${esc(f.titulo)}</div>
+        <div class="req-d">Límite: ${esc(f.fechaLimite || "sin fecha")} · ${esc(f.comprobantes)} comprobantes</div>
+        <div class="tags"><span class="tag">${
+          f.estado === "cumplida"
+            ? (f.retrasoDias ? `cumplida con ${f.retrasoDias} día(s) de retraso` : "cumplida a tiempo")
+            : f.estado === "vencida" ? "vencida sin cumplir" : "pendiente"}</span>
+          ${f.cumplidaEn ? `<span class="tag">cumplida el ${fecha(f.cumplidaEn)}</span>` : ""}</div>
+      </div>
+    </div>`).join("")}</div>` : ""}
 
   <h2>Comprobantes del expediente</h2>
   <div class="caja">${filasReq || '<p class="mut">Sin requisitos.</p>'}</div>
