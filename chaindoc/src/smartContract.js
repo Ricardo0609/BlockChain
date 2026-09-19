@@ -41,21 +41,30 @@ export async function listModels() {
     .map((m) => m.name.replace(/^models\//, ""));
 }
 
-/** Elige un modelo disponible una sola vez y lo recuerda. */
-async function resolveModel() {
-  if (FORCED) return FORCED;
-  if (resolvedModel) return resolvedModel;
+let candidatos = null;
+
+/**
+ * ← ACTUALIZADO: antes elegía UN modelo. Ahora arma una lista ordenada
+ * de respaldos: si el primero está saturado (503), se prueba el siguiente.
+ * Las cuotas gratuitas son por modelo, así que cambiar también ayuda con el 429.
+ */
+async function modelosCandidatos() {
+  if (candidatos) return candidatos;
 
   const available = await listModels();
   if (!available.length)
     throw new Error("Tu llave no tiene acceso a ningún modelo de Gemini.");
 
+  const utiles = available.filter((m) => !/vision|embedding|tts|image|audio|live|thinking-exp/.test(m));
+  const orden = [];
+  if (FORCED) orden.push(FORCED);
+  if (resolvedModel) orden.push(resolvedModel);   // el que funcionó la última vez, primero
   for (const rx of PREFER) {
-    const hit = available.find((m) => rx.test(m) && !/vision|embedding|tts|image/.test(m));
-    if (hit) { resolvedModel = hit; return hit; }
+    for (const m of utiles) if (rx.test(m) && !orden.includes(m)) orden.push(m);
   }
-  resolvedModel = available[0];
-  return resolvedModel;
+  if (!orden.length) orden.push(utiles[0] || available[0]);
+  candidatos = orden.slice(0, 4);   // más de cuatro sólo alarga la espera
+  return candidatos;
 }
 
 export const aiConfigured = () => Boolean(API_KEY);
@@ -89,12 +98,26 @@ const SCHEMA = {
           monto:       { type: "number", nullable: true },
           fechaLimite: { type: "string", nullable: true },
           obligatorio: { type: "boolean" },
+          fase:        { type: "string", nullable: true },   // ← NUEVO: título de su fase
         },
         required: ["titulo", "descripcion", "tipo", "obligatorio"],
       },
     },
+    // ← NUEVO: etapas del contrato (avances, revisiones, entregas parciales)
+    fases: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          titulo:      { type: "string" },
+          descripcion: { type: "string" },
+          fechaLimite: { type: "string", nullable: true },
+        },
+        required: ["titulo", "descripcion"],
+      },
+    },
   },
-  required: ["titulo", "resumen", "partes", "requisitos"],
+  required: ["titulo", "resumen", "partes", "requisitos", "fases"],
 };
 
 const PROMPT = `Eres un analista de contratos. Lee el contrato y extrae ÚNICAMENTE lo que está escrito en él.
@@ -109,6 +132,10 @@ Reglas:
 - tipo "documento": un papel que debe existir (el contrato firmado, un permiso, una póliza).
 - Si el contrato menciona contratar a un tercero, genera un requisito de tipo "comprobante" para ese gasto.
 - Las fechas van en formato AAAA-MM-DD. Si el contrato da un plazo relativo ("5 días"), calcúlalo desde HOY, que es {HOY}.
+- FASES: si el contrato establece etapas, avances, revisiones intermedias, entregas parciales o plazos escalonados, crea una fase por cada una, en orden cronológico y con su fecha límite. La entrega final también es una fase. Si el contrato no menciona etapas, devuelve "fases" como lista vacía.
+- Si una fase se define de forma relativa ("a la mitad del plazo", "a los 5 días del inicio"), calcula su fecha a partir de las fechas del contrato.
+- Asigna cada requisito a la fase en la que debe entregarse, escribiendo en "fase" el título EXACTO de esa fase. Si no corresponde a ninguna, déjalo nulo.
+- Toda fase debe poder comprobarse: si una fase no tiene ningún requisito, crea uno de tipo "entregable" que la demuestre (por ejemplo, un reporte de avance con fotografías).
 - El resumen es una frase de máximo 25 palabras.
 - Escribe todo en español.
 
@@ -119,41 +146,85 @@ CONTRATO:
 
 // ── Llamada al modelo ─────────────────────────────────────────
 // ← Este es el único punto que cambia al mover la IA a un backend.
-async function askGemini(prompt) {
-  const model = await resolveModel();
-  const res = await fetch(`${BASE}/models/${model}:generateContent?key=${API_KEY}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0, // determinista: mismo contrato, mismo resultado
-        responseMimeType: "application/json",
-        responseSchema: SCHEMA,
-      },
-    }),
-  });
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  if (!res.ok) {
-    const body = await res.text();
-    if (res.status === 404) {
-      // El modelo desapareció: olvida el elegido para que se resuelva de nuevo.
-      resolvedModel = null;
-      throw new Error(`El modelo «${model}» no está disponible para tu llave. Vuelve a intentarlo.`);
+// Errores pasajeros del lado de Google: vale la pena reintentar.
+//   503 = modelo saturado · 500/502/504 = falla temporal · 429 = cuota por minuto
+const TRANSITORIOS = new Set([429, 500, 502, 503, 504]);
+
+/** Una sola petición a un modelo. Devuelve { ok, status, text, cuerpo }. */
+async function pedir(model, prompt) {
+  let res;
+  try {
+    res = await fetch(`${BASE}/models/${model}:generateContent?key=${API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0, // determinista: mismo contrato, mismo resultado
+          responseMimeType: "application/json",
+          responseSchema: SCHEMA,
+        },
+      }),
+    });
+  } catch {
+    return { ok: false, status: 0, cuerpo: "" };   // sin conexión
+  }
+  if (!res.ok) return { ok: false, status: res.status, cuerpo: await res.text() };
+  const data = await res.json();
+  return { ok: true, status: 200, text: data?.candidates?.[0]?.content?.parts?.[0]?.text };
+}
+
+/**
+ * ← ACTUALIZADO: reintenta con espera creciente (1 s, 2.5 s) y, si el
+ * modelo sigue fallando, pasa al siguiente candidato. Los errores
+ * definitivos (llave inválida, sin permiso) cortan de inmediato.
+ */
+async function askGemini(prompt, onEstado) {
+  const modelos = await modelosCandidatos();
+  const ESPERAS = [0, 1000, 2500];
+  let ultimo = 0;
+
+  for (let mi = 0; mi < modelos.length; mi++) {
+    const model = modelos[mi];
+    for (let intento = 0; intento < ESPERAS.length; intento++) {
+      if (ESPERAS[intento]) {
+        onEstado?.(mi === 0
+          ? `Gemini está saturado, reintentando (${intento + 1}/${ESPERAS.length})…`
+          : `Probando con otro modelo (${model})…`);
+        await esperar(ESPERAS[intento]);
+      } else if (mi > 0) {
+        onEstado?.(`Probando con otro modelo (${model})…`);
+      }
+
+      const r = await pedir(model, prompt);
+      if (r.ok) {
+        if (!r.text) throw new Error("El modelo no devolvió resultados. Prueba con un contrato más detallado.");
+        if (model !== resolvedModel) candidatos = null;   // se reordena: el que funcionó va primero
+        resolvedModel = model;
+        return { text: r.text, model };
+      }
+      ultimo = r.status;
+
+      // Definitivos: no tiene caso reintentar.
+      if (r.status === 400 && /API key/i.test(r.cuerpo))
+        throw new Error("La llave de Gemini no es válida. Debe empezar con «AIza».");
+      if (r.status === 403)
+        throw new Error("La llave no tiene permiso para usar este modelo.");
+      if (r.status === 404) { candidatos = null; break; }   // ese modelo ya no existe: siguiente
+      if (r.status === 400) break;                          // petición rechazada por este modelo: siguiente
+      if (!TRANSITORIOS.has(r.status) && r.status !== 0) break;
     }
-    if (res.status === 429)
-      throw new Error("Se agotó la cuota gratuita por ahora. Espera un minuto e inténtalo de nuevo.");
-    if (res.status === 400 && /API key/i.test(body))
-      throw new Error("La llave de Gemini no es válida. Debe empezar con «AIza».");
-    if (res.status === 403)
-      throw new Error("La llave no tiene permiso para usar este modelo.");
-    throw new Error(`El servicio respondió con error ${res.status}.`);
   }
 
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("El modelo no devolvió resultados. Prueba con un contrato más detallado.");
-  return { text, model };
+  if (ultimo === 429)
+    throw new Error("Se agotó la cuota gratuita de Gemini por ahora. Espera un minuto e inténtalo de nuevo.");
+  if (ultimo === 0)
+    throw new Error("No hay conexión con Gemini. Revisa tu internet e inténtalo de nuevo.");
+  if (ultimo === 503 || ultimo >= 500)
+    throw new Error(`Gemini está saturado en este momento (error ${ultimo}). Probé ${modelos.length} modelo${modelos.length === 1 ? "" : "s"} con reintentos. Espera un par de minutos y vuelve a intentarlo.`);
+  throw new Error(`El servicio respondió con error ${ultimo}.`);
 }
 
 // ── Normalización ─────────────────────────────────────────────
@@ -161,9 +232,33 @@ async function askGemini(prompt) {
 // garantiza que la app siempre reciba una estructura utilizable.
 const isDate = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
+// ← NUEVO: comparación tolerante de títulos (sin acentos, mayúsculas ni espacios de más)
+const llaveTexto = (t) => String(t || "").toLowerCase()
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+
+function normalizarFases(raw) {
+  const lista = (Array.isArray(raw.fases) ? raw.fases : [])
+    .filter((f) => f?.titulo)
+    .map((f) => ({
+      titulo: String(f.titulo).trim(),
+      descripcion: String(f.descripcion || "").trim(),
+      fechaLimite: isDate(f.fechaLimite) ? f.fechaLimite : null,
+    }));
+  // Con todas las fechas, orden cronológico. Si a alguna le falta (por
+  // ejemplo, "Inicio de obra"), se respeta el orden del contrato: mandarla
+  // al final sólo por no tener fecha la pondría en el lugar equivocado.
+  if (lista.every((f) => f.fechaLimite)) {
+    lista.sort((a, b) => a.fechaLimite.localeCompare(b.fechaLimite));
+  }
+  return lista.map((f, i) => ({ id: `f${i + 1}`, ...f }));
+}
+
 function normalize(raw) {
   const reqs = Array.isArray(raw.requisitos) ? raw.requisitos : [];
+  const fases = normalizarFases(raw);
+  const porTitulo = new Map(fases.map((f) => [llaveTexto(f.titulo), f.id]));
   return {
+    fases,
     titulo:      String(raw.titulo || "").trim() || "Contrato inteligente",
     resumen:     String(raw.resumen || "").trim(),
     fechaLimite: isDate(raw.fechaLimite) ? raw.fechaLimite : null,
@@ -182,6 +277,7 @@ function normalize(raw) {
         monto:       typeof r.monto === "number" ? r.monto : null,
         fechaLimite: isDate(r.fechaLimite) ? r.fechaLimite : null,
         obligatorio: r.obligatorio !== false,
+        fase:        porTitulo.get(llaveTexto(r.fase)) || null,   // ← NUEVO
         estado:      "pendiente",
         archivo:     null,
       })),
@@ -189,7 +285,7 @@ function normalize(raw) {
 }
 
 /** Lee un contrato y devuelve la estructura del expediente. */
-export async function analyzeContract(text) {
+export async function analyzeContract(text, onEstado) {
   if (!API_KEY) throw new Error("Falta la llave de Gemini. Crea el archivo .env.local con VITE_GEMINI_API_KEY.");
   if (!text || text.trim().length < 80)
     throw new Error("El contrato es demasiado corto para analizarse. Escribe al menos un párrafo con las obligaciones.");
@@ -197,7 +293,7 @@ export async function analyzeContract(text) {
   const hoy = new Date().toISOString().slice(0, 10);
   const prompt = PROMPT.replace("{HOY}", hoy).replace("{TEXTO}", text.trim().slice(0, 60000));
 
-  const { text: out, model } = await askGemini(prompt);
+  const { text: out, model } = await askGemini(prompt, onEstado);
 
   let parsed;
   try {
@@ -372,6 +468,67 @@ export function calcularMontos(exp) {
   };
 }
 
+// ── FASES DEL CONTRATO ────────────────────────────────────────
+// ← NUEVO: etapas con su propia fecha límite (un avance a mitad de
+// plazo, una revisión, una entrega parcial). Todo se deriva de los
+// comprobantes: nada se guarda, así no puede quedar desactualizado.
+
+const hoyYmd = () => new Date().toISOString().slice(0, 10);
+/** Días de calendario de `a` a `b` (positivo si b es posterior). */
+const diasEntre = (a, b) =>
+  Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000);
+
+/** Estado de cada fase, en orden. Lista vacía si el contrato no tiene fases. */
+export function estadoFases(exp) {
+  const fases = exp?.fases || [];
+  if (!fases.length) return [];
+  const hoy = hoyYmd();
+
+  return fases.map((f, i) => {
+    const reqs   = (exp.requisitos || []).filter((r) => r.fase === f.id);
+    const oblig  = reqs.filter((r) => r.obligatorio !== false);
+    const hechos = oblig.filter((r) => archivosDe(r).length > 0);
+    const completa = oblig.length > 0 && hechos.length === oblig.length;
+
+    // Se cumplió cuando el ÚLTIMO requisito recibió su PRIMER comprobante.
+    let cumplidaEn = null;
+    if (completa) {
+      const primeros = oblig.map((r) =>
+        archivosDe(r).map((a) => a.subidoEn).filter(Boolean).sort()[0]).filter(Boolean).sort();
+      cumplidaEn = primeros[primeros.length - 1] || null;
+    }
+
+    const dias = f.fechaLimite ? diasEntre(hoy, f.fechaLimite) : null;
+    const vencida = !completa && f.fechaLimite ? hoy > f.fechaLimite : false;
+
+    // Retraso con que se cumplió (0 = a tiempo). Sirve para penas por día de atraso.
+    let retraso = null;
+    if (completa && cumplidaEn && f.fechaLimite) {
+      retraso = Math.max(0, diasEntre(f.fechaLimite, cumplidaEn.slice(0, 10)));
+    }
+
+    return {
+      ...f, n: i + 1, requisitos: reqs,
+      total: oblig.length, hechos: hechos.length,
+      completa, cumplidaEn, dias, vencida, retraso,
+      sinRequisitos: oblig.length === 0,
+      estado: completa ? "cumplida" : vencida ? "vencida" : "pendiente",
+    };
+  });
+}
+
+/** La primera fase que falta por cumplir, en orden del contrato. */
+export function faseActual(exp) {
+  return estadoFases(exp).find((f) => !f.completa) || null;
+}
+
+/** La fase incumplida con la fecha más apremiante (las vencidas primero). */
+export function faseCritica(exp) {
+  const pendientes = estadoFases(exp).filter((f) => !f.completa && f.dias != null);
+  if (!pendientes.length) return null;
+  return pendientes.reduce((a, b) => (b.dias < a.dias ? b : a));
+}
+
 export function expedienteStatus(exp) {
   const reqs = exp?.requisitos || [];
   const obligatorios = reqs.filter((r) => r.obligatorio);
@@ -528,6 +685,21 @@ export function duplicados(docs = []) {
     (a.alcance === b.alcance ? b.veces - a.veces : a.alcance === "entre-expedientes" ? -1 : 1));
 }
 
+/** Identidad de un comprobante para la detección de duplicados. */
+export const claveDup = (a) =>
+  a?.origen === "interno" ? `doc:${a.docId}` : a?.hash ? `sha:${a.hash}` : null;
+
+/**
+ * Adónde llevar al usuario cuando toca un aviso de duplicado: al lugar
+ * donde se adjuntó MÁS RECIENTEMENTE, que es el que probablemente sobra.
+ * Si se pasa `excepto`, se omite ese documento (el que ya está abierto).
+ */
+export function destinoDuplicado(grupo, excepto = null) {
+  const candidatos = (grupo?.ubicaciones || []).filter((u) => u.docId !== excepto);
+  if (!candidatos.length) return null;
+  return candidatos.reduce((a, b) => ((b.subidoEn || "") > (a.subidoEn || "") ? b : a));
+}
+
 /** ¿Este documento ya está adjunto a algún expediente? Devuelve dónde. */
 export function dondeEstaAdjunto(docId, docs = []) {
   const sitios = [];
@@ -569,27 +741,33 @@ export function panelExpedientes(docs = [], opciones = {}) {
   const filas = exps.map((x) => {
     const st = expedienteStatus(x);
     const mt = calcularMontos(x);
+    // ← NUEVO: si una fase intermedia vence antes que el contrato, manda ella.
+    const fc = faseCritica(x);
+    const usaFase = fc && (st.dias == null || fc.dias < st.dias || fc.vencida);
     return {
       doc: x, st, mt,
+      dias:    usaFase ? fc.dias : st.dias,
+      vencido: st.vencido || Boolean(fc?.vencida),
+      hito:    usaFase ? fc : null,
       inactivo: diasInactivo(x),
       duplicados: duplicadosDe(dups, x.id).length,
     };
   });
 
-  const vencidos   = filas.filter((f) => f.st.vencido && !f.st.completo);
-  const porVencer  = filas.filter((f) => !f.st.vencido && !f.st.completo &&
-                                          f.st.dias != null && f.st.dias <= diasAviso);
+  const vencidos   = filas.filter((f) => f.vencido && !f.st.completo);
+  const porVencer  = filas.filter((f) => !f.vencido && !f.st.completo &&
+                                          f.dias != null && f.dias <= diasAviso);
   const completos  = filas.filter((f) => f.st.completo);
-  const detenidos  = filas.filter((f) => !f.st.completo && !f.st.vencido &&
-                                          (f.st.dias == null || f.st.dias > diasAviso) &&
+  const detenidos  = filas.filter((f) => !f.st.completo && !f.vencido &&
+                                          (f.dias == null || f.dias > diasAviso) &&
                                           f.inactivo != null && f.inactivo >= diasQuieto);
-  const enCurso    = filas.filter((f) => !f.st.completo && !f.st.vencido &&
+  const enCurso    = filas.filter((f) => !f.st.completo && !f.vencido &&
                                           !porVencer.includes(f) && !detenidos.includes(f));
 
   return {
     total: filas.length,
-    vencidos: vencidos.sort((a, b) => a.st.dias - b.st.dias),
-    porVencer: porVencer.sort((a, b) => a.st.dias - b.st.dias),
+    vencidos: vencidos.sort((a, b) => a.dias - b.dias),
+    porVencer: porVencer.sort((a, b) => a.dias - b.dias),
     detenidos: detenidos.sort((a, b) => b.inactivo - a.inactivo),
     enCurso, completos,
     duplicados: dups,
