@@ -1,0 +1,179 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function sesion() {
+      return request.auth != null;
+    }
+
+    function miCorreo() {
+      return request.auth.token.email.lower();
+    }
+
+    function correoConfirmado() {
+      return request.auth.token.get('email_verified', false);
+    }
+
+    function tengoAcceso(data) {
+      return data.ownerUid == request.auth.uid
+          || miCorreo() in data.get('sharedWith', [])
+          || miCorreo() in data.get('roles', {}).keys();
+    }
+
+    // Durante la migración un documento puede estar en cualquiera de las
+    // dos colecciones. Esto pregunta por las dos.
+    function accesoADocumento(docId) {
+      return (exists(/databases/$(database)/documents/operaciones/$(docId))
+              && tengoAcceso(get(/databases/$(database)/documents/operaciones/$(docId)).data))
+          || (exists(/databases/$(database)/documents/documents/$(docId))
+              && tengoAcceso(get(/databases/$(database)/documents/documents/$(docId)).data));
+    }
+
+    match /users/{uid} {
+      allow read, write: if sesion() && request.auth.uid == uid;
+    }
+
+    // Sólo se entra al directorio con el correo confirmado: es lo que
+    // impide publicarse con una dirección que no es tuya.
+    match /directorio/{correo} {
+      allow get: if sesion();
+      allow list: if false;
+      allow create, update: if sesion()
+                            && correoConfirmado()
+                            && correo == miCorreo()
+                            && request.resource.data.uid == request.auth.uid;
+      allow delete: if sesion() && resource.data.uid == request.auth.uid;
+    }
+
+    // ── OPERACIONES (modelo nuevo) ────────────────────────────
+    // El navegador lee; escribir es cosa de las Cloud Functions, que
+    // entran como administrador y no pasan por estas reglas.
+    match /operaciones/{opId} {
+      allow get: if sesion() && tengoAcceso(resource.data);
+
+      // La regla de una consulta tiene que decir lo MISMO que la
+      // consulta, ni más ni menos: la app pide lo propio y lo
+      // compartido. Una condición más amplia hace que Firestore
+      // niegue la consulta entera.
+      allow list: if sesion() && (
+                     resource.data.ownerUid == request.auth.uid
+                     || miCorreo() in resource.data.get('sharedWith', [])
+                   );
+      allow write: if false;
+
+      // La cadena: sólo se lee. Nadie puede agregar, cambiar ni borrar
+      // un bloque desde el navegador, ni siquiera el dueño.
+      // Para llegar aquí hay que conocer el identificador de la
+      // operación, que ya está protegido arriba. Consultar el
+      // documento padre en cada bloque revienta cuando la cadena es
+      // larga: el límite del aportador se aplica en el servidor.
+      match /bloques/{n} {
+        allow read:  if sesion();
+        allow write: if false;
+      }
+
+      // Reservado para las validaciones externas (SAT, sellos de tiempo).
+      match /validaciones/{vid} {
+        allow read:  if sesion();
+        allow write: if false;
+      }
+    }
+
+    // ── DOCUMENTS (modelo viejo) ──────────────────────────────
+    // Se conserva hasta terminar la migración. Después se cierra por
+    // completo cambiando estas reglas por `allow read, write: if false`.
+    match /documents/{docId} {
+      allow get: if sesion();
+      allow list: if sesion() && (
+                     resource.data.ownerUid == request.auth.uid
+                     || miCorreo() in resource.data.sharedWith
+                   );
+      allow create: if sesion()
+                    && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if sesion()
+                    && tengoAcceso(resource.data)
+                    && request.resource.data.ownerUid == resource.data.ownerUid
+                    && (
+                         resource.data.ownerUid == request.auth.uid
+                         || request.resource.data.get('sharedWith', [])
+                              .hasAll(resource.data.get('sharedWith', []))
+                       );
+      allow delete: if sesion() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // ── SECRETOS (Etapa 3) ────────────────────────────────────
+    // Código de firma, credenciales biométricas, contraseñas de
+    // documento y retos en curso. Ninguna sesión los lee ni los
+    // escribe: sólo las Cloud Functions, que no pasan por aquí.
+    match /secretos/{uid} {
+      allow read, write: if false;
+    }
+    match /protegidos/{opId} {
+      allow read, write: if false;
+    }
+    match /retos/{uid} {
+      allow read, write: if false;
+    }
+
+    // Avisos de la revision diaria: vencimientos y facturas que
+    // cambiaron de estatus. Cada quien lee los suyos; los escribe el
+    // servidor.
+    match /avisos/{uid} {
+      allow read: if sesion() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Enlaces de invitacion. Se guardan por la huella del testigo, no
+    // por el testigo, y ni asi se leen desde el navegador: quien tiene
+    // el enlace lo canjea llamando a una funcion.
+    match /invitaciones/{huella} {
+      allow read, write: if false;
+    }
+
+    // Registro de folios fiscales ya usados, para detectar una factura
+    // deducida dos veces. Lo escribe y lo lee solo el servidor.
+    match /cfdis/{id} {
+      allow read, write: if false;
+    }
+
+    // La lista 69-B del SAT y su fecha de actualizacion. Solo el
+    // servidor la escribe; el navegador la consulta por funcion.
+    match /catalogos/{id} {
+      allow read, write: if false;
+    }
+
+    // ── ANCLAJE EN BITCOIN (Etapa 5) ──────────────────────────
+    // El arbol de Merkle de cada dia y la prueba de OpenTimestamps.
+    // Cerrados al navegador por la misma razon que los bloques: una
+    // prueba de anclaje escrita desde el cliente no probaria nada. El
+    // navegador pide lo suyo por funcion (anclajesDe), que ademas
+    // comprueba que tenga acceso a esa operacion.
+    match /anclajes/{id} {
+      allow read, write: if false;
+    }
+
+    // Cola de bloques que todavia no se anclan. La escribe el servidor
+    // en la misma transaccion que el bloque y la vacia al anclar.
+    match /porAnclar/{hash} {
+      allow read, write: if false;
+    }
+
+    // ── EVIDENCIAS (archivos en base64) ───────────────────────
+    match /evidencias/{id} {
+      allow get: if sesion() && (
+                    resource.data.ownerUid == request.auth.uid
+                    || accesoADocumento(resource.data.docId)
+                  );
+      allow list: if false;
+      allow create: if sesion()
+                    && request.resource.data.ownerUid == request.auth.uid
+                    && accesoADocumento(request.resource.data.docId);
+      allow update: if false;
+      allow delete: if sesion() && (
+                       resource.data.ownerUid == request.auth.uid
+                       || accesoADocumento(resource.data.docId)
+                     );
+    }
+  }
+}

@@ -1,0 +1,62 @@
+# -- Puesto por subir-a-github.ps1 --
+
+# Dependencias: se instalan solas con npm install.
+node_modules/
+
+# Lo compilado: Render lo genera en cada despliegue.
+dist/
+mock/dist/
+
+# Variables de entorno. Aqui vive la llave de Gemini.
+.env
+.env.*
+!.env.example
+
+# Llaves de servidor de Firebase.
+serviceAccount*.json
+*-adminsdk-*.json
+*.pem
+*.p12
+
+# Basura de herramientas.
+.firebase/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# -- Puesto por subir-a-github.ps1 --
+
+# Dependencias: se instalan solas con npm install.
+node_modules/
+
+# Lo compilado: Render lo genera en cada despliegue.
+dist/
+mock/dist/
+
+# Variables de entorno. Aqui vive la llave de Gemini.
+.env
+.env.*
+!.env.example
+
+# Llaves de servidor de Firebase.
+serviceAccount*.json
+*-adminsdk-*.json
+*.pem
+*.p12
+
+# Scripts de instalacion de sesiones pasadas: no son del proyecto,
+# son el envoltorio con el que llegaron los archivos.
+instalar-*.ps1
+aplicar-*.ps1
+
+# Basura de herramientas.
+.firebase/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

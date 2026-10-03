@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// Reglas de Firebase Storage.
+//
+// Subir: solo a tu propia carpeta y hasta 20 MB.
+// Leer: nadie, directamente. Los archivos se piden a la funcion
+// `archivo`, que comprueba que quien los pide tenga acceso al
+// expediente. Asi no existen enlaces publicos que se puedan reenviar.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    match /evidencias/{uid}/{docId}/{archivo} {
+      allow read: if false;
+
+      allow create: if request.auth != null
+                    && request.auth.uid == uid
+                    && request.resource.size <= 20 * 1024 * 1024;
+
+      allow update, delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Rincon temporal de las invitaciones. Quien abre un enlace entra
+    // con una sesion anonima de Firebase, que no da acceso a nada mas
+    // que a dejar un archivo en su propia carpeta. El servidor lo lee,
+    // lo mueve a su lugar y lo asienta; el invitado nunca escribe en
+    // la operacion ni puede leer lo que dejo.
+    match /invitaciones/{uid}/{huella}/{archivo} {
+      allow read: if false;
+      allow create: if request.auth != null
+                    && request.auth.uid == uid
+                    && request.resource.size <= 20 * 1024 * 1024;
+      allow update, delete: if false;
+    }
+
+    // Todo lo demas queda cerrado.
+    match /{rutas=**} {
+      allow read, write: if false;
+    }
+  }
+}
