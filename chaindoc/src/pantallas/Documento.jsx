@@ -18,7 +18,7 @@ import { ESTILOS } from "../ui/estilos";
 export function renderDocumento(ctx){
   const {
     MAX_IMGS, abrirProtegido, addImage, bioBusy, bioCreds, bioOk, content, d, doVerify,
-    docs, editMode, exportarPaquete, fields, getFile, goHome, histOpen, histTab,
+    docs, editMode, exportarPaquete, fields, getFile, goHome, histOpen, histTab, ocupado,
     iniciarConversion, lockInput, menuOpen, modal, notif, openDoc, openExpedientes,
     puedeConvertir, removeImage, save, saving, setContent, setDirty, setEdit, setFields,
     setHist, setHistTab, setLinkErr, setLinkExp, setLock, setLockInput, setMIn, setMenu,
@@ -364,8 +364,11 @@ export function renderDocumento(ctx){
         )}
         {/* ← NUEVO: el paquete que un tercero verifica por su cuenta */}
         {d.kind==="expediente" && puede("exportar") && (
-          <button className="btn btn-primary" onClick={exportarPaquete}>
-            <Icon n="download" size={18}/> Exportar evidencia
+          <button className={`btn btn-primary ${ocupado==="exportando"?"esperando":""}`}
+            disabled={ocupado==="exportando"} onClick={exportarPaquete}>
+            {ocupado==="exportando"
+              ? "Generando el paquete…"
+              : <><Icon n="download" size={18}/> Exportar evidencia</>}
           </button>
         )}
       </div>

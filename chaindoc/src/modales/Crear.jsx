@@ -8,7 +8,7 @@ import { fmtFecha } from "../nucleo/formato";
 
 export function modalCrear(ctx){
   const {
-    closeCreate, createDoc, createExpediente, createStep, dragOver, dropFase, dropReq,
+    closeCreate, creando, createDoc, createExpediente, createStep, dragOver, dropFase, dropReq,
     folders, handleFile, imp, impErr, impMeta, impText, mIn, mIn2, method, modal,
     onDrop, resetImport, runAnalysis, setCreateStep, setDragOver, setMIn, setMIn2,
     setMethod, setSmartErr, setSmartRes, setSmartText, setTpl, smartBusy, smartErr,
@@ -35,7 +35,7 @@ export function modalCrear(ctx){
         </div>
 
         <div className="modal-row">
-          <button className="btn btn-secondary" onClick={closeCreate}>Cancelar</button>
+          <button className="btn btn-secondary rojo" onClick={closeCreate}>Cancelar</button>
         </div>
       </>)}
 
@@ -257,7 +257,7 @@ export function modalCrear(ctx){
       {/* ← ACTUALIZADO: el expediente tiene sus propios campos más abajo */}
       {method && !isSmart && (<>
         <input className="inp" style={{marginTop:20}} placeholder="Nombre del documento"
-          value={mIn} onChange={e=>setMIn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&createDoc()} />
+          value={mIn} onChange={e=>setMIn(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter" && !creando) createDoc(); }} />
         <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Guardar en carpeta (opcional):</p>
         <div className="pills">
           <button className={`pill ${mIn2===""?"sel":""}`} onClick={()=>setMIn2("")}>Sin carpeta</button>
@@ -272,12 +272,13 @@ export function modalCrear(ctx){
         {/* ← ACTUALIZADO: el expediente se crea con su propia función */}
         {isSmart ? (
           <button className="btn btn-primary" onClick={createExpediente}
-            disabled={!smartRes || smartBusy || !smartRes.requisitos.length}>
-            Abrir expediente
+            disabled={!smartRes || smartBusy || creando || !smartRes.requisitos.length}>
+            {creando ? "Abriendo…" : "Abrir expediente"}
           </button>
         ) : (
-          <button className="btn btn-primary" onClick={createDoc} disabled={!!imp||!method}>
-            {method==="subir" ? "Importar documento"
+          <button className="btn btn-primary" onClick={createDoc} disabled={!!imp||!method||creando}>
+            {creando ? "Creando…"
+             : method==="subir" ? "Importar documento"
              : method==="escanear" ? "Guardar escaneo"
              : "Crear documento"}
           </button>

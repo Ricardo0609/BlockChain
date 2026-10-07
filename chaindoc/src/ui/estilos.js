@@ -10,6 +10,10 @@ export const ESTILOS = `
   --negro:#252223; --gris-400:#5b5456; --gris-300:#7b7b7b; --gris-200:#ada6a8;
   --bordes:#cac6c7; --gris-100:#e8e4e5; --rojo:#df2531; --rojo-soft:#fef2f2;
   --blanco:#fff; --bg-soft:#fafafa; --verde:#16a34a;
+  /* ← NUEVO: un color por tipo de documento. Se usan en el borde de la
+     tarjeta y en la etiqueta de debajo del título, para que los dos
+     digan lo mismo. */
+  --t-texto:#2563eb; --t-factura:#16a34a; --t-recibo:#7c3aed; --t-smart:#ca8a04;
   --sh-sm:0px 0px 2px rgba(0,0,0,.04),0px 2px 4px rgba(0,0,0,.06);
   --sh:0px 0px 4px rgba(0,0,0,.04),0px 8px 16px rgba(0,0,0,.08);
   --sh-card:0px 0px 6px rgba(0,0,0,.04),0px 6px 12px rgba(0,0,0,.06);
@@ -28,10 +32,19 @@ img,svg{max-width:100%}
 .btn-secondary{background:#fff;color:var(--negro);border:2.5px solid var(--negro);padding:11px 20px;font-size:16px}
 .btn-secondary:hover{background:var(--negro);color:#fff}
 .btn-secondary.on{background:var(--negro);color:#fff}
+/* ← NUEVO: cancelar no lleva al mismo sitio que aceptar, y el negro los
+   hacía parecer dos caminos iguales. */
+.btn-secondary.rojo{border-color:var(--rojo);color:var(--rojo)}
+.btn-secondary.rojo:hover{background:var(--rojo);color:#fff;border-color:var(--rojo)}
 .btn-warning{background:var(--rojo);color:#fff;border:none;padding:13px 24px;font-size:16px;border-radius:8px;box-shadow:var(--sh-sm)}
 .btn-warning:hover{opacity:.88}
 .btn-tertiary{background:none;border:none;color:var(--gris-400);font-family:var(--f-p);font-weight:500;font-size:15px;cursor:pointer;text-decoration:underline;padding:4px}
 .btn-tertiary:hover{color:var(--negro)}
+/* ← NUEVO: la vuelta que gira dentro de cualquier botón que esté
+   esperando. Se pinta con el color del propio texto, así vale igual en
+   el botón negro, en el rojo y en el de borde. */
+.btn.esperando::before{content:"";width:14px;height:14px;border:2px solid currentColor;
+  border-top-color:transparent;border-radius:50%;animation:sp .7s linear infinite;flex:none}
 
 /* ── LOADING ── */
 .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px}
@@ -75,7 +88,11 @@ img,svg{max-width:100%}
 .page{max-width:1512px;margin:0 auto;padding:0 40px 60px}
 .page-title{font-family:var(--f-t);font-weight:600;font-size:38px;margin:24px 0 20px}
 .sec-h{display:flex;align-items:center;gap:8px;margin:28px 0 16px;cursor:pointer;user-select:none}
-.sec-arrow{font-size:22px;color:var(--gris-200);transition:transform .2s;display:inline-block}
+/* ← ACTUALIZADO: era el caracter ⌄, que cada navegador dibuja a su
+   manera y parecia texto sin estilo. Ahora es un icono de verdad; el
+   tamano lo fija el componente y aqui solo queda el giro. */
+.sec-arrow{color:var(--gris-200);transition:transform .2s;display:inline-flex;
+  align-items:center;justify-content:center;line-height:1}
 .sec-arrow.closed{transform:rotate(-90deg)}
 .sec-t{font-family:var(--f-t);font-weight:500;font-size:28px;color:var(--gris-200)}
 
@@ -88,9 +105,23 @@ img,svg{max-width:100%}
 .folder.dashed:hover{color:var(--negro)}
 
 /* ── DOC CARDS ── */
-.cards{display:flex;flex-wrap:wrap;gap:24px}
-.card{background:#fff;border:2px solid var(--bordes);border-radius:16px;padding:16px;width:262px;box-shadow:var(--sh-sm);cursor:pointer;transition:all .15s;display:flex;flex-direction:column;gap:14px;position:relative}
-.card:hover{border-color:var(--negro);transform:translateY(-2px);box-shadow:var(--sh)}
+/* align-items:flex-start: sin esto, la fila estira todas las tarjetas a
+   la altura de la más alta y la acostada dejaba de ser acostada. */
+.cards{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+/* ← ACTUALIZADO: el color del borde sale de --c-tipo, que cada tipo
+   redefine. Así el :hover ya no tiene que pisarlo: sube la tarjeta y le
+   da sombra, pero el color sigue diciendo qué es. */
+.card{--c-tipo:var(--bordes);background:#fff;border:2px solid var(--c-tipo);border-radius:16px;
+  padding:16px;width:262px;box-shadow:var(--sh-sm);cursor:pointer;transition:all .15s;
+  display:flex;flex-direction:column;gap:14px;position:relative}
+.card.tipo-texto{--c-tipo:var(--t-texto)}
+.card.tipo-factura{--c-tipo:var(--t-factura)}
+.card.tipo-recibo{--c-tipo:var(--t-recibo)}
+.card.tipo-smart{--c-tipo:var(--t-smart)}
+/* Los comprobantes van acostados: la forma se reconoce antes que el color. */
+.card.ancha{width:323px}
+.card.ancha .card-prev{height:75px}
+.card:hover{border-color:var(--c-tipo);transform:translateY(-2px);box-shadow:var(--sh)}
 .card-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .card-t{font-family:var(--f-t);font-weight:500;font-size:20px;color:var(--gris-300);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card-prev{height:136px;background:var(--bg-soft);border:1px solid var(--gris-100);border-radius:6px;padding:10px 12px;font-size:10px;color:var(--gris-300);line-height:1.7;overflow:hidden}
@@ -101,6 +132,13 @@ img,svg{max-width:100%}
 .chip-s{background:#fffbeb;color:#d97706;border:1px solid #fde68a}
 .chip-f{background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe}
 .chip-l{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1}
+/* ← NUEVO: la etiqueta del tipo, justo debajo del título y del mismo
+   color que el borde. El margen negativo la acerca al título: el hueco
+   de 14px de la tarjeta la dejaba flotando. */
+/* .chip.chip-tipo y no .chip-tipo a secas: mas abajo hay otra regla
+   .chip que fija color y fondo, y al ir despues ganaba el empate. */
+.chip.chip-tipo{align-self:flex-start;margin-top:-8px;background:#fff;
+  border:1.5px solid var(--c-tipo);color:var(--c-tipo);font-weight:600}
 
 /* dropdown */
 .drop{position:absolute;top:52px;right:8px;z-index:100;background:#fff;border:2px solid var(--bordes);border-radius:12px;box-shadow:var(--sh);min-width:180px;overflow:hidden}
@@ -111,7 +149,11 @@ img,svg{max-width:100%}
 /* ── CREATE BTN ── */
 .create-zone{display:flex;justify-content:center;padding:47px 0}
 .create-btn{background:#fff;border:1.5px solid var(--bordes);border-radius:12px;padding:12px 24px;box-shadow:var(--sh-sm);cursor:pointer;font-family:var(--f-p);font-size:20px;color:var(--negro);display:flex;flex-direction:column;align-items:center;gap:6px;transition:all .15s;min-width:180px}
-.create-btn:hover{border-color:var(--negro);box-shadow:var(--sh);transform:translateY(-1px)}
+/* ← ACTUALIZADO: antes solo se oscurecia el borde, que junto a los
+   demas botones parecia que este se habia quedado a medias. Ahora se
+   rellena igual que btn-secondary. */
+.create-btn:hover{background:var(--negro);color:#fff;border-color:var(--negro);
+  box-shadow:var(--sh);transform:translateY(-1px)}
 .create-btn b{font-size:24px;line-height:1}
 
 .empty{text-align:center;padding:50px 20px;color:var(--gris-200);font-size:16px;line-height:1.8}
@@ -164,7 +206,12 @@ img,svg{max-width:100%}
 .tpl:hover{border-color:var(--negro);transform:translateY(-2px);box-shadow:var(--sh)}
 .tpl.sel{border-color:var(--negro);background:var(--bg-soft)}
 .tpl-ico{font-size:40px}
-.tpl-n{font-family:var(--f-p);font-weight:500;font-size:16px;color:var(--negro)}
+/* ← ACTUALIZADO: sin centrar, un nombre de dos palabras se partía y
+   quedaba pegado al borde izquierdo («Contrato inteligente»). Ahora se
+   centra, respira por los lados y baja de línea con holgura. */
+.tpl-n{font-family:var(--f-p);font-weight:500;font-size:16px;color:var(--negro);
+  text-align:center;line-height:1.3;padding:0 12px;max-width:100%;
+  overflow-wrap:break-word;hyphens:auto}
 
 /* folder pills */
 .pills{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 0}
@@ -884,7 +931,12 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .btn:disabled{opacity:.55;cursor:not-allowed}
 .menu-item{display:flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;font-family:var(--f-p);font-weight:500;font-size:17px;color:var(--gris-400);padding:8px;transition:color .15s}
 .menu-item:hover{color:var(--negro)}
-.menu-x{background:none;border:none;font-size:26px;cursor:pointer;color:var(--negro);margin-top:auto;margin-bottom:40px}
+/* ← NUEVO: cerrar sesion es la unica accion del menu que cuesta algo
+   si se toca sin querer. El rojo lo dice antes de leerlo. */
+.menu-item.peligro{color:var(--rojo)}
+.menu-item.peligro:hover{color:var(--rojo)}
+.menu-x{background:none;border:none;cursor:pointer;color:var(--rojo);margin-top:auto;
+  margin-bottom:40px;display:flex;align-items:center;justify-content:center;padding:8px}
 
 /* ── TOGGLE ── */
 .toggle-wrap{display:flex;align-items:center;gap:10px;padding:9px;cursor:pointer}
@@ -975,7 +1027,7 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   .page-title{font-size:26px;margin:18px 0 14px}
   .sec-h{margin:22px 0 12px;gap:6px}
   .sec-t{font-size:21px}
-  .sec-arrow{font-size:18px}
+  .sec-arrow .msym{font-size:22px !important}
 
   /* carpetas: 2 columnas */
   .folders{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
@@ -986,6 +1038,8 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   /* tarjetas a ancho completo */
   .cards{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
   .card{width:100%;min-width:0;padding:14px;border-radius:14px;gap:12px}
+  .card.ancha{width:100%}
+  .card.ancha .card-prev{height:70px}
   .card-t{font-size:18px}
   .card-prev{height:110px;font-size:11px}
   .card-meta{font-size:13px}
@@ -1114,14 +1168,18 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 
 /* ── Ajustes táctiles generales ── */
 @media (hover:none){
-  .card:hover{transform:none;box-shadow:var(--sh-sm);border-color:var(--bordes)}
+  .card:hover{transform:none;box-shadow:var(--sh-sm);border-color:var(--c-tipo)}
   .card:active{border-color:var(--negro);transform:scale(.99)}
   .folder:hover{border-color:var(--bordes);box-shadow:none}
   .folder:active{border-color:var(--negro)}
   .tpl:hover{transform:none;box-shadow:var(--sh-sm);border-color:var(--bordes)}
   .tpl.sel{border-color:var(--negro)}
   .btn-secondary:hover{background:#fff;color:var(--negro)}
+  .btn-secondary.rojo:hover{background:#fff;color:var(--rojo)}
+  .btn-secondary.rojo:active{background:var(--rojo);color:#fff}
   .btn-secondary.on{background:var(--negro);color:#fff}
-  .create-btn:hover{transform:none}
+  .create-btn:hover{background:#fff;color:var(--negro);border-color:var(--bordes);
+    box-shadow:var(--sh-sm);transform:none}
+  .create-btn:active{background:var(--negro);color:#fff;border-color:var(--negro)}
 }
 `;

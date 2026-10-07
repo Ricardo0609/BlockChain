@@ -6,13 +6,19 @@
 // propia tarjeta— y luego cuatro con las clases como pastillas. Las
 // dos formas obligaban a decidir de qué clase es el contrato antes de
 // haber escrito una línea, que es justo cuando menos se sabe. Ahora
-// hay un solo contrato con la estructura común, y quien necesite algo
-// distinto lo escribe encima: escribir es más fácil que elegir.
+// hay un solo tipo de texto libre y quien necesite algo distinto lo
+// escribe: escribir es más fácil que elegir.
+//
+// ← ACTUALIZADO (7 oct): se llama «Documento de texto», no «Contrato»,
+// porque el producto no es sólo para contratos, y empieza EN BLANCO.
+// La plantilla que traía antes llenaba la hoja de corchetes que había
+// que borrar; una hoja limpia con una invitación a escribir pesa menos.
+// El identificador sigue siendo "contrato" para no romper lo ya creado.
 //
 // "carpeta", "subir", "escanear" y "en blanco" salieron de aquí: el
 // método de creación es el paso 2 y las carpetas tienen su propio modal.
 export const TEMPLATES = [
-  { id:"contrato",    ico:"contract",     name:"Contrato", body:"CONTRATO\n\nEntre las partes:\n\nPRIMERA PARTE: [Nombre o razón social]\nRFC: [RFC]\nDomicilio: [Domicilio]\n\nSEGUNDA PARTE: [Nombre o razón social]\nRFC: [RFC]\nDomicilio: [Domicilio]\n\nOBJETO\n[Qué se contrata, con el detalle suficiente para saber si se cumplió:\nqué se entrega o se hace, dónde, con qué alcance]\n\nPRECIO Y FORMA DE PAGO\nTotal: $[cantidad] MXN más IVA.\n[Anticipo / pagos parciales / pago único: cuánto y cuándo]\nCada pago se hará dentro de los [X] días siguientes a la recepción del\ncomprobante fiscal correspondiente.\n\nPLAZO\nDel [fecha] al [fecha].\n[Penas por retraso, si las hay]\n\nCOMPROBANTES\nCada pago se documentará con comprobante fiscal digital (CFDI). Ambas\npartes conservarán copia de los comprobantes que amparen el cumplimiento.\n\nOBLIGACIONES DE LA PRIMERA PARTE\n1. [Obligación]\n2. [Obligación]\n\nOBLIGACIONES DE LA SEGUNDA PARTE\n1. [Obligación]\n2. [Obligación]\n\nENTREGA Y ACEPTACIÓN\n[Cómo se da por entregado, y cuántos días hay para observar]\n\nTERMINACIÓN\nCualquiera de las partes puede darlo por terminado avisando por escrito\ncon [X] días de anticipación, pagando lo devengado hasta esa fecha.\n\nINCUMPLIMIENTO\nSi alguna de las partes incumple, la otra podrá exigir el cumplimiento o\ndar por terminado el contrato, sin perjuicio de los daños causados.\n\nFIRMAS\n[Nombre]                            [Nombre]\nFecha: [fecha]" },
+  { id:"contrato",    ico:"contract",     name:"Documento de texto", body:"" },
   { id:"factura",     ico:"receipt_long", name:"Factura",  form:"factura", body:"" },
   { id:"recibo",      ico:"receipt",      name:"Recibo",   form:"recibo",  body:"" },
   // No crea un documento: crea un expediente con lista de comprobantes.
@@ -52,3 +58,28 @@ export function selloDesdeUid(uid=""){
  * oponer ante un tercero.
  */
 export const aceptaEfirma = (doc) => Boolean(doc) && doc.tplId !== "factura";
+
+// ── TIPOS DE DOCUMENTO, PARA RECONOCERLOS DE UN VISTAZO ───────
+//
+// Tres tarjetas seguidas se veían iguales: mismo tamaño, mismo borde
+// gris, y para saber cuál era cuál había que leer el contenido. Ahora
+// cada tipo tiene su color y su etiqueta debajo del título, y los
+// comprobantes (factura y recibo) son apaisados en vez de verticales:
+// la forma se reconoce antes que el color, y antes aún que el texto.
+export const TIPOS_DOC = {
+  texto:   { nombre: "Documento de texto",   color: "azul" },
+  factura: { nombre: "Factura",              color: "verde" },
+  recibo:  { nombre: "Recibo",               color: "morado" },
+  smart:   { nombre: "Contrato inteligente", color: "amarillo" },
+};
+
+/** De qué tipo es un documento ya guardado. */
+export function tipoDeDocumento(doc){
+  if(doc?.kind === "expediente") return "smart";
+  if(doc?.tplId === "factura")   return "factura";
+  if(doc?.tplId === "recibo")    return "recibo";
+  return "texto";
+}
+
+/** Los comprobantes se dibujan acostados; el texto y el expediente, de pie. */
+export const esApaisado = (tipo) => tipo === "factura" || tipo === "recibo";

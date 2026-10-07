@@ -6,7 +6,7 @@ import { aceptaEfirma } from "../nucleo/catalogos";   // ← NUEVO (Etapa 5)
 
 export function modalFirma(ctx){
   const {
-    bioBusy, bioCreds, bioOk, d, modal, pass, setLock, setModal, setPass, signWithBio,
+    bioBusy, bioCreds, bioOk, d, modal, pass, saving, setLock, setModal, setPass, signWithBio,
     trySign, unlockFiles, unlockFilesBio, user,
   } = ctx;
   if(modal.t==="sign"){
@@ -33,7 +33,10 @@ export function modalFirma(ctx){
         onKeyDown={e=>{if(e.key==="Enter"){ trySign(); }}} />
       <div className="modal-row">
         <button className="btn btn-secondary" onClick={()=>setModal(null)} disabled={bioBusy}>Cancelar</button>
-        <button className="btn btn-primary" onClick={()=>{ trySign(); }} disabled={bioBusy}>Firmar</button>
+        <button className={`btn btn-primary ${saving?"esperando":""}`}
+          onClick={()=>{ trySign(); }} disabled={bioBusy||saving}>
+          {saving ? "Firmando…" : "Firmar"}
+        </button>
       </div>
       {!canBio && <div className="fingerprint" onClick={()=>{ trySign(); }}><IcoFinger/></div>}
 

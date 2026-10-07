@@ -49,37 +49,29 @@ describe("tipos de documento (paso 1)", () => {
   });
 });
 
-describe("la plantilla de contrato", () => {
-  const contrato = TEMPLATES.find((t) => t.id === "contrato");
+describe("el tipo de texto libre", () => {
+  const texto = TEMPLATES.find((t) => t.id === "contrato");
 
-  it("trae un texto de partida, no una hoja en blanco", () => {
-    expect(contrato.body.length).toBeGreaterThan(600);
+  // Antes traía un contrato completo de plantilla. Llenaba la hoja de
+  // corchetes que había que borrar uno por uno, y suponía que lo que se
+  // va a escribir es un contrato. Ahora la hoja empieza limpia y el
+  // marcador de posición es el que invita a escribir.
+  it("empieza en blanco, a proposito", () => {
+    expect(texto.body).toBe("");
   });
 
-  it("nombra a las dos partes y les pide RFC", () => {
-    expect(contrato.body).toMatch(/PRIMERA PARTE/);
-    expect(contrato.body).toMatch(/SEGUNDA PARTE/);
-    expect(contrato.body).toMatch(/RFC/);
+  it("se llama por lo que es, no por un solo uso", () => {
+    expect(texto.name).toBe("Documento de texto");
+    expect(texto.name).not.toMatch(/contrato/i);
   });
 
-  // Es lo que distingue a chaindoc de un editor de texto: el contrato
-  // tiene que decir con qué se comprueba cada pago.
-  it("habla de comprobantes fiscales", () => {
-    expect(contrato.body).toMatch(/CFDI|comprobante fiscal/i);
-    expect(contrato.body).toMatch(/COMPROBANTES/);
-  });
-
-  it("tiene las secciones que el análisis de IA busca", () => {
-    for(const s of ["OBJETO", "PRECIO Y FORMA DE PAGO", "PLAZO", "FIRMAS"]){
-      expect(contrato.body).toContain(s);
-    }
-  });
-
-  it("no se quedó con el encabezado de una clase concreta", () => {
-    expect(contrato.body.split("\n")[0]).toBe("CONTRATO");
-    expect(contrato.body).not.toMatch(/ARRENDAMIENTO|PRECIO ALZADO/);
+  // El identificador no cambia aunque el nombre sí: cambiarlo dejaría
+  // huérfano lo que ya está creado.
+  it("conserva su identificador", () => {
+    expect(texto.id).toBe("contrato");
   });
 });
+
 
 describe("métodos de creación (paso 2)", () => {
   it("siguen siendo los tres de siempre", () => {

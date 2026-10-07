@@ -2,7 +2,8 @@
 
 export function modalCarpetas(ctx){
   const {
-    delDoc, folders, mIn, mIn2, modal, moveTo, notify, setFolders, setMIn, setMIn2, setModal,
+    delDoc, folders, mIn, mIn2, modal, moveTo, notify, ocupado,
+    setFolders, setMIn, setMIn2, setModal,
   } = ctx;
   if(modal.t==="newFolder") return (
     <div className="ov" onClick={()=>setModal(null)}><div className="modal" onClick={e=>e.stopPropagation()}>
@@ -27,8 +28,11 @@ export function modalCarpetas(ctx){
         {folders.map(f=><button key={f} className={`pill ${mIn2===f?"sel":""}`} onClick={()=>setMIn2(f)}>{f}</button>)}
       </div>
       <div className="modal-row">
-        <button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button>
-        <button className="btn btn-primary" onClick={()=>moveTo(modal.id,mIn2||null)}>Mover</button>
+        <button className="btn btn-secondary" disabled={!!ocupado} onClick={()=>setModal(null)}>Cancelar</button>
+        <button className={`btn btn-primary ${ocupado==="moviendo"?"esperando":""}`}
+          disabled={ocupado==="moviendo"} onClick={()=>moveTo(modal.id,mIn2||null)}>
+          {ocupado==="moviendo" ? "Moviendo…" : "Mover"}
+        </button>
       </div>
     </div></div>
   );
@@ -38,12 +42,14 @@ export function modalCarpetas(ctx){
       <h2>Eliminar documento</h2>
       <p className="sub">¿Seguro que quieres eliminar <strong>«{modal.name}»</strong>? Esta acción no se puede deshacer.</p>
       <div className="modal-row">
-        <button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button>
-        <button className="btn btn-warning" onClick={()=>delDoc(modal.id)}>Eliminar</button>
+        <button className="btn btn-secondary" disabled={!!ocupado} onClick={()=>setModal(null)}>Cancelar</button>
+        <button className={`btn btn-warning ${ocupado==="eliminando"?"esperando":""}`}
+          disabled={ocupado==="eliminando"} onClick={()=>delDoc(modal.id)}>
+          {ocupado==="eliminando" ? "Eliminando…" : "Eliminar"}
+        </button>
       </div>
     </div></div>
   );
 
   return null;
 }
-

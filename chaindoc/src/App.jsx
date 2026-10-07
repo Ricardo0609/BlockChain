@@ -69,7 +69,10 @@ export default function ChainDoc(){
   const [authMode,setAuthMode] = useState("signup");   // ← NUEVO: "signup" | "login"
   const [authBusy,setAuthBusy] = useState(false);      // ← NUEVO: bloquea el botón mientras responde Firebase
   const [docs,setDocs]       = useState([]);
-  const [folders,setFolders] = useState(()=>{ try{return JSON.parse(localStorage.getItem("cd_folders"))||["Contratos","Facturas","Recibos"];}catch{return ["Contratos","Facturas","Recibos"];} });
+  // Una cuenta nueva empieza SIN carpetas: la tarjeta punteada
+  // "Nueva carpeta" es la que invita a crear la primera. Tres carpetas
+  // puestas de oficio suponen de que trata el trabajo de quien entra.
+  const [folders,setFolders] = useState(()=>{ try{return JSON.parse(localStorage.getItem("cd_folders"))||[];}catch{return [];} });
   const [view,setView]       = useState("inicio");
   const [d,setD]             = useState(null);
   const [editMode,setEdit]   = useState(false);
@@ -527,7 +530,39 @@ export default function ChainDoc(){
   };
 
   // ── DOCS ──
+  // ← NUEVO (7 oct): contra el documento duplicado.
+  //
+  // Crear tarda lo que tarde el servidor, y durante ese rato el botón
+  // seguía vivo: una segunda pulsación —o Enter en el nombre y después
+  // clic— creaba DOS documentos. Salían dos tarjetas iguales y no había
+  // forma de saber cuál era cuál.
+  //
+  // Mientras `creando` está encendido, el botón se apaga, el Enter no
+  // dispara y la propia función se devuelve sin hacer nada. React vacía
+  // los cambios de estado al terminar cada pulsación, así que la segunda
+  // ya encuentra la puerta cerrada.
+  const [creando, setCreando] = useState(false);
+
+  // ← NUEVO (7 oct): las esperas que no tenían aviso.
+  //
+  // Borrar, mover y exportar tardan lo que tarde el servidor, y hasta
+  // ahora el botón se quedaba igual: el usuario no sabía si había pasado
+  // algo, le daba otra vez, y en el mejor de los casos no pasaba nada.
+  //
+  // `ocupado` guarda el nombre de lo que se está haciendo, y cada botón
+  // lo mira para apagarse, enseñar su vuelta y decirlo con palabras.
+  const [ocupado, setOcupado] = useState(null);
+  const conEspera = async (nombre, fn) => {
+    if(ocupado) return;
+    setOcupado(nombre);
+    try{ return await fn(); }
+    finally{ setOcupado(null); }
+  };
+
   const createDoc = async()=>{
+    if(creando) return;
+    setCreando(true);
+    try{
     const t = TEMPLATES.find(x=>x.id===tpl);
     // ← ACTUALIZADO: la importación ya no depende del tipo sino del método elegido.
     const isImport = (method==="subir"||method==="escanear");
@@ -575,6 +610,7 @@ export default function ChainDoc(){
     closeCreate();
     setD(nd); setTitle(name); setContent(nd.content); setFields(nd.fields||{});
     setUnlocked(true); setEdit(true); setUrlDoc(id); setScreen("doc");
+    }finally{ setCreando(false); }
   };
 
   // ← NUEVO: abre y cierra el asistente de creación en un solo lugar
@@ -765,6 +801,9 @@ export default function ChainDoc(){
   // ← NUEVO
   const createExpediente = async()=>{
     if(!smartRes) return;
+    if(creando) return;                     // ← NUEVO: mismo cerrojo
+    setCreando(true);
+    try{
     const name = mIn.trim() || smartRes.titulo;
     const nd = await crear({
       id: genId(), numId: genNumId(), title:name, content:smartText, folder:mIn2||null,
@@ -793,6 +832,7 @@ export default function ChainDoc(){
     setD(nd); setTitle(name); setContent(smartText); setFields({});
     setUnlocked(true); setEdit(false); setUrlDoc(nd.id); setScreen("doc");
     notify(`Expediente abierto con ${smartRes.requisitos.length} requisitos ✓`);
+    }finally{ setCreando(false); }
   };
 
   // ← ACTUALIZADO: el archivo se guarda en Firestore (colección «evidencias»).
@@ -1095,7 +1135,7 @@ export default function ChainDoc(){
   // ── PAQUETE DE EVIDENCIA ──
   // ← NUEVO: exporta el expediente como HTML autocontenido que un
   // tercero verifica sin cuenta, sin internet y sin confiar en nosotros.
-  const exportarPaquete = async()=>{
+  const exportarPaquete = ()=> conEspera("exportando", async()=>{
     try{
       // Las pruebas de anclaje se piden aquí y no al abrir el
       // documento: son la parte pesada y sólo el paquete las necesita.
@@ -1113,7 +1153,7 @@ export default function ChainDoc(){
       if(up) setD(up);
       notify("Paquete de evidencia descargado ✓");
     }catch(e){ console.error(e); notify("No se pudo generar el paquete","err"); }
-  };
+  });
 
   // ← NUEVO (Etapa 5): forzar el anclaje sin esperar a la madrugada.
   // Sirve para probarlo y para el día que alguien necesite el paquete
@@ -1249,17 +1289,17 @@ export default function ChainDoc(){
     }catch(e){ console.error(e); notify(errorBackend(e),"err"); }
   };
 
-  const delDoc = async(id)=>{
+  const delDoc = (id)=> conEspera("eliminando", async()=>{
     const ok = await store.del(id);
     if(ok){ await refresh(); notify("Documento eliminado"); } else notify("Error","err");
     setModal(null);
-  };
+  });
 
-  const moveTo = async(id,f)=>{
+  const moveTo = (id,f)=> conEspera("moviendo", async()=>{
     const dd = await store.get(id); if(!dd) return;
     await guardarCampos(dd, { folder: f });
     await refresh(); setModal(null); notify(`Movido a "${f||"Sin carpeta"}"`);
-  };
+  });
 
   // ← NUEVO: asienta que alguien abrió un documento compartido.
   // Una vez por persona y día: ver `debeRegistrarConsulta`.
@@ -1499,13 +1539,13 @@ export default function ChainDoc(){
   const ctx = {
     MAX_IMGS, moveTo, migrarDatos, migrando, migrarArchivosDatos, migrandoArch, acctEmail, addImage, attachEvidence, authBusy, authMode, authStep,
     bioBusy, bioCreds, bioOk, cancelarSolicitud, closeCreate, confirmarConversion,
-    content, copyLink, createDoc, createExpediente, createStep, d, delDoc, doLogin,
+    content, copyLink, creando, createDoc, createExpediente, createStep, d, delDoc, doLogin,
     doLogout, doReset, doShare, doSignCode, doSignup, doVerify, docs, dragOver, drop,
     dropFase, dropReq, editMode, email, enrollBio, exportarPaquete, exps, faseSel,
     fields, filesOpen, filterF, finishAuth, focoDup, folders, getFile, goHome,
     handleFile, histOpen, histTab, imp, impErr, impMeta, impText, iniciarConversion,
     irADuplicado, linkBusy, linkErr, linkExp, linkSitios, linkToExpediente, lockInput,
-    mIn, mIn2, menuOpen, method, modal, notif, notify, onDrop, openCreate, openDoc,
+    mIn, mIn2, menuOpen, method, modal, notif, notify, ocupado, onDrop, openCreate, openDoc,
     openExpedientes, openSec, pass, puedeConvertir, removeEvidence,
     removeImage, resetImport, revokeShare, runAnalysis, save, saveSettings, saving,
     setContent, setCreateStep, setD, setDirty, setDragOver, setDrop, setEdit, setEmail,

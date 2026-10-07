@@ -15,6 +15,7 @@ import { renderModales } from "../modales";
 import { ESTILOS } from "../ui/estilos";
 import { TEXTO_AVISO, ordenar, esGrave } from "../nucleo/avisos";
 import { estaProtegido } from "../nucleo/datos";
+import { TIPOS_DOC, esApaisado, tipoDeDocumento } from "../nucleo/catalogos";
 export function renderInicio(ctx){
   const {
     acctEmail, copyLink, docs, drop, filterF, folders, irADuplicado, menuOpen, modal,
@@ -33,13 +34,18 @@ export function renderInicio(ctx){
     const sg = x.chain.filter(b=>b.action==="FIRMA").length;
     // ← NUEVO: estado del expediente para el distintivo de la tarjeta
     const ex = x.kind==="expediente" ? expedienteStatus(x) : null;
+    // ← NUEVO: el tipo decide el color del borde, la etiqueta de debajo
+    // del título y si la tarjeta va de pie o acostada.
+    const tipo = tipoDeDocumento(x);
     return (
-      <div key={x.id} className="card" onClick={()=>openDoc(x.id)}>
+      <div key={x.id} className={`card tipo-${tipo}${esApaisado(tipo)?" ancha":""}`}
+        onClick={()=>openDoc(x.id)}>
         <div className="card-h">
           <span className="card-t">{x.title}</span>
           <button className="icon-btn" style={{color:"var(--gris-200)"}}
             onClick={e=>{e.stopPropagation();setDrop(drop===x.id?null:x.id);}}><IcoDots/></button>
         </div>
+        <span className="chip chip-tipo">{TIPOS_DOC[tipo].nombre}</span>
         <div className="card-prev">{x.content||"Sin contenido aún…"}</div>
         <div className="card-meta">Última edición: {fmtShort(x.lastModified)}</div>
         <div className="chips">
@@ -268,7 +274,7 @@ export function renderInicio(ctx){
         <h2 className="page-title">Recientes</h2>
 
         <div className="sec-h" onClick={()=>setOpenSec({...openSec,carp:!openSec.carp})}>
-          <span className={`sec-arrow ${openSec.carp?"":"closed"}`}>⌄</span>
+          <span className={`sec-arrow ${openSec.carp?"":"closed"}`}><Icon n="expand_more" size={28}/></span>
           <span className="sec-t">Carpetas</span>
         </div>
         {openSec.carp && (
@@ -293,7 +299,7 @@ export function renderInicio(ctx){
         )}
 
         <div className="sec-h" onClick={()=>setOpenSec({...openSec,docs:!openSec.docs})}>
-          <span className={`sec-arrow ${openSec.docs?"":"closed"}`}>⌄</span>
+          <span className={`sec-arrow ${openSec.docs?"":"closed"}`}><Icon n="expand_more" size={28}/></span>
           <span className="sec-t">Documentos</span>
         </div>
         {openSec.docs && (recientes.length
@@ -301,7 +307,7 @@ export function renderInicio(ctx){
           : <div className="empty">No hay documentos aún.<br/>Crea el primero con el botón de abajo.</div>)}
 
         <div className="sec-h" onClick={()=>setOpenSec({...openSec,comp:!openSec.comp})}>
-          <span className={`sec-arrow ${openSec.comp?"":"closed"}`}>⌄</span>
+          <span className={`sec-arrow ${openSec.comp?"":"closed"}`}><Icon n="expand_more" size={28}/></span>
           <span className="sec-t">Compartidos conmigo</span>
         </div>
         {openSec.comp && (shared.length

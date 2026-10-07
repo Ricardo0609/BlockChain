@@ -8,6 +8,7 @@ import { modalEfirma } from "./Efirma";
 import { modalExpediente } from "./Expediente";
 import { modalFirma } from "./Firma";
 import { modalLegal } from "./Legal";
+import { modalSalir } from "./Salir";
 
 export function renderModales(ctx){
   return modalCrear(ctx)
@@ -18,5 +19,6 @@ export function renderModales(ctx){
     ?? modalCompartir(ctx)
     ?? modalAjustes(ctx)
     ?? modalLegal(ctx)
+    ?? modalSalir(ctx)
     ?? null;
 }
