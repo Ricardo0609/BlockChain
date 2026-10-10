@@ -55,9 +55,16 @@ export function armarManifiesto(exp, anclaje = null) {
       monto: r.monto ?? null, fechaLimite: r.fechaLimite || null,
       comprobantes: archivosDe(r).map((a) => ({
         nombre: a.nombre,
-        origen: a.origen === "interno" ? "documento-chaindoc" : "archivo",
+        // ← ACTUALIZADO (10 oct): el enlace sale como lo que es. Un
+        // auditor que lea el paquete tiene que poder distinguir «aquí
+        // hay un archivo con esta huella» de «aquí se entregó esta
+        // dirección», que prueban cosas distintas.
+        origen: a.origen === "interno" ? "documento-chaindoc"
+              : a.origen === "enlace"  ? "enlace" : "archivo",
         numId: a.numId || null,
+        url: a.url || null,
         hash: a.hash || null,
+        hashDe: a.origen === "enlace" ? "la direccion" : "el archivo",
         tam: a.tam ?? null,
         monto: a.monto ?? null,
         subidoEn: a.subidoEn, subidoPor: a.subidoPor,
@@ -145,7 +152,8 @@ export function generarHTML(exp, anclaje = null) {
           <div class="cmp">
             <div class="cmp-n">${esc(c.nombre)}${c.numId ? ` <span class="mut">(${esc(c.numId)})</span>` : ""}</div>
             <div class="cmp-m">${esc(c.origen)} · ${fecha(c.subidoEn)} · ${esc(c.subidoPor)}${c.monto != null ? " · " + dinero(c.monto, e.moneda) : ""}</div>
-            ${c.hash ? `<div class="hash" data-hash="${esc(c.hash)}">SHA-256 ${esc(c.hash)}</div>` : ""}
+            ${c.hash ? `<div class="hash" data-hash="${esc(c.hash)}">SHA-256 de ${esc(c.hashDe)} ${esc(c.hash)}</div>` : ""}
+            ${c.origen === "enlace" ? `<div class="cmp-nota">Queda probada la dirección entregada y su fecha, no lo que haya hoy en ella.</div>` : ""}
           </div>`).join("")}
         ${r.comprobantes.length ? "" : '<div class="cmp vacio">Sin comprobantes</div>'}
       </div>
@@ -196,6 +204,8 @@ export function generarHTML(exp, anclaje = null) {
   .cmp{background:#fafafa;border:1px solid var(--bd);border-radius:9px;padding:10px;margin-top:7px}
   .cmp.vacio{color:var(--mut);font-style:italic;font-size:14px;background:none;border-style:dashed}
   .cmp-n{font-weight:600;font-size:15px;word-break:break-all}
+  .cmp-u{font-size:13px;color:#4f46e5;word-break:break-all;margin-top:2px}
+  .cmp-nota{font-size:11.5px;color:#6b7280;line-height:1.5;margin-top:3px}
   .cmp-m{font-size:12px;color:var(--mut);margin-top:1px}
   .hash{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--mut);
     word-break:break-all;margin-top:5px}

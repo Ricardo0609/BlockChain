@@ -137,6 +137,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // El contador consecutivo de documentos de cada cuenta. Cerrado al
+    // navegador a proposito: si el usuario pudiera fijar su propio
+    // contador, el folio dejaria de probar en que orden se crearon los
+    // documentos. Lo sube la funcion que los crea, en la misma
+    // transaccion que el documento y su primer bloque.
+    match /folios/{uid} {
+      allow read, write: if false;
+    }
+
     // La lista 69-B del SAT y su fecha de actualizacion. Solo el
     // servidor la escribe; el navegador la consulta por funcion.
     match /catalogos/{id} {

@@ -10,10 +10,15 @@ export const ESTILOS = `
   --negro:#252223; --gris-400:#5b5456; --gris-300:#7b7b7b; --gris-200:#ada6a8;
   --bordes:#cac6c7; --gris-100:#e8e4e5; --rojo:#df2531; --rojo-soft:#fef2f2;
   --blanco:#fff; --bg-soft:#fafafa; --verde:#16a34a;
-  /* ← NUEVO: un color por tipo de documento. Se usan en el borde de la
-     tarjeta y en la etiqueta de debajo del título, para que los dos
-     digan lo mismo. */
-  --t-texto:#2563eb; --t-factura:#16a34a; --t-recibo:#7c3aed; --t-smart:#ca8a04;
+  /* ← ACTUALIZADO (10 oct): un color por tipo de documento, en dos
+     intensidades. La clara va al borde de la tarjeta y al contorno de
+     la etiqueta; la fuerte, al texto de la etiqueta.
+     Antes el borde llevaba la fuerte y pesaba más que el propio
+     documento: cuatro tarjetas juntas se veían como cuatro avisos. Con
+     la clara el tipo se reconoce de un vistazo sin gritar, y el texto
+     conserva el contraste que necesita para leerse. */
+  --t-texto:#60a5fa; --t-factura:#4ade80; --t-recibo:#a78bfa; --t-smart:#fbbf24;
+  --t-texto-f:#2563eb; --t-factura-f:#16a34a; --t-recibo-f:#7c3aed; --t-smart-f:#b45309;
   --sh-sm:0px 0px 2px rgba(0,0,0,.04),0px 2px 4px rgba(0,0,0,.06);
   --sh:0px 0px 4px rgba(0,0,0,.04),0px 8px 16px rgba(0,0,0,.08);
   --sh-card:0px 0px 6px rgba(0,0,0,.04),0px 6px 12px rgba(0,0,0,.06);
@@ -111,13 +116,13 @@ img,svg{max-width:100%}
 /* ← ACTUALIZADO: el color del borde sale de --c-tipo, que cada tipo
    redefine. Así el :hover ya no tiene que pisarlo: sube la tarjeta y le
    da sombra, pero el color sigue diciendo qué es. */
-.card{--c-tipo:var(--bordes);background:#fff;border:2px solid var(--c-tipo);border-radius:16px;
+.card{--c-tipo:var(--bordes);--c-tipo-f:var(--gris-400);background:#fff;border:2px solid var(--c-tipo);border-radius:16px;
   padding:16px;width:262px;box-shadow:var(--sh-sm);cursor:pointer;transition:all .15s;
   display:flex;flex-direction:column;gap:14px;position:relative}
-.card.tipo-texto{--c-tipo:var(--t-texto)}
-.card.tipo-factura{--c-tipo:var(--t-factura)}
-.card.tipo-recibo{--c-tipo:var(--t-recibo)}
-.card.tipo-smart{--c-tipo:var(--t-smart)}
+.card.tipo-texto{--c-tipo:var(--t-texto);--c-tipo-f:var(--t-texto-f)}
+.card.tipo-factura{--c-tipo:var(--t-factura);--c-tipo-f:var(--t-factura-f)}
+.card.tipo-recibo{--c-tipo:var(--t-recibo);--c-tipo-f:var(--t-recibo-f)}
+.card.tipo-smart{--c-tipo:var(--t-smart);--c-tipo-f:var(--t-smart-f)}
 /* Los comprobantes van acostados: la forma se reconoce antes que el color. */
 .card.ancha{width:323px}
 .card.ancha .card-prev{height:75px}
@@ -138,7 +143,7 @@ img,svg{max-width:100%}
 /* .chip.chip-tipo y no .chip-tipo a secas: mas abajo hay otra regla
    .chip que fija color y fondo, y al ir despues ganaba el empate. */
 .chip.chip-tipo{align-self:flex-start;margin-top:-8px;background:#fff;
-  border:1.5px solid var(--c-tipo);color:var(--c-tipo);font-weight:600}
+  border:1.5px solid var(--c-tipo);color:var(--c-tipo-f);font-weight:600}
 
 /* dropdown */
 .drop{position:absolute;top:52px;right:8px;z-index:100;background:#fff;border:2px solid var(--bordes);border-radius:12px;box-shadow:var(--sh);min-width:180px;overflow:hidden}
@@ -148,13 +153,15 @@ img,svg{max-width:100%}
 
 /* ── CREATE BTN ── */
 .create-zone{display:flex;justify-content:center;padding:47px 0}
-.create-btn{background:#fff;border:1.5px solid var(--bordes);border-radius:12px;padding:12px 24px;box-shadow:var(--sh-sm);cursor:pointer;font-family:var(--f-p);font-size:20px;color:var(--negro);display:flex;flex-direction:column;align-items:center;gap:6px;transition:all .15s;min-width:180px}
-/* ← ACTUALIZADO: antes solo se oscurecia el borde, que junto a los
-   demas botones parecia que este se habia quedado a medias. Ahora se
-   rellena igual que btn-secondary. */
-.create-btn:hover{background:var(--negro);color:#fff;border-color:var(--negro);
-  box-shadow:var(--sh);transform:translateY(-1px)}
-.create-btn b{font-size:24px;line-height:1}
+/* ← ACTUALIZADO (10 oct): ahora ES un btn-secondary.
+   Antes tenía contorno gris, tipografía más grande y el «+» debajo del
+   texto, así que junto a los botones de arriba parecía de otra
+   pantalla. Reusar la clase, en vez de copiarle los valores, lo deja
+   atado: lo que cambie en btn-secondary —incluidas sus medidas de
+   móvil— cambia aquí también. Sólo queda propio el ancho mínimo y el
+   tamaño del «+». */
+.create-btn{min-width:180px}
+.create-btn b{font-size:20px;line-height:1;font-weight:600}
 
 .empty{text-align:center;padding:50px 20px;color:var(--gris-200);font-size:16px;line-height:1.8}
 
@@ -359,6 +366,35 @@ span.dup-lugar.aqui{cursor:default}
 .link-row.bloqueado:hover{border-color:var(--bordes);background:none}
 .chip-bloq{background:rgba(0,0,0,.06);color:var(--gris-400);font-weight:600;white-space:nowrap}
 
+/* ── ENLACE COMO EVIDENCIA (10 oct) ──
+   El mismo formulario sirve en el expediente y en la pagina publica de
+   entrega. Dentro de .entrega-item, que envuelve, ocupa su propio
+   renglon completo. */
+.enl-form{flex:1 0 100%;width:100%;margin-top:12px;padding:14px;
+  border:1.5px solid var(--bordes);border-radius:12px;background:var(--bg-soft);
+  display:flex;flex-direction:column;gap:9px}
+.enl-form .inp{margin:0;width:100%}
+.enl-url{font-family:ui-monospace,monospace;font-size:14px}
+.enl-url.malo{border-color:var(--rojo)}
+.enl-err{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--rojo);line-height:1.4}
+.enl-nota{display:flex;align-items:flex-start;gap:7px;font-size:12.5px;
+  color:var(--gris-400);line-height:1.5}
+.enl-nota .msym{flex:0 0 auto;margin-top:1px;color:var(--gris-200)}
+.enl-acts{display:flex;gap:9px;justify-content:flex-end;flex-wrap:wrap}
+
+/* El enlace ya entregado, dentro de la tarjeta del comprobante. */
+.tag.tag-enl{background:#eef2ff;color:#4f46e5;border-color:#c7d2fe}
+.exp-url{display:inline-flex;align-items:center;gap:5px;max-width:100%;
+  font-size:13px;color:#4f46e5;text-decoration:none;margin-top:3px}
+.exp-url span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.exp-url:hover{text-decoration:underline}
+.exp-url-nota{font-size:12px;color:var(--gris-300);line-height:1.5;margin-top:5px}
+
+@media(max-width:768px){
+  .enl-acts{flex-direction:column-reverse}
+  .enl-acts .btn{width:100%}
+}
+
 /* ← NUEVO: oferta de convertir a contrato inteligente */
 .convertir{max-width:860px;margin:0 auto 18px;display:flex;align-items:center;gap:16px;
   justify-content:space-between;border:1px solid rgba(99,102,241,.35);
@@ -367,8 +403,17 @@ span.dup-lugar.aqui{cursor:default}
 .convertir-b strong{display:block;color:var(--negro);font-size:15px}
 .convertir-b span{display:block;font-size:13px;color:var(--gris-400);line-height:1.45;margin-top:2px}
 .convertir .btn{flex:0 0 auto;white-space:nowrap}
+/* ← NUEVO (10 oct): el botón y la X van juntos a la derecha. La X
+   queda gris hasta que se le pasa por encima: es una salida, no una
+   invitación. */
+.convertir-acc{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.convertir-x{background:none;border:none;cursor:pointer;color:var(--gris-200);
+  display:inline-flex;align-items:center;justify-content:center;padding:6px;
+  border-radius:8px;transition:all .15s;flex:0 0 auto}
+.convertir-x:hover{color:var(--negro);background:rgba(0,0,0,.06)}
 @media(max-width:768px){
   .convertir{flex-direction:column;align-items:stretch;margin:0 0 14px}
+  .convertir-acc{width:100%}
   .convertir .btn{width:100%;white-space:normal}
 }
 
@@ -660,6 +705,10 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   font-size:14.5px;font-weight:600;color:var(--blanco);background:var(--negro);
   transition:opacity .15s}
 .entrega-btn:hover{opacity:.85}
+/* ← NUEVO (10 oct): subir y enlace van juntos, sin jerarquia entre ellos. */
+.entrega-acts{display:flex;align-items:center;gap:8px;flex:0 0 auto;flex-wrap:wrap}
+.entrega-item-u{display:block;font-size:12px;color:#15803d;margin-top:3px;
+  overflow-wrap:anywhere;text-decoration:underline}
 .entrega-btn.otra{background:transparent;color:var(--negro)}
 .entrega-btn.ocupado{cursor:default;opacity:.7;border-color:var(--bordes);
   background:var(--bg-soft);color:var(--gris-400);font-weight:500}
@@ -1050,7 +1099,7 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 
   /* crear */
   .create-zone{padding:32px 0}
-  .create-btn{width:100%;max-width:320px;font-size:18px;padding:14px 20px}
+  .create-btn{width:100%;max-width:320px}
 
   .empty{padding:36px 16px;font-size:15px}
 
@@ -1178,8 +1227,6 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   .btn-secondary.rojo:hover{background:#fff;color:var(--rojo)}
   .btn-secondary.rojo:active{background:var(--rojo);color:#fff}
   .btn-secondary.on{background:var(--negro);color:#fff}
-  .create-btn:hover{background:#fff;color:var(--negro);border-color:var(--bordes);
-    box-shadow:var(--sh-sm);transform:none}
   .create-btn:active{background:var(--negro);color:#fff;border-color:var(--negro)}
 }
 `;

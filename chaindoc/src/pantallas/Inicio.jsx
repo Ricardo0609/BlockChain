@@ -352,7 +352,7 @@ export function renderInicio(ctx){
       </>)}
 
       <div className="create-zone">
-        <button className="create-btn" onClick={openCreate}>
+        <button className="btn btn-secondary create-btn" onClick={openCreate}>
           <span>Crear documento</span><b>+</b>
         </button>
       </div>

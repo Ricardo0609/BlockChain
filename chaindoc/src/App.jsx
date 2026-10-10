@@ -36,7 +36,8 @@ import { descargarPaquete } from "./paquete";
 import { FORMS, serializeForm } from "./ui/formularios";
 import { TEMPLATES, selloDesdeUid } from "./nucleo/catalogos";
 import { getUrlDoc, setUrlDoc } from "./nucleo/formato";
-import { genId, genNumId, verifyChain } from "./nucleo/cadena";
+import { folioTexto, genId, sha256, siguienteFolio, verifyChain } from "./nucleo/cadena";
+import { normalizarEnlace, nombreDeEnlace, textoFirmado } from "./nucleo/enlaces";
 import { parseFactura } from "./nucleo/extraccion";
 import {
   quitarArchivoViejo,
@@ -51,7 +52,8 @@ import {
 import { llamar, errorBackend } from "./nucleo/backend";
 import { leerAvisos } from "./nucleo/avisos";
 import {
-  testigoDeUrl, verInvitacion, entregarArchivo, enlaceDeEntrega,
+  testigoDeUrl, verInvitacion, entregarArchivo, entregarEnlace as entregarEnlaceInvitado,
+  enlaceDeEntrega,
 } from "./nucleo/invitaciones";
 import {
   ROLES_ASIGNABLES, ROL_TEXTO, ROL_AYUDA, rolDe, puede, puedeSubirA,
@@ -559,6 +561,44 @@ export default function ChainDoc(){
     finally{ setOcupado(null); }
   };
 
+  // ← NUEVO (10 oct): el folio que llevará el documento nuevo.
+  //
+  // En modo servidor esto no se usa: el folio lo pone la función, que es
+  // la única que ve el contador de la cuenta. Va aquí para el camino sin
+  // servidor, donde no hay quién lo asigne, y se calcula del mayor folio
+  // que ya hay en la lista.
+  const folioNuevo = () => {
+    const n = siguienteFolio(docs);
+    return { folio: n, numId: folioTexto(n) };
+  };
+
+  // ← NUEVO (10 oct): el aviso de «¿Es un contrato?» se puede quitar.
+  //
+  // Aparecía en todo documento de texto en edición y no había forma de
+  // callarlo: quien ya decidió que su documento NO es un contrato lo
+  // tenía delante cada vez que entraba a editar.
+  //
+  // Se recuerda por documento y sólo en este navegador, a propósito: es
+  // una preferencia de vista, no un dato del expediente, y no tiene por
+  // qué viajar a la cadena ni verlo quien tenga el documento compartido.
+  const [convOculto, setConvOculto] = useState(() => {
+    try{
+      const v = JSON.parse(localStorage.getItem("chaindoc.convOculto") || "[]");
+      return Array.isArray(v) ? v : [];
+    }catch{ return []; }
+  });
+  const ocultarConvertir = (id) => {
+    if(!id) return;
+    setConvOculto((v) => {
+      const n = v.includes(id) ? v : [...v, id];
+      // En modo privado escribir revienta; el aviso se queda quitado
+      // mientras dure la sesión y vuelve al recargar. Es lo peor que
+      // puede pasar y no vale la pena avisarlo.
+      try{ localStorage.setItem("chaindoc.convOculto", JSON.stringify(n)); }catch{ /* sin almacén */ }
+      return n;
+    });
+  };
+
   const createDoc = async()=>{
     if(creando) return;
     setCreando(true);
@@ -591,7 +631,7 @@ export default function ChainDoc(){
       : `Creación de documento: ${name}`;
 
     const nd = await crear({
-      id: genId(), numId: genNumId(), title:name, content:body, folder:mIn2||null,
+      id: genId(), ...folioNuevo(), title:name, content:body, folder:mIn2||null,
       owner:user, ownerUid:uid, ownerEmail:acctEmail,
       tplId: formKey, fields: formKey ? initial : null,
       source: isImport ? (method==="escanear"?"escaneo":"importado") : "nuevo",
@@ -806,7 +846,7 @@ export default function ChainDoc(){
     try{
     const name = mIn.trim() || smartRes.titulo;
     const nd = await crear({
-      id: genId(), numId: genNumId(), title:name, content:smartText, folder:mIn2||null,
+      id: genId(), ...folioNuevo(), title:name, content:smartText, folder:mIn2||null,
       owner:user, ownerUid:uid, ownerEmail:acctEmail,
       kind:"expediente",                       // ← lo distingue de un documento normal
       tplId:null, fields:null,
@@ -858,6 +898,25 @@ export default function ChainDoc(){
       meta:{ tipo:"alta", requisito:reqId, archivo:file.name, huella:hash, tam:file.size },
     }, { requisitos, solicitudes }, { autor:user, autorUid:uid });
     if(!doc) throw new Error("No se pudo registrar el comprobante.");
+    return { doc, cerradas };
+  };
+
+  const registrarEnlaceLocal = async({ reqId, url, host, nombre })=>{
+    const req   = d.requisitos.find(r=>r.id===reqId);
+    const aid   = genId();
+    const hash  = await sha256(textoFirmado(url));
+    const nuevo = { aid, origen:"enlace", url, host, nombre,
+                    hash, subidoEn:new Date().toISOString(), subidoPor:user };
+    const requisitos = d.requisitos.map(r=> r.id!==reqId ? r : {
+      ...quitarArchivoViejo(r), estado:"cumplido", archivos:[...archivosDe(r), nuevo],
+    });
+    const { solicitudes, cerradas } = cerrarSolicitudes(d, reqId, user);
+    const doc = await aplicar(d, {
+      accion:"EVIDENCIA",
+      contenido:`${req?.titulo||reqId}: enlace a ${host} («${nombre}»)`,
+      meta:{ tipo:"alta", requisito:reqId, enlace:url, host, archivo:nombre, huella:hash },
+    }, { requisitos, solicitudes }, { autor:user, autorUid:uid });
+    if(!doc) throw new Error("No se pudo registrar el enlace.");
     return { doc, cerradas };
   };
 
@@ -933,6 +992,64 @@ export default function ChainDoc(){
       notify(errArchivo(e),"err");
     }
     finally{ setSaving(false); }
+  };
+
+  // ── EVIDENCIA POR ENLACE ──
+  //
+  // ← NUEVO (10 oct): el tercer camino para cumplir un requisito.
+  //
+  // Adjuntar un archivo y pedirlo a alguien no cubren al entregable que
+  // vive en una dirección: un sitio publicado, un repositorio, un
+  // tablero. Hasta ahora eso se entregaba como captura de pantalla, que
+  // prueba menos que la dirección misma.
+  //
+  // `enlReq` guarda en qué requisito está abierto el campo. Es uno a la
+  // vez a propósito: dos formularios abiertos invitan a pegar la
+  // dirección en el que no era.
+  const [enlReq,  setEnlReq]  = useState(null);
+  const [enlUrl,  setEnlUrl]  = useState("");
+  const [enlNom,  setEnlNom]  = useState("");
+  const [enlErr,  setEnlErr]  = useState("");
+  const [enlBusy, setEnlBusy] = useState(false);
+
+  const abrirEnlace = (reqId)=>{
+    setEnlReq(reqId); setEnlUrl(""); setEnlNom(""); setEnlErr("");
+  };
+  const cerrarEnlace = ()=>{
+    setEnlReq(null); setEnlUrl(""); setEnlNom(""); setEnlErr("");
+  };
+
+  /**
+   * Guarda el enlace en el requisito abierto.
+   *
+   * La dirección se revisa aquí para poder decir qué está mal mientras
+   * se escribe, pero quien manda es el servidor: vuelve a revisarla por
+   * su cuenta. Esta revisión es cortesía, no la cerradura.
+   */
+  const guardarEnlace = async()=>{
+    if(enlBusy || !enlReq || !d) return;
+    const revisado = normalizarEnlace(enlUrl);
+    if(!revisado.ok){ setEnlErr(revisado.error); return; }
+
+    setEnlErr(""); setEnlBusy(true);
+    try{
+      const nombre = nombreDeEnlace(enlNom, revisado.host);
+      const r = enServidor()
+        ? await llamar("registrarEnlace",
+            { opId:d.id, reqId:enlReq, url:revisado.url, nombre })
+        : await registrarEnlaceLocal(
+            { reqId:enlReq, url:revisado.url, host:revisado.host, nombre });
+
+      setD(r.doc);
+      cerrarEnlace();
+      notify(r.cerradas
+        ? `Enlace registrado ✓ ${r.cerradas} solicitud${r.cerradas===1?"":"es"} atendida${r.cerradas===1?"":"s"}`
+        : "Enlace registrado en la cadena ✓");
+    }catch(e){
+      console.error(e);
+      setEnlErr(errorBackend(e) || "No se pudo registrar el enlace.");
+    }
+    finally{ setEnlBusy(false); }
   };
 
   // ← ACTUALIZADO: además de asentarlo, borra el archivo de Storage
@@ -1411,6 +1528,29 @@ export default function ChainDoc(){
     finally{ setInvBusy(false); setInvSubiendo(null); setInvPaso(""); }
   };
 
+  // ← NUEVO (10 oct): el mismo tercer camino, para quien entra por
+  // invitación y no tiene cuenta. Usa el mismo formulario y las mismas
+  // reglas; lo único distinto es a qué función del servidor llama.
+  const entregarEnlaceReq = async()=>{
+    if(enlBusy || !enlReq) return;
+    const revisado = normalizarEnlace(enlUrl);
+    if(!revisado.ok){ setEnlErr(revisado.error); return; }
+
+    const reqId = enlReq;
+    setEnlErr(""); setEnlBusy(true); setInvBusy(true);
+    try{
+      const r = await entregarEnlaceInvitado(
+        testigo, reqId, revisado.url, nombreDeEnlace(enlNom, revisado.host));
+      setEntregas(prev=>({ ...prev, [reqId]: r }));
+      cerrarEnlace();
+      notify("Entregado ✓");
+    }catch(e){
+      console.error(e);
+      setEnlErr(errorBackend(e) || "No se pudo entregar el enlace.");
+    }
+    finally{ setEnlBusy(false); setInvBusy(false); }
+  };
+
   // Del lado de quien lo crea.
   //
   // ← ACTUALIZADO (rediseño): un enlace cubre VARIOS requisitos, no
@@ -1539,13 +1679,15 @@ export default function ChainDoc(){
   const ctx = {
     MAX_IMGS, moveTo, migrarDatos, migrando, migrarArchivosDatos, migrandoArch, acctEmail, addImage, attachEvidence, authBusy, authMode, authStep,
     bioBusy, bioCreds, bioOk, cancelarSolicitud, closeCreate, confirmarConversion,
-    content, copyLink, creando, createDoc, createExpediente, createStep, d, delDoc, doLogin,
+    content, convOculto, copyLink, creando, createDoc, createExpediente, createStep, d, delDoc, doLogin,
+    abrirEnlace, cerrarEnlace, guardarEnlace, entregarEnlaceReq,
+    enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
     doLogout, doReset, doShare, doSignCode, doSignup, doVerify, docs, dragOver, drop,
     dropFase, dropReq, editMode, email, enrollBio, exportarPaquete, exps, faseSel,
     fields, filesOpen, filterF, finishAuth, focoDup, folders, getFile, goHome,
     handleFile, histOpen, histTab, imp, impErr, impMeta, impText, iniciarConversion,
     irADuplicado, linkBusy, linkErr, linkExp, linkSitios, linkToExpediente, lockInput,
-    mIn, mIn2, menuOpen, method, modal, notif, notify, ocupado, onDrop, openCreate, openDoc,
+    mIn, mIn2, menuOpen, method, modal, notif, notify, ocultarConvertir, ocupado, onDrop, openCreate, openDoc,
     openExpedientes, openSec, pass, puedeConvertir, removeEvidence,
     removeImage, resetImport, revokeShare, runAnalysis, save, saveSettings, saving,
     setContent, setCreateStep, setD, setDirty, setDragOver, setDrop, setEdit, setEmail,

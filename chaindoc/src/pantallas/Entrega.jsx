@@ -14,10 +14,13 @@ import { Icon } from "../ui/iconos";
 import { ESTILOS } from "../ui/estilos";
 import { tiempoRestante } from "../nucleo/invitaciones";
 import { fmtFull } from "../nucleo/formato";
+import { CampoEnlace } from "../ui/CampoEnlace";
 
 export function renderEntrega(ctx){
   const {
     invitacion, invError, invPaso, invBusy, invSubiendo, entregas, entregar, notif,
+    abrirEnlace, cerrarEnlace, entregarEnlaceReq,
+    enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
   } = ctx;
 
   const Marco = ({ children }) => (<><style>{ESTILOS}</style>
@@ -84,20 +87,46 @@ export function renderEntrega(ctx){
                 {hecho && (
                   <div className="entrega-item-ok">
                     Entregado: {hecho.nombre}
+                    {hecho.url && (
+                      <a className="entrega-item-u" href={hecho.url}
+                         target="_blank" rel="noopener noreferrer nofollow">{hecho.url}</a>
+                    )}
                     <div className="entrega-item-h">{hecho.hash}</div>
                   </div>
                 )}
                 {yaEstaba && <div className="entrega-item-d">Ya se entregó.</div>}
               </div>
 
-              {!hecho && (
-                <label className={`entrega-btn ${subiendo?"ocupado":""} ${yaEstaba?"otra":""}`}>
-                  {subiendo
-                    ? <><span className="mini-spin"/> {invPaso || "Subiendo…"}</>
-                    : <><Icon n="upload_file" size={17}/> {yaEstaba ? "Subir otro" : "Subir"}</>}
-                  <input type="file" style={{display:"none"}} disabled={invBusy}
-                    onChange={e=>{ entregar(r.id, e.target.files?.[0]); e.target.value=""; }} />
-                </label>
+              {/* ← ACTUALIZADO (10 oct): no todo entregable es un
+                  archivo. Un sitio publicado o un repositorio se
+                  entrega con su dirección, y antes había que mandar una
+                  captura de pantalla que prueba menos. Los dos caminos
+                  van juntos y sin jerarquía: cuál sirve lo sabe quien
+                  entrega, no nosotros. */}
+              {!hecho && enlReq!==r.id && (
+                <div className="entrega-acts">
+                  <label className={`entrega-btn ${subiendo?"ocupado":""} ${yaEstaba?"otra":""}`}>
+                    {subiendo
+                      ? <><span className="mini-spin"/> {invPaso || "Subiendo…"}</>
+                      : <><Icon n="upload_file" size={17}/> {yaEstaba ? "Subir otro" : "Subir"}</>}
+                    <input type="file" style={{display:"none"}} disabled={invBusy}
+                      onChange={e=>{ entregar(r.id, e.target.files?.[0]); e.target.value=""; }} />
+                  </label>
+                  <button className="entrega-btn otra" disabled={invBusy}
+                    onClick={()=>abrirEnlace(r.id)}>
+                    <Icon n="link" size={17}/> Enlace
+                  </button>
+                </div>
+              )}
+
+              {/* .entrega-item ya envuelve, asi que el formulario cae
+                  solo a su propio renglon a lo ancho. */}
+              {enlReq===r.id && (
+                <CampoEnlace
+                  url={enlUrl} nombre={enlNom} error={enlErr} ocupado={enlBusy}
+                  onUrl={setEnlUrl} onNombre={setEnlNom}
+                  onGuardar={entregarEnlaceReq} onCancelar={cerrarEnlace}
+                  textoGuardar="Entregar enlace"/>
               )}
             </div>
           );

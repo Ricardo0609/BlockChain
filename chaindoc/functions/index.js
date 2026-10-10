@@ -23,6 +23,7 @@ import { armarBloqueV2, verificarCadena, sha256Bytes } from "./lib/bloques.js";
 import {
   agregarArchivo, quitarArchivo, cerrarSolicitudes,
 } from "./lib/expediente.js";
+import { normalizarEnlace, nombreDeEnlace, textoFirmado } from "./lib/enlaces.js";
 import {
   limpiarCambios, validarEvento, revisarCambioDeAcceso,
   rolDe, puede, permisoDeEvento, puedeSubirA,
@@ -42,6 +43,15 @@ setGlobalOptions({ region: "us-central1", maxInstances: 10, memory: "256MiB" });
 
 const OPS = "operaciones";
 const idBloque = (n) => String(n).padStart(6, "0");
+
+// ── Folios (10 oct) ───────────────────────────────────────────
+//
+// El contador consecutivo de cada cuenta. Va en su propia colección y
+// no en `users/{uid}`, que el navegador sí puede escribir: si el
+// usuario pudiera fijar su propio contador, el folio dejaría de probar
+// el orden en que se crearon los documentos.
+const FOLIOS = "folios";
+const folioTexto = (n) => String(Math.max(1, Math.trunc(Number(n) || 1))).padStart(2, "0");
 
 // ── App Check (Etapa 3) ───────────────────────────────────────
 // Comprueba que la llamada venga de nuestra aplicación y no de un
@@ -148,7 +158,7 @@ export const crearOperacion = onCall(OPCIONES, async (req) => {
   const ev = validarEvento(req.data?.evento);
 
   const ref = db.collection(OPS).doc();
-  const numId = String(Math.floor(Math.random() * 9e10) + 1e10);
+  const refFolio = db.doc(`${FOLIOS}/${uid}`);
 
   const b = await armarBloqueV2({
     previo: null, action: ev.accion, content: ev.contenido,
@@ -156,23 +166,33 @@ export const crearOperacion = onCall(OPCIONES, async (req) => {
     timestamp: new Date().toISOString(),
   });
 
-  const op = {
-    ...campos,
-    id: ref.id, numId, version: 2,
-    owner: autor, ownerUid: uid, ownerEmail: email,
-    sharedWith: [],
-    roles: {},
-    password: null,
-    bloques: 1, ultimoHash: b.hash,
-    creadoEn: new Date().toISOString(),
-    lastModified: b.timestamp,
-  };
+  // ← ACTUALIZADO (10 oct): el folio consecutivo sustituye al número al
+  // azar. Va en transacción y no en lote porque hay que LEER el contador
+  // antes de subirlo: con un lote, dos documentos creados en el mismo
+  // instante se quedarían con el mismo folio. La transacción reintenta
+  // sola si alguien se le adelanta.
+  const op = await db.runTransaction(async (t) => {
+    const previo = await t.get(refFolio);
+    const folio = Math.trunc(Number(previo.data()?.ultimo) || 0) + 1;
 
-  const lote = db.batch();
-  lote.set(ref, op);
-  lote.set(db.doc(`${OPS}/${ref.id}/bloques/${idBloque(0)}`), b);
-  encolarParaAnclar(lote, ref.id, b);
-  await lote.commit();
+    const operacion = {
+      ...campos,
+      id: ref.id, folio, numId: folioTexto(folio), version: 2,
+      owner: autor, ownerUid: uid, ownerEmail: email,
+      sharedWith: [],
+      roles: {},
+      password: null,
+      bloques: 1, ultimoHash: b.hash,
+      creadoEn: new Date().toISOString(),
+      lastModified: b.timestamp,
+    };
+
+    t.set(refFolio, { ultimo: folio, actualizadoEn: FieldValue.serverTimestamp() }, { merge: true });
+    t.set(ref, operacion);
+    t.set(db.doc(`${OPS}/${ref.id}/bloques/${idBloque(0)}`), b);
+    encolarParaAnclar(t, ref.id, b);
+    return operacion;
+  });
 
   return { doc: { ...op, chain: [b] } };
 });
@@ -625,6 +645,126 @@ export const registrarArchivo = onCall(OPCIONES, async (req) => {
   return { doc, archivo: nuevo, cerradas, fiscal };
 });
 
+// ── Registrar un ENLACE como comprobante ──────────────────────
+//
+// Un entregable que vive en una dirección —un sitio publicado, un
+// repositorio, un tablero— no se puede subir. Antes había que mandar
+// una captura de pantalla, que prueba menos que la dirección misma.
+//
+// La huella se calcula sobre el TEXTO de la dirección, no sobre lo que
+// haya en ella. Eso es a propósito y la interfaz lo dice: queda probado
+// qué se entregó y cuándo, no que el contenido siga ahí mañana.
+//
+// La dirección se vuelve a revisar aquí aunque el navegador ya la haya
+// revisado. Quien entrega puede no ser quien mira, y un «javascript:»
+// guardado como comprobante sería una trampa para el dueño del
+// expediente el día que le dé clic.
+export const registrarEnlace = onCall(OPCIONES, async (req) => {
+  const { uid, email } = quien(req);
+  const { opId, reqId, url, nombre } = req.data || {};
+  if(!opId || !reqId) throw new HttpsError("invalid-argument", "Faltan datos del enlace.");
+
+  const revisado = normalizarEnlace(url);
+  if(!revisado.ok) throw new HttpsError("invalid-argument", revisado.error);
+
+  const actual = await leerOperacion(opId);
+  if(!actual) throw new HttpsError("not-found", "La operación no existe.");
+  const rol = exigir(actual, uid, email, "subir");
+  if(!puedeSubirA(actual, rol, email, reqId)){
+    throw new HttpsError("permission-denied", "No tienes una solicitud abierta para ese requisito.");
+  }
+
+  const autor = await nombreDe(uid, email);
+  const hash = await sha256Bytes(Buffer.from(textoFirmado(revisado.url), "utf8"));
+  const id = `${opId}-${reqId}-${Math.random().toString(36).slice(2, 10)}`;
+
+  const nuevo = {
+    aid: id, origen: "enlace",
+    url: revisado.url, host: revisado.host,
+    nombre: nombreDeEnlace(nombre, revisado.host),
+    hash, subidoEn: new Date().toISOString(), subidoPor: autor,
+  };
+
+  const { requisitos, encontrado } = agregarArchivo(actual.requisitos || [], reqId, nuevo);
+  if(!encontrado) throw new HttpsError("not-found", "Ese requisito no existe en el expediente.");
+  const { solicitudes, cerradas } = cerrarSolicitudes(actual, reqId, autor);
+  const req0 = (actual.requisitos || []).find((r) => r.id === reqId);
+
+  const { doc } = await asentar({
+    opId, uid, email, autor,
+    evento: {
+      accion: "EVIDENCIA",
+      contenido: `${req0?.titulo || reqId}: enlace a ${revisado.host} («${nuevo.nombre}»)`,
+      meta: { tipo: "alta", requisito: reqId, enlace: revisado.url,
+              host: revisado.host, archivo: nuevo.nombre, huella: hash },
+    },
+    cambios: { requisitos, solicitudes },
+  });
+
+  return { doc, archivo: nuevo, cerradas };
+});
+
+// ── Entregar un enlace por invitación ─────────────────────────
+//
+// El gemelo de subirPorInvitacion para quien no tiene cuenta. Mismas
+// comprobaciones del enlace de invitación, y además gasta una de las
+// entregas que le quedan: si no, un enlace de invitación daría entregas
+// ilimitadas con sólo pegar direcciones.
+export const entregarEnlacePorInvitacion = onCall(OPCIONES, async (req) => {
+  const anon = req.auth?.uid;
+  if(!anon) throw new HttpsError("unauthenticated", "Vuelve a abrir el enlace e inténtalo de nuevo.");
+
+  const { testigo, reqId, url, nombre } = req.data || {};
+  const revisado = normalizarEnlace(url);
+  if(!revisado.ok) throw new HttpsError("invalid-argument", revisado.error);
+
+  const { huella, registro } = await abrirInvitacion(testigo);
+  if(!cubre(registro, reqId)){
+    throw new HttpsError("permission-denied", "Este enlace no sirve para ese comprobante.");
+  }
+
+  const op = await leerOperacion(registro.opId);
+  if(!op) throw new HttpsError("not-found", "El documento ya no existe.");
+  const requisito = (op.requisitos || []).find((r) => r.id === reqId);
+  if(!requisito) throw new HttpsError("not-found", "Ese requisito ya no está en el documento.");
+
+  const autor = autorDeInvitacion(registro);
+  const hash = await sha256Bytes(Buffer.from(textoFirmado(revisado.url), "utf8"));
+  const id = `${registro.opId}-${reqId}-${Math.random().toString(36).slice(2, 10)}`;
+
+  const nuevo = {
+    aid: id, origen: "enlace",
+    url: revisado.url, host: revisado.host,
+    nombre: nombreDeEnlace(nombre, revisado.host),
+    hash, subidoEn: new Date().toISOString(), subidoPor: autor,
+    porInvitacion: true, invitacionA: registro.correo || null,
+  };
+
+  const { requisitos, encontrado } = agregarArchivo(op.requisitos || [], reqId, nuevo);
+  if(!encontrado) throw new HttpsError("not-found", "Ese requisito ya no está en el documento.");
+  const { solicitudes } = cerrarSolicitudes(op, reqId, autor);
+
+  await asentar({
+    opId: registro.opId, uid: op.ownerUid, email: op.ownerEmail, autor,
+    exigirAcceso: false,
+    evento: {
+      accion: "EVIDENCIA",
+      contenido: `${requisito.titulo || reqId}: enlace a ${revisado.host} entregado por invitación`,
+      meta: { tipo: "alta", requisito: reqId, enlace: revisado.url, host: revisado.host,
+              archivo: nuevo.nombre, huella: hash,
+              porInvitacion: true, correo: registro.correo || null },
+    },
+    cambios: { requisitos, solicitudes },
+  });
+
+  await refInv(huella).set({
+    entregas: (registro.entregas || 0) + 1,
+    ultimoUso: new Date().toISOString(),
+  }, { merge: true });
+
+  return { ok: true, nombre: nuevo.nombre, hash, url: revisado.url, host: revisado.host, reqId };
+});
+
 // ── Retirar un comprobante ────────────────────────────────────
 export const quitarArchivoDeRequisito = onCall(OPCIONES, async (req) => {
   const { uid, email } = quien(req);
@@ -638,8 +778,9 @@ export const quitarArchivoDeRequisito = onCall(OPCIONES, async (req) => {
   const { requisitos, quitado } = quitarArchivo(actual.requisitos || [], reqId, aid);
   if(!quitado) throw new HttpsError("not-found", "Ese comprobante ya no está en el requisito.");
 
-  // Un documento enlazado sólo se desvincula; su archivo no existe aquí.
-  if(quitado.origen !== "interno" && quitado.path){
+  // Un documento enlazado sólo se desvincula y un enlace externo nunca
+  // tuvo archivo; en los dos casos no hay nada que borrar del almacén.
+  if(quitado.origen !== "interno" && quitado.origen !== "enlace" && quitado.path){
     const meta = await db.doc(`${META}/${quitado.path}`).get();
     const ruta = meta.data()?.ruta;
     if(ruta) await bucket().file(ruta).delete().catch(() => {});

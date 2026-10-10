@@ -22,6 +22,8 @@ import {
 } from "../smartContract";
 import { fmtFecha, fmtFull, fmtShort } from "../nucleo/formato";
 import { SelloFiscal } from "../ui/SelloFiscal";
+import { CampoEnlace } from "../ui/CampoEnlace";
+import { esEnlace } from "../nucleo/enlaces";
 
 export function renderExpediente(ctx){
   const {
@@ -31,6 +33,8 @@ export function renderExpediente(ctx){
     uid, verifVin, vinculos,
     puedo, puedoSubirA, verificarFiscal, verificandoFiscal, setEnlaceNuevo,
     setShareModo, setShareTodo, setShareReqs, anclajesPorHash,
+    abrirEnlace, cerrarEnlace, guardarEnlace,
+    enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
   } = ctx;
   const st = expedienteStatus(d);
   const mt = calcularMontos(d);   // ← NUEVO: derivado, no almacenado
@@ -296,8 +300,33 @@ export function renderExpediente(ctx){
                 ${dupPorClave[claveDup(a)]?"es-dup":""} ${focoDup && claveDup(a)===focoDup?"dup-foco":""}`}>
               <div className="exp-file-n">
                 {a.origen==="interno" && <span className="tag" style={{marginRight:6}}>chaindoc</span>}
+                {/* ← NUEVO: el enlace se marca aparte del archivo porque
+                    prueba otra cosa, y quien lo lea tiene que notarlo
+                    antes de leer el nombre. */}
+                {esEnlace(a) && <span className="tag tag-enl" style={{marginRight:6}}>enlace</span>}
                 {a.nombre}
               </div>
+              {esEnlace(a) && (
+                <a className="exp-url" href={a.url} target="_blank"
+                   rel="noopener noreferrer nofollow" title={a.url}>
+                  <Icon n="link" size={15}/> <span>{a.url}</span>
+                </a>
+              )}
+              {/* ← NUEVO: marca el comprobante repetido y lleva a su otra aparición */}
+              {dupPorClave[claveDup(a)] && (()=>{
+                const g = dupPorClave[claveDup(a)];
+                const otro = destinoDuplicado(g, d.id);
+                return (
+                  <div className="dup-tag-row">
+                    <span className="dup-tag">Adjuntado {g.veces} veces</span>
+                    {otro && (
+                      <button className="dup-lugar" onClick={()=>irADuplicado(g, otro)}>
+                        Ver en «{otro.docTitulo}» ↗
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
               {/* ← NUEVO: marca el comprobante repetido y lleva a su otra aparición */}
               {dupPorClave[claveDup(a)] && (()=>{
                 const g = dupPorClave[claveDup(a)];
@@ -316,9 +345,22 @@ export function renderExpediente(ctx){
               <div className="exp-file-m">
                 {a.origen==="interno"
                   ? `${a.numId} · ${a.bloques} bloques al adjuntar · ${fmtFull(a.subidoEn)} · ${a.subidoPor}`
-                  : `${(a.tam/1024).toFixed(0)} KB · ${fmtFull(a.subidoEn)} · ${a.subidoPor}`}
+                  : esEnlace(a)
+                    ? `${a.host || "enlace"} · entregado ${fmtFull(a.subidoEn)} · ${a.subidoPor}`
+                    : `${(a.tam/1024).toFixed(0)} KB · ${fmtFull(a.subidoEn)} · ${a.subidoPor}`}
               </div>
-              <div className="exp-file-h">SHA-256 {a.hash}</div>
+              {/* La huella de un enlace es la de su DIRECCIÓN, no la de
+                  lo que haya en ella. Decirlo en la etiqueta evita que
+                  un SHA-256 parezca prometer más de lo que prueba. */}
+              <div className="exp-file-h">
+                {esEnlace(a) ? "SHA-256 de la dirección " : "SHA-256 "}{a.hash}
+              </div>
+              {esEnlace(a) && (
+                <div className="exp-url-nota">
+                  Queda probada la dirección y su fecha de entrega ({fmtFull(a.subidoEn)}).
+                  Lo que haya en ella hoy puede ser distinto.
+                </div>
+              )}
 
               {/* ← NUEVO (Etapa 4): lo que dijo el SAT de esta factura.
                   No es opinión nuestra: es la respuesta del SAT, fechada
@@ -356,6 +398,10 @@ export function renderExpediente(ctx){
               {a.origen==="interno" && (
                 <button className="btn btn-tertiary" style={{marginRight:8}}
                   onClick={()=>openDoc(a.docId)}>Abrir documento</button>
+              )}
+              {esEnlace(a) && (
+                <a className="btn btn-tertiary" style={{marginRight:8}} href={a.url}
+                   target="_blank" rel="noopener noreferrer nofollow">Abrir enlace</a>
               )}
               <button className="btn btn-tertiary"
                 onClick={()=>removeEvidence(r.id, aid)}>Retirar</button>
@@ -395,6 +441,16 @@ export function renderExpediente(ctx){
                 cuarto. Ahora es una sola que abre Compartir con este
                 requisito ya marcado; ahí se decide si va por correo o
                 por enlace, y si quien lo recibe necesita cuenta. */}
+            {/* ← NUEVO (10 oct): el tercer camino. Va junto a adjuntar
+                y no escondido en un menú: para un requisito de tipo
+                «entregable» suele ser LA forma de cumplirlo, no la
+                excepción. */}
+            {(!puedoSubirA || puedoSubirA(r.id)) && enlReq!==r.id && (
+              <button className="exp-up como-btn" disabled={saving}
+                onClick={()=>abrirEnlace(r.id)}>
+                Entregar un enlace
+              </button>
+            )}
             {(!puedo || puedo("pedir")) && (
               <button className="exp-up como-btn"
                 onClick={()=>{ setMIn(""); setEnlaceNuevo(null);
@@ -404,6 +460,13 @@ export function renderExpediente(ctx){
               </button>
             )}
           </div>
+
+          {enlReq===r.id && (
+            <CampoEnlace
+              url={enlUrl} nombre={enlNom} error={enlErr} ocupado={enlBusy}
+              onUrl={setEnlUrl} onNombre={setEnlNom}
+              onGuardar={guardarEnlace} onCancelar={cerrarEnlace}/>
+          )}
         </div>
       </div>
       );

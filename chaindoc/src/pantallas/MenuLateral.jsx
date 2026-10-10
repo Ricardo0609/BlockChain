@@ -34,7 +34,7 @@ export function renderMenu(ctx){
           onClick={()=>{setMenu(false);setModal({t:"logout"});}}>
           <Icon n="logout" size={22}/> Cerrar sesión
         </button>
-        <button className="create-btn" style={{marginTop:8}}
+        <button className="btn btn-secondary create-btn" style={{marginTop:8}}
           onClick={()=>{setMenu(false);openCreate();}}>
           <span>Crear documento</span><b>+</b>
         </button>

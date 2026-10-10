@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("../src/firebase", () => ({ db: {}, auth: {}, app: {}, ENTORNO: "prueba" }));
 
-import { genId, genNumId, sha256, verifyChain } from "../src/nucleo/cadena";
+import { folioTexto, genId, genNumId, sha256, siguienteFolio, verifyChain } from "../src/nucleo/cadena";
 import { sinUndefined, quitarArchivoViejo, CAMPOS_EDITABLES } from "../src/nucleo/datos";
 
 describe("sha256", () => {
@@ -21,6 +21,38 @@ describe("identificadores", () => {
   });
   it("el número de documento tiene 11 dígitos", () => {
     expect(genNumId()).toMatch(/^\d{11}$/);
+  });
+});
+
+// ← NUEVO (10 oct): el folio consecutivo que ve el usuario.
+describe("folio consecutivo", () => {
+  it("el primero es 01 y rellena a dos cifras", () => {
+    expect(folioTexto(1)).toBe("01");
+    expect(folioTexto(9)).toBe("09");
+    expect(folioTexto(10)).toBe("10");
+    expect(folioTexto(100)).toBe("100");
+  });
+
+  it("nunca baja de 01, ni con basura ni con cero", () => {
+    expect(folioTexto(0)).toBe("01");
+    expect(folioTexto(-7)).toBe("01");
+    expect(folioTexto(undefined)).toBe("01");
+    expect(folioTexto("no es un número")).toBe("01");
+  });
+
+  it("una cuenta sin documentos empieza en el 1", () => {
+    expect(siguienteFolio([])).toBe(1);
+    expect(siguienteFolio()).toBe(1);
+  });
+
+  it("sigue al folio más alto, no a la cantidad de documentos", () => {
+    // Borrar el 2 no debe hacer que el siguiente repita el 3.
+    expect(siguienteFolio([{ folio: 1 }, { folio: 3 }])).toBe(4);
+  });
+
+  it("ignora los documentos viejos, que no tienen folio", () => {
+    expect(siguienteFolio([{ numId: "62173423069" }, { folio: 2 }])).toBe(3);
+    expect(siguienteFolio([{ numId: "62173423069" }])).toBe(1);
   });
 });
 

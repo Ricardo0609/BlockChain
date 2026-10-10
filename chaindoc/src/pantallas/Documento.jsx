@@ -17,10 +17,10 @@ import { estaProtegido } from "../nucleo/datos";
 import { ESTILOS } from "../ui/estilos";
 export function renderDocumento(ctx){
   const {
-    MAX_IMGS, abrirProtegido, addImage, bioBusy, bioCreds, bioOk, content, d, doVerify,
+    MAX_IMGS, abrirProtegido, addImage, bioBusy, bioCreds, bioOk, content, convOculto, d, doVerify,
     docs, editMode, exportarPaquete, fields, getFile, goHome, histOpen, histTab, ocupado,
     iniciarConversion, lockInput, menuOpen, modal, notif, openDoc, openExpedientes,
-    puedeConvertir, removeImage, save, saving, setContent, setDirty, setEdit, setFields,
+    ocultarConvertir, puedeConvertir, removeImage, save, saving, setContent, setDirty, setEdit, setFields,
     setHist, setHistTab, setLinkErr, setLinkExp, setLock, setLockInput, setMIn, setMenu,
     setModal, setPass, setShowHashes, setTitle, showHashes, smartBusy, title, uid,
     setEnlaceNuevo, setShareModo, setShareTodo, setShareReqs,
@@ -122,7 +122,7 @@ export function renderDocumento(ctx){
       </div>
 
       {/* ← NUEVO: en edición, un documento de texto puede volverse contrato inteligente */}
-      {editMode && puedeConvertir(d) && (
+      {editMode && puedeConvertir(d) && !(convOculto||[]).includes(d.id) && (
         <div className="convertir">
           <div className="convertir-b">
             <Icon n="rule" size={22}/>
@@ -134,10 +134,20 @@ export function renderDocumento(ctx){
               </span>
             </div>
           </div>
-          <button className="btn btn-primary" onClick={iniciarConversion}
-            disabled={smartBusy || saving || !aiConfigured()}>
-            Convertir a contrato inteligente
-          </button>
+          {/* ← NUEVO (10 oct): la X para quitarlo. Quien ya decidió que su
+              documento no es un contrato no tiene por qué volver a leer
+              esto cada vez que entra a editar. */}
+          <div className="convertir-acc">
+            <button className="btn btn-primary" onClick={iniciarConversion}
+              disabled={smartBusy || saving || !aiConfigured()}>
+              Convertir a contrato inteligente
+            </button>
+            <button className="convertir-x" title="Quitar este aviso"
+              aria-label="Quitar este aviso"
+              onClick={()=>ocultarConvertir(d.id)}>
+              <Icon n="close" size={20}/>
+            </button>
+          </div>
         </div>
       )}
 

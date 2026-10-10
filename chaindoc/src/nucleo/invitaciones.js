@@ -57,6 +57,20 @@ export async function entregarArchivo(testigo, reqId, archivo, onPaso){
 }
 
 /**
+ * ← NUEVO: entregar un enlace, no un archivo.
+ *
+ * No sube nada: la dirección viaja en la llamada y el servidor la
+ * revisa, la normaliza y le saca la huella. Por eso no hay paso de
+ * «Subiendo…» que avisar.
+ */
+export async function entregarEnlace(testigo, reqId, url, nombre){
+  // La sesión anónima también hace falta aquí: la función exige estar
+  // autenticado, aunque sea sin cuenta, para poder limitar el abuso.
+  if(!auth.currentUser) await signInAnonymously(auth);
+  return await llamar("entregarEnlacePorInvitacion", { testigo, reqId, url, nombre });
+}
+
+/**
  * La misma huella que calcula el servidor. Se usa sólo para armar la
  * ruta donde dejar el archivo; quien decide si el enlace vale es el
  * servidor, que la recalcula por su cuenta.
