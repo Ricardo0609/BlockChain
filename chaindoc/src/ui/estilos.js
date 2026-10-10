@@ -192,9 +192,9 @@ img,svg{max-width:100%}
 .sign-done p{color:var(--negro)}
 /* ← NUEVO: sello de firma */
 .sign-slot.con-sello{border-top:none;padding-top:0}
-.sello{display:block;margin:0 auto 2px;max-height:88px;max-width:230px;
+.sello{display:block;margin:0 auto 2px;max-height:200px;max-width:522px;
   object-fit:contain;user-select:none;-webkit-user-drag:none}
-@media(max-width:760px){ .sello{max-height:66px;max-width:170px} }
+@media(max-width:760px){ .sello{max-height:150px;max-width:387px}  }
 .sign-mark{font-family:'Inter',cursive;font-size:30px;font-style:italic;color:var(--negro);margin-bottom:4px}
 
 /* ── MODAL ── */

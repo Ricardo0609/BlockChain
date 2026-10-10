@@ -34,7 +34,7 @@ import { anclajesDe, anclarAhora, paraElPaquete, porHash, resumenAnclaje } from 
 import { aceptoVigente, selloDeAceptacion, VERSION as LEGAL_VERSION } from "./nucleo/legal";
 import { descargarPaquete } from "./paquete";
 import { FORMS, serializeForm } from "./ui/formularios";
-import { TEMPLATES, selloDesdeUid } from "./nucleo/catalogos";
+import { TEMPLATES } from "./nucleo/catalogos";
 import { getUrlDoc, setUrlDoc } from "./nucleo/formato";
 import { folioTexto, genId, sha256, siguienteFolio, verifyChain } from "./nucleo/cadena";
 import { normalizarEnlace, nombreDeEnlace, textoFirmado } from "./nucleo/enlaces";
@@ -297,15 +297,19 @@ export default function ChainDoc(){
       setTieneCodigo(cuenta.tieneCodigo);
       setBioCreds(cuenta.biometria || []);
 
-      // ← NUEVO: el sello se asigna una sola vez y se guarda en el perfil.
-      // Guardarlo (en vez de derivarlo siempre) evita que cambie si más
-      // adelante agregas o quitas imágenes del catálogo.
-      let sello = profile?.selloId;
-      if(!sello){
-        sello = selloDesdeUid(account.uid);
-        saveProfile(account.uid, { selloId: sello });
-      }
-      setSelloId(sello);
+      // ← ACTUALIZADO (10 oct): el sello lo asigna el servidor, no el
+      // navegador.
+      //
+      // Antes se elegía una de ocho imágenes a partir del uid y se
+      // guardaba en el perfil. Con ocho, a partir de cinco cuentas
+      // había un 79% de probabilidad de que dos personas compartieran
+      // sello, y a partir de ocho era seguro.
+      //
+      // Esta llamada le pide al servidor su número de usuario y su
+      // clave. La primera vez los asigna y los congela; después sólo
+      // los lee. Va sin bloquear: si falla, se firma igual y el
+      // servidor lo resuelve al estampar.
+      llamar("miSello").then((s)=>setSelloId(s?.clave || null)).catch(()=>{});
 
       // ← NUEVO (Etapa 4): lo que dejó la revisión de anoche. Se lee
       // sin bloquear: si falla, la app entra igual.

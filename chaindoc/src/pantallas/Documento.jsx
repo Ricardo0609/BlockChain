@@ -13,6 +13,8 @@ import { renderMenu } from "./MenuLateral";
 import { renderModales } from "../modales";
 import { selloUrl } from "../nucleo/catalogos";
 import { selloDe, firmaDe } from "../nucleo/bloques";
+import { Sello } from "../ui/Sello";
+import { esSelloViejo } from "../nucleo/sello";
 import { estaProtegido } from "../nucleo/datos";
 import { ESTILOS } from "../ui/estilos";
 export function renderDocumento(ctx){
@@ -264,11 +266,20 @@ export function renderDocumento(ctx){
             Las firmas antiguas no traen sello, así que conservan el estilo viejo. */}
         {sigs.map((b,i)=>(
           <div key={i} className={`sign-slot sign-done ${selloDe(b)?"con-sello":""}`}>
-            {selloDe(b) ? (
+            {/* ← ACTUALIZADO (10 oct): el sello se dibuja, ya no es una
+                imagen de un catálogo de ocho.
+                Las firmas viejas traen un sello del sistema anterior
+                (LG1…LG8) y siguen saliendo de su PNG: lo que ya quedó
+                asentado no se redibuja. Si el archivo no está —LG8
+                nunca lo tuvo— cae al nombre, que es lo que hacía
+                cualquier firma antes de que existieran los sellos. */}
+            {!selloDe(b) ? (
+              <div className="sign-mark">{b.author}</div>
+            ) : esSelloViejo(selloDe(b)) ? (
               <img className="sello" src={selloUrl(selloDe(b))} alt={`Sello de ${b.author}`}
                 onError={e=>{e.currentTarget.style.display="none";}} />
             ) : (
-              <div className="sign-mark">{b.author}</div>
+              <Sello key={selloDe(b)} clave={selloDe(b)} semilla={b?.meta?.selloSemilla ?? null}/>
             )}
             <p>Firmado por: {b.author}</p>
           </div>

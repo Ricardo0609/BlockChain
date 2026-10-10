@@ -1,7 +1,6 @@
 // Pruebas de utilidades: lectura de facturas, sellos y limpieza de llaves.
 import { describe, it, expect } from "vitest";
 import { parseFactura } from "../src/nucleo/extraccion";
-import { selloDesdeUid, SELLOS } from "../src/nucleo/catalogos";
 import { limpiar, limpiarProfundo, filtrarRastro } from "../src/monitoreo";
 
 describe("lectura de facturas (OCR)", () => {
@@ -30,13 +29,6 @@ UUID 6F9619FF-8B86-D011-B42D-00C04FC964FF`;
 
   it("convierte fechas dd/mm/aaaa", () => {
     expect(parseFactura("Fecha 5/9/2026").fecha).toBe("2026-09-05");
-  });
-});
-
-describe("sellos", () => {
-  it("el mismo usuario siempre recibe el mismo sello", () => {
-    expect(selloDesdeUid("abc123")).toBe(selloDesdeUid("abc123"));
-    expect(SELLOS).toContain(selloDesdeUid("otro-uid"));
   });
 });
 

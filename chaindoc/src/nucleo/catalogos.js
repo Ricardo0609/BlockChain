@@ -32,20 +32,27 @@ export const METHODS = [
   { id:"cero",     ico:"draft", name:"Crear desde cero",  desc:"Empieza con la plantilla en blanco" },
 ];
 
-// ── SELLOS DE FIRMA ───────────────────────────────────────────
-// ← NUEVO: cada cuenta recibe un sello fijo la primera vez y no
-// vuelve a cambiar, aunque después agregues más imágenes al catálogo.
-// Las imágenes van en: public/sellos/LG1.png, LG2.png, …
-export const SELLOS = ["LG1","LG2","LG3","LG4","LG5","LG6","LG7","LG8"];
-
+// ── SELLOS DE FIRMA (sistema viejo) ───────────────────────────
+//
+// ← RETIRADO (10 oct). Repartía una de ocho imágenes según el uid.
+// Dos problemas que no se arreglaban agregando archivos:
+//
+//   - Con ocho opciones, a partir de CINCO cuentas había un 79% de
+//     probabilidad de que dos personas compartieran sello, y a partir
+//     de ocho era seguro. Un «sello personal» que se repite no es un
+//     sello personal.
+//   - LG8 estaba en la lista sin tener PNG, así que una de cada ocho
+//     cuentas firmaba y no le salía nada: el <img> fallaba y se
+//     escondía, sin caer siquiera al nombre.
+//
+// Lo que se estampa ahora lo decide el servidor y se dibuja: ver
+// nucleo/sello.js y ui/trazoSello.js.
+//
+// Esto se queda SÓLO para que las firmas ya asentadas sigan
+// enseñando su sello viejo. No se le agregan entradas nuevas, y el
+// día que no queden firmas con LG* se puede borrar junto con
+// public/sellos/.
 export const selloUrl = (id) => `/sellos/${id}.png`;
-
-/** Deriva un sello desde el uid: estable, sin necesidad de azar. */
-export function selloDesdeUid(uid=""){
-  let h = 0;
-  for(let i=0;i<uid.length;i++) h = (h*31 + uid.charCodeAt(i)) >>> 0;
-  return SELLOS[h % SELLOS.length];
-}
 
 // ── e.firma (Etapa 5) ─────────────────────────────────────────
 

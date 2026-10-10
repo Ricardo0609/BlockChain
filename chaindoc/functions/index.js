@@ -24,6 +24,7 @@ import {
   agregarArchivo, quitarArchivo, cerrarSolicitudes,
 } from "./lib/expediente.js";
 import { normalizarEnlace, nombreDeEnlace, textoFirmado } from "./lib/enlaces.js";
+import { claveDeSello, semillaDeOrden, VERSION_SELLO } from "./lib/sello.js";
 import {
   limpiarCambios, validarEvento, revisarCambioDeAcceso,
   rolDe, puede, permisoDeEvento, puedeSubirA,
@@ -52,6 +53,16 @@ const idBloque = (n) => String(n).padStart(6, "0");
 // el orden en que se crearon los documentos.
 const FOLIOS = "folios";
 const folioTexto = (n) => String(Math.max(1, Math.trunc(Number(n) || 1))).padStart(2, "0");
+
+// ── Sellos de firma (10 oct) ──────────────────────────────────
+//
+// El sello de cada cuenta y el contador del que sale su número. Van
+// aquí y no en `users/{uid}`, que el navegador sí puede escribir: si
+// el usuario pudiera fijar su propia clave, se estamparía el sello de
+// otra persona. El bloque seguiría diciendo quién firmó, pero la marca
+// mentiría, y una marca que miente es peor que no tener ninguna.
+const SELLOS = "sellos";
+const CONTADORES = "contadores";
 
 // ── App Check (Etapa 3) ───────────────────────────────────────
 // Comprueba que la llamada venga de nuestra aplicación y no de un
@@ -149,6 +160,70 @@ async function asentar({ opId, evento, cambios, uid, email, autor, tocarFecha = 
 
   return { doc: await leerOperacion(opId), bloque };
 }
+
+/**
+ * El sello de una cuenta: lo asigna la primera vez y después sólo lo
+ * lee.
+ *
+ * El número sale de un contador global en transacción. Si lo calculara
+ * el navegador, dos personas que se registran en el mismo segundo se
+ * llevarían el mismo.
+ *
+ * Y una vez escrito no se vuelve a tocar NUNCA, ni aunque el usuario
+ * se cambie el nombre: sus firmas ya asentadas tienen que seguir
+ * llevando la misma marca. Por eso se guarda la clave ya resuelta y la
+ * semilla del barajado, en vez de recalcularlas al dibujar.
+ */
+async function selloDeCuenta(uid, nombre){
+  const ref = db.doc(`${SELLOS}/${uid}`);
+  const ya = (await ref.get()).data();
+  if(ya?.clave) return ya;
+
+  const refCont = db.doc(`${CONTADORES}/usuarios`);
+  return await db.runTransaction(async (t) => {
+    // Se relee dentro de la transacción: entre el get de arriba y
+    // aquí pudo haberlo escrito otra llamada del mismo usuario.
+    const dentro = (await t.get(ref)).data();
+    if(dentro?.clave) return dentro;
+
+    const previo = (await t.get(refCont)).data();
+    const numero = Math.trunc(Number(previo?.ultimo) || 0) + 1;
+
+    const sello = {
+      numero,
+      clave: claveDeSello(nombre, numero),
+      semilla: semillaDeOrden(nombre, numero),
+      v: VERSION_SELLO,
+      // El nombre con el que se resolvió, para poder explicar después
+      // por qué la clave dice lo que dice si la persona se lo cambió.
+      nombreAlCrear: String(nombre || ""),
+      creadoEn: new Date().toISOString(),
+    };
+    t.set(refCont, { ultimo: numero, actualizadoEn: FieldValue.serverTimestamp() }, { merge: true });
+    t.set(ref, sello);
+    return sello;
+  });
+}
+
+/** Lo que se estampa en el bloque de FIRMA. */
+async function marcaDeFirma(uid, nombre){
+  try{
+    const s = await selloDeCuenta(uid, nombre);
+    return { sello: s.clave, selloSemilla: s.semilla ?? null, selloV: s.v ?? VERSION_SELLO };
+  }catch(e){
+    // Que falle el sello no puede impedir una firma: es decoración, no
+    // la prueba. La firma vale igual sin marca.
+    console.error("sello: no se pudo asignar", e);
+    return { sello: null };
+  }
+}
+
+/** El sello propio, para poder enseñárselo al usuario en su perfil. */
+export const miSello = onCall(OPCIONES, async (req) => {
+  const { uid, email } = quien(req);
+  const s = await selloDeCuenta(uid, await nombreDe(uid, email));
+  return { clave: s.clave, numero: s.numero, semilla: s.semilla ?? null, v: s.v ?? VERSION_SELLO };
+});
 
 // ── Crear ─────────────────────────────────────────────────────
 export const crearOperacion = onCall(OPCIONES, async (req) => {
@@ -1075,10 +1150,10 @@ export const firmarDocumento = onCall(OPCIONES, async (req) => {
   await revisarCodigo(uid, codigo);
 
   const autor = await nombreDe(uid, email);
-  const perfil = (await db.doc(`users/${uid}`).get()).data() || {};
   const { doc } = await asentar({
     opId, uid, email, autor,
-    evento: { accion: "FIRMA", contenido: "Firma", meta: { sello: perfil.selloId || null, metodo: "codigo" } },
+    evento: { accion: "FIRMA", contenido: "Firma",
+              meta: { ...(await marcaDeFirma(uid, autor)), metodo: "codigo" } },
   });
   return { doc };
 });
@@ -1167,14 +1242,13 @@ export const firmarConBiometria = onCall(OPCIONES, async (req) => {
   const credencial = await revisarBiometria(uid, { asercion, motivo: "firma", opId });
 
   const autor = await nombreDe(uid, email);
-  const perfil = (await db.doc(`users/${uid}`).get()).data() || {};
   const { doc } = await asentar({
     opId, uid, email, autor,
     evento: {
       accion: "FIRMA",
       contenido: `Firma biométrica desde ${credencial.device || "dispositivo"}`,
       meta: {
-        sello: perfil.selloId || null,
+        ...(await marcaDeFirma(uid, autor)),
         signature: {
           method: "webauthn", credId: credencial.credId,
           device: credencial.device || null, alg: credencial.alg ?? null,
@@ -2341,14 +2415,13 @@ export const firmarConEfirma = onCall(
     if(!r.valida) throw new HttpsError("permission-denied", motivoEfirma(r.motivo));
 
     const autor = await nombreDe(uid, email);
-    const perfil = (await db.doc(`users/${uid}`).get()).data() || {};
     const { doc } = await asentar({
       opId, uid, email, autor,
       evento: {
         accion: "FIRMA",
         contenido: `Firma con e.firma del SAT · ${r.rfc}`,
         meta: {
-          sello: perfil.selloId || null,
+          ...(await marcaDeFirma(uid, autor)),
           signature: {
             method: "efirma", verified: true, verificadaEn: "servidor",
             rfc: r.rfc, nombre: r.nombre,

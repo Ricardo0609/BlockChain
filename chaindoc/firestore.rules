@@ -146,6 +146,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // El sello de firma de cada cuenta y el contador del que sale su
+    // numero. Cerrados al navegador por la misma razon que los folios:
+    // `users/{uid}` lo escribe el propio usuario, y si la clave del
+    // sello viviera ahi cualquiera podria estamparse el de otro.
+    match /sellos/{uid} {
+      allow read, write: if false;
+    }
+    match /contadores/{id} {
+      allow read, write: if false;
+    }
+
     // La lista 69-B del SAT y su fecha de actualizacion. Solo el
     // servidor la escribe; el navegador la consulta por funcion.
     match /catalogos/{id} {
