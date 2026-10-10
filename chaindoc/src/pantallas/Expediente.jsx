@@ -16,6 +16,7 @@ import {
   expedienteStatus,
   faseActual,
   fmtMonto,
+  llevaImporte,
   resumenConsultas,
   resumenVinculos,
   solicitudesDe,
@@ -385,15 +386,21 @@ export function renderExpediente(ctx){
                 </div>
               )}
 
-              <div className="exp-monto">
-                <span className="mnt-lbl">Importe:</span>
-                <input className="exp-monto-in" inputMode="decimal" placeholder="0.00"
-                  defaultValue={a.monto ?? ""}
-                  onBlur={e=>setMontoReq(r.id, aid, e.target.value)}
-                  onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()} />
-                {a.origen==="interno" && a.monto!=null &&
-                  <span className="tag">leído del documento</span>}
-              </div>
+              {/* ← ACTUALIZADO (10 oct): el importe sólo sale donde
+                  significa algo. En un entregable, un documento o un
+                  enlace no hay monto que anotar, y el campo vacío sólo
+                  servía para dejar el expediente pareciendo incompleto. */}
+              {llevaImporte(r, a) && (
+                <div className="exp-monto">
+                  <span className="mnt-lbl">Importe:</span>
+                  <input className="exp-monto-in" inputMode="decimal" placeholder="0.00"
+                    defaultValue={a.monto ?? ""}
+                    onBlur={e=>setMontoReq(r.id, aid, e.target.value)}
+                    onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()} />
+                  {a.origen==="interno" && a.monto!=null &&
+                    <span className="tag">leído del documento</span>}
+                </div>
+              )}
 
               {a.origen==="interno" && (
                 <button className="btn btn-tertiary" style={{marginRight:8}}

@@ -12,6 +12,7 @@
 
 import { enServidor } from "./nucleo/datos";
 import { llamar, errorBackend } from "./nucleo/backend";
+import { esEnlace } from "./nucleo/enlaces";
 
 const ENV = (typeof import.meta !== "undefined" && import.meta.env) || {};
 const API_KEY = ENV.VITE_GEMINI_API_KEY || "";
@@ -454,7 +455,11 @@ export function calcularMontos(exp) {
     const lista = archivosDe(r);
     const real = comprobadoDe(r);
     if (real != null) { comprobado += real; hayComprobado = true; }
-    sinImporte += lista.filter((a) => typeof a.monto !== "number").length;
+    // ← ACTUALIZADO (10 oct): sólo cuenta lo que SÍ puede llevar
+    // importe. Antes, un enlace o la foto de un entregable engordaban
+    // este aviso para siempre: no hay forma de anotarles un importe.
+    sinImporte += lista.filter(
+      (a) => typeof a.monto !== "number" && llevaImporte(r, a)).length;
 
     // Sólo tiene sentido comparar cuando existen ambos lados.
     if (typeof r.monto === "number" && real != null) {
@@ -700,6 +705,39 @@ export function duplicados(docs = []) {
   // Los que cruzan expedientes primero: son los que importan.
   return grupos.sort((a, b) =>
     (a.alcance === b.alcance ? b.veces - a.veces : a.alcance === "entre-expedientes" ? -1 : 1));
+}
+
+/**
+ * ← NUEVO (10 oct): ¿este comprobante lleva importe?
+ *
+ * Hasta ahora el campo «Importe» salía en TODO lo que se adjuntara. En
+ * la foto de la obra terminada o en el enlace al sitio publicado no
+ * significa nada, y además alimentaba el aviso de «N comprobantes sin
+ * importe anotado»: un reproche que el usuario no podía quitar ni
+ * llenando el campo, porque no había nada que llenar.
+ *
+ * Quién lleva importe no lo decide el archivo, lo decide el REQUISITO.
+ * De los tres tipos que produce la IA, sólo uno habla de dinero:
+ *
+ *   - «comprobante» → la prueba de un pago. Lleva importe.
+ *   - «entregable»  → el producto o servicio final. No lleva.
+ *   - «documento»   → un papel que debe existir (permiso, póliza). No lleva.
+ *
+ * Por eso la foto de un recibo de la ferretería SÍ conserva su campo:
+ * lo que manda es para qué sirve el requisito, no si la evidencia es
+ * una imagen. Un enlace es la excepción: una dirección no es un pago,
+ * esté donde esté.
+ *
+ * Y un importe ya anotado no se esconde nunca, aunque hoy la regla
+ * diga que no debería estar: esconder un dato que alguien capturó es
+ * perderlo sin avisar.
+ */
+export function llevaImporte(requisito, archivo){
+  if(typeof archivo?.monto === "number") return true;
+  if(esEnlace(archivo)) return false;
+  // Sin tipo (expedientes viejos) se enseña: mejor un campo de más que
+  // esconderle a alguien el que ya usaba.
+  return (requisito?.tipo || "comprobante") === "comprobante";
 }
 
 /** Identidad de un comprobante para la detección de duplicados. */

@@ -85,7 +85,7 @@ Revisar "pruebas/cfdi.test.js" "8258dba11ccefb98788684425144183f7902e5a484212ff0
 Revisar "pruebas/efirma.test.js" "7f7cc73e41bf800168aaf855043274eacaa4acfb9698d4c277ea3ba1a749adf6" 345
 Revisar "pruebas/efirma-servidor.test.js" "36830fdf659a62741f5d53273293d6714464a870226ea22b675a45ad5940506a" 270
 Revisar "pruebas/enlaces.test.js" "d82003da8e3e1466c819df73b08ce85f5703e1ade255d2f645de58d837ec782f" 261
-Revisar "pruebas/expediente.test.js" "3f7731fdc4d42144c76ac96a33dee72d68dd5506de9fd812b68d4c5cfdaef78b" 252
+Revisar "pruebas/expediente.test.js" "2e0112b98471d5c9fdaa8f9e326f3c4249f73d361b8d377335d37bd98d2c27fb" 320
 Revisar "pruebas/fixtures/LEEME.md" "40cb87c47eda78fefb4f95006b628ade982c9a496849ba4829b655eda0e9fa69" 28
 Revisar "pruebas/ia.test.js" "7c0edd9ff9d5c35c8ae50b44fd49eb177cac4bd78a20692f7e20937eecd37b81" 120
 Revisar "pruebas/identidad.test.js" "30138842ee2d7a25592ae3f34afc5c40a0ff7cffde2088f369b1f2f588f15d63" 181
@@ -137,11 +137,11 @@ Revisar "src/nucleo/rfc.js" "7e13188a98627525b485efb7df84eebbeb93ed86d27193bed37
 Revisar "src/pantallas/Acceso.jsx" "3dad92233ab974108aaadb2aaba4f7097cd15ad80b3ed8324abf0323706a69b0" 128
 Revisar "src/pantallas/Documento.jsx" "133a1b5f508f9ffee4bccf9741ac1ea9a553b0cd847968771e02a0077648f532" 453
 Revisar "src/pantallas/Entrega.jsx" "a3bab84274316f7521598ca8908fa49f6967fcc220003ab2632f03b4125feef8" 167
-Revisar "src/pantallas/Expediente.jsx" "61db31a6a2828811d931efb0dc1f38c7148cc701c709763f9822b89144ac4dbe" 586
+Revisar "src/pantallas/Expediente.jsx" "8f94fe700c2779696f6a654cf91f2ed73ac89b795f61426a004a044cb6b8e0aa" 593
 Revisar "src/pantallas/Inicio.jsx" "727fd39075ab1865029eb82d23f00b0a1d2f5932df3fc4721c7252054c4823c7" 365
 Revisar "src/pantallas/MenuLateral.jsx" "178d6dd09c02dbeb2e6458e341cff09cfa66e9dc4f2072b9fddfd5bf2adee608" 48
 Revisar "src/paquete.js" "00a164215a49ea438e0441870d5ee8f1c7d302a14df16a0f066addf91abf9a9c" 487
-Revisar "src/smartContract.js" "b22e3f78b167b5a73a3758c7bd0bca55a80bb7a54e404c1822eb61d9b7e95621" 914
+Revisar "src/smartContract.js" "d7024cb8d0a47ca301400db3171182d0cc5de3d8da418bed598dc2b7d471b59e" 952
 Revisar "src/storage.js" "a00601636bc631c2a36155f3da84b5e3b0525083b9b4d3ad91b2665ff5484e18" 138
 Revisar "src/ui/CampoEnlace.jsx" "04d5d98987cf0959517c67eb21721b8bf6f628eb1ffd6b06805de97c1720708b" 58
 Revisar "src/ui/EfirmaPanel.jsx" "04650659f1c7e031613ad5f23d74f4d5af82be304a22bb8bef2227b772773f50" 124

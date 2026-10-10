@@ -250,3 +250,70 @@ describe("los RFC de un expediente", () => {
     expect(hayQueRevisarRFCs({ partes:[{ nombre:"x", rfc:"AAA010101AAA" }] })).toBe(true);
   });
 });
+
+// ── ¿Qué comprobante lleva importe? (10 oct) ──────────────────
+//
+// El campo «Importe» salía en todo lo adjunto. En un entregable o un
+// enlace no significa nada, y además engordaba el aviso de «N
+// comprobantes sin importe anotado» con cosas que nunca van a tener
+// uno: un reproche imposible de quitar.
+import { llevaImporte } from "../src/smartContract";
+
+describe("llevaImporte", () => {
+  const archivo = { aid: "a1", nombre: "factura.pdf" };
+  const enlace  = { aid: "a2", origen: "enlace", url: "https://x.com/", nombre: "Sitio" };
+
+  it("sí, cuando el requisito es la prueba de un pago", () => {
+    expect(llevaImporte({ tipo: "comprobante" }, archivo)).toBe(true);
+  });
+
+  it("no, cuando el requisito es un entregable o un papel", () => {
+    expect(llevaImporte({ tipo: "entregable" }, archivo)).toBe(false);
+    expect(llevaImporte({ tipo: "documento" },  archivo)).toBe(false);
+  });
+
+  it("la foto de un recibo conserva su campo", () => {
+    // Lo que manda es PARA QUÉ sirve el requisito, no si la evidencia
+    // es una imagen. En obra, el recibo de la ferretería llega como
+    // foto del teléfono y su importe hay que poder anotarlo.
+    const foto = { aid: "a3", nombre: "recibo.jpg", tipo: "image/jpeg" };
+    expect(llevaImporte({ tipo: "comprobante" }, foto)).toBe(true);
+  });
+
+  it("un enlace nunca, ni en un requisito de pago", () => {
+    expect(llevaImporte({ tipo: "comprobante" }, enlace)).toBe(false);
+  });
+
+  it("un importe ya anotado no se esconde jamás", () => {
+    // Esconder un dato que alguien capturó es perderlo sin avisar.
+    expect(llevaImporte({ tipo: "entregable" }, { ...archivo, monto: 500 })).toBe(true);
+    expect(llevaImporte({ tipo: "comprobante" }, { ...enlace, monto: 500 })).toBe(true);
+  });
+
+  it("sin tipo (expedientes viejos) se enseña", () => {
+    expect(llevaImporte({}, archivo)).toBe(true);
+    expect(llevaImporte(undefined, archivo)).toBe(true);
+  });
+});
+
+describe("el aviso de «sin importe anotado»", () => {
+  const exp = (tipo, archivos) => ({
+    moneda: "MXN", montoTotal: 1000,
+    requisitos: [{ id: "r1", titulo: "X", tipo, monto: 1000, archivos }],
+  });
+
+  it("no cuenta lo que no puede llevar importe", () => {
+    expect(calcularMontos(exp("entregable", [{ aid: "a1", nombre: "obra.jpg" }])).sinImporte).toBe(0);
+    expect(calcularMontos(exp("comprobante",
+      [{ aid: "a2", origen: "enlace", url: "https://x.com/" }])).sinImporte).toBe(0);
+  });
+
+  it("y sí cuenta la factura a la que de verdad le falta", () => {
+    expect(calcularMontos(exp("comprobante", [{ aid: "a3", nombre: "factura.pdf" }])).sinImporte).toBe(1);
+  });
+
+  it("deja de contarla en cuanto se anota", () => {
+    expect(calcularMontos(exp("comprobante",
+      [{ aid: "a3", nombre: "factura.pdf", monto: 1000 }])).sinImporte).toBe(0);
+  });
+});
