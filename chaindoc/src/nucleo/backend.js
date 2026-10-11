@@ -18,17 +18,37 @@ const funciones = () => (fns ||= getFunctions(app, REGION));
 /** Mensajes en español para los errores que devuelve el servidor. */
 export function errorBackend(e){
   const codigo = (e?.code || "").replace("functions/", "");
-  const mensajes = {
+
+  // ← ACTUALIZADO (11 oct): el mensaje del servidor manda sobre el
+  // genérico.
+  //
+  // Nuestras funciones ya explican el motivo en español y con el caso
+  // concreto: «Sólo el dueño puede eliminarlo», «No tienes una
+  // solicitud abierta para ese requisito». Traducirlos todos a «No
+  // tienes permiso para hacer esto en este documento» le quitaba al
+  // usuario justo lo que necesita para saber qué hacer.
+  //
+  // Los de abajo sí se traducen, porque no los escribimos nosotros:
+  // son del transporte y vienen en inglés y en jerga.
+  const DEL_TRANSPORTE = {
     "unauthenticated":    "Tu sesión expiró. Vuelve a iniciar sesión.",
-    "permission-denied":  "No tienes permiso para hacer esto en este documento.",
-    "not-found":          "El documento ya no existe.",
-    "failed-precondition": "Alguien más acaba de modificar el documento. Vuelve a intentarlo.",
-    "invalid-argument":   "Los datos enviados no son válidos.",
     "resource-exhausted": "Demasiados intentos seguidos. Espera un momento.",
     "unavailable":        "No se pudo contactar al servidor. Revisa tu conexión.",
     "internal":           "El servidor no pudo completar la operación.",
+    "deadline-exceeded":  "El servidor tardó demasiado. Vuelve a intentarlo.",
   };
-  return mensajes[codigo] || e?.message || "No se pudo completar la operación.";
+  if(DEL_TRANSPORTE[codigo]) return DEL_TRANSPORTE[codigo];
+
+  const propio = String(e?.message || "").trim();
+  if(propio && propio.toLowerCase() !== "internal") return propio;
+
+  const RESPALDO = {
+    "permission-denied":   "No tienes permiso para hacer esto en este documento.",
+    "not-found":           "El documento ya no existe.",
+    "failed-precondition": "Alguien más acaba de modificar el documento. Vuelve a intentarlo.",
+    "invalid-argument":    "Los datos enviados no son válidos.",
+  };
+  return RESPALDO[codigo] || "No se pudo completar la operación.";
 }
 
 /** Llama a una función y devuelve sus datos. Lanza el error si falla. */

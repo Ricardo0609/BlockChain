@@ -366,6 +366,13 @@ span.dup-lugar.aqui{cursor:default}
 .link-row.bloqueado:hover{border-color:var(--bordes);background:none}
 .chip-bloq{background:rgba(0,0,0,.06);color:var(--gris-400);font-weight:600;white-space:nowrap}
 
+/* ← NUEVO (11 oct): la segunda linea del aviso, la que dice que SI
+   se puede hacer. Mas pequena que la explicacion y en caja, para que
+   se lea como la salida y no como mas de lo mismo. */
+.aviso-detalle{font-size:13.5px;line-height:1.6;color:var(--gris-400);
+  background:var(--bg-soft);border:1.5px solid var(--gris-100);
+  border-radius:10px;padding:11px 13px;margin-top:-4px}
+
 /* ── ENLACE COMO EVIDENCIA (10 oct) ──
    El mismo formulario sirve en el expediente y en la pagina publica de
    entrega. Dentro de .entrega-item, que envuelve, ocupa su propio

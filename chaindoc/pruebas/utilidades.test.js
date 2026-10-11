@@ -48,3 +48,46 @@ describe("monitoreo: nunca envía llaves", () => {
     expect(filtrarRastro({ category: "fetch", data: { url: "/x?key=S" } }).data.url).toBe("/x?key=[oculta]");
   });
 });
+
+// ── El mensaje de error que ve el usuario (11 oct) ────────────
+//
+// Al intentar borrar un documento compartido, el servidor contesta
+// «Sólo el dueño puede eliminarlo» — y la interfaz lo cambiaba por un
+// «No tienes permiso para hacer esto en este documento» que no dice
+// nada, o peor, por un «Error» a secas. El motivo tiene que llegar
+// entero: es lo único que le dice al usuario qué hacer después.
+import { errorBackend } from "../src/nucleo/backend";
+
+describe("errorBackend", () => {
+  it("respeta el mensaje que escribió el servidor", () => {
+    expect(errorBackend({ code: "functions/permission-denied",
+                          message: "Sólo el dueño puede eliminarlo." }))
+      .toBe("Sólo el dueño puede eliminarlo.");
+    expect(errorBackend({ code: "functions/permission-denied",
+                          message: "No tienes una solicitud abierta para ese requisito." }))
+      .toBe("No tienes una solicitud abierta para ese requisito.");
+  });
+
+  it("traduce los errores del transporte, que vienen en jerga", () => {
+    // Estos no los escribimos nosotros: los pone el SDK, en inglés.
+    expect(errorBackend({ code: "functions/unavailable", message: "fetch failed" }))
+      .toBe("No se pudo contactar al servidor. Revisa tu conexión.");
+    expect(errorBackend({ code: "functions/unauthenticated", message: "UNAUTHENTICATED" }))
+      .toBe("Tu sesión expiró. Vuelve a iniciar sesión.");
+    expect(errorBackend({ code: "functions/internal", message: "INTERNAL" }))
+      .toBe("El servidor no pudo completar la operación.");
+  });
+
+  it("tiene respaldo cuando no viene mensaje", () => {
+    expect(errorBackend({ code: "functions/permission-denied" }))
+      .toBe("No tienes permiso para hacer esto en este documento.");
+    expect(errorBackend({ code: "functions/not-found", message: "  " }))
+      .toBe("El documento ya no existe.");
+  });
+
+  it("no se cae con cualquier cosa", () => {
+    expect(errorBackend(null)).toBe("No se pudo completar la operación.");
+    expect(errorBackend({})).toBe("No se pudo completar la operación.");
+    expect(typeof errorBackend(new Error("algo"))).toBe("string");
+  });
+});

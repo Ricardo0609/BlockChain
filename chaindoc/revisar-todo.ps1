@@ -1,8 +1,8 @@
 # ============================================================
 #  chaindoc - revisar-todo.ps1
-#  Referencia fijada el 10 oct. 2026 en esta maquina, con todo en verde.
+#  Referencia fijada el 11 oct. 2026 en esta maquina, con todo en verde.
 #
-#  Comprueba 106 archivos comparando su HUELLA SHA-256 completa
+#  Comprueba 107 archivos comparando su HUELLA SHA-256 completa
 #  contra la que tenian cuando se fijo la referencia. Es mas estricto
 #  que buscar una marca de texto: una marca no detecta lo que FALTA, y
 #  el fallo del 29 de septiembre fue justo ese - un archivo nuevo que
@@ -99,8 +99,8 @@ Revisar "pruebas/roles.test.js" "de1b375de2e0228c68c3d5f80c1dd0dff1f74233259270b
 Revisar "pruebas/sat.test.js" "dd1f4461f4ef9a4f9bae492d89bb725b794b50621b984bf6251d88692766f07f" 172
 Revisar "pruebas/sello.test.js" "fbaf5b43f7a14c286438c5db7525a0414de19c8882187b287b497ffe5e28a839" 161
 Revisar "pruebas/servidor.test.js" "1e226925493590822d199ac2d1f6f6ada23219bfdb70deddea9ca14ec8d04fcc" 85
-Revisar "pruebas/utilidades.test.js" "057d8c17d8bd53ea0c1cd7526ec9799237f86314f920c32799149c3c1340763d" 51
-Revisar "src/App.jsx" "5e5a5722184c07a99abeba8c6c231bc18bc96ac36f7247e292343bdf7c94e2ee" 1748
+Revisar "pruebas/utilidades.test.js" "312f7b7be521dc00a5bdd24a0bb4aa5c84d3b05d68e63b798d8706fb9043c519" 94
+Revisar "src/App.jsx" "caeaabe0c4d34839b6c693e9e3caeb2886463b3b5c2433c725098c1ffa51850c" 1772
 Revisar "src/auth.js" "d13bea31217043f590df6b4721694dfec17b6c7363b698e31e503ed8d84ba3fe" 169
 Revisar "src/biometric.js" "4f1a7761207b2cd2f19aecafb9b0af0fb726a4b4863b11e93cdd26e3e3f5cf50" 258
 Revisar "src/fileImport.js" "62b0ae92ced5ada3579b560847fc475a2e3aa40f1bf2e5c98fc0cac2c53b0ea1" 187
@@ -108,13 +108,14 @@ Revisar "src/firebase.js" "dede965d490260b93016b54fc1b88039c2b490ad552993a280c6d
 Revisar "src/index.css" "fda85fffe7f006d822fb9ab4e774b9e2b8fadffa73a3806b038dc0b8456cbbeb" 112
 Revisar "src/main.jsx" "98718acca141894863f8f5c9094cb5b6f7aa98431b2e3e1ed9371379f1a9ffcc" 17
 Revisar "src/modales/Ajustes.jsx" "a983eabc00edb32c9ea2e3922187b99fa071c060b4305142e3029b8b98c1f9bf" 59
+Revisar "src/modales/Aviso.jsx" "2f7a15b7ffa629c49b87e29e14605b1406c762771772481290602928d8ec1c54" 34
 Revisar "src/modales/Carpetas.jsx" "7ced0f9d0205cb31d56229693cb3841c09f9fa7ec4b70c01b548d43ef79c4f61" 56
 Revisar "src/modales/Compartir.jsx" "9ea81e26c2fd2f7be02bbdc0154170204cd37a0ac625c430c197fdbdf74810e4" 298
 Revisar "src/modales/Crear.jsx" "9ebf622b3c343a2e4a82f26e77c06ccb43955838bb6cdaa2d51b27ec3fb564af" 294
 Revisar "src/modales/Efirma.jsx" "3e66cbae7acfa3a25d55f9e069804730cfd90e84398e708f2d2a4ed10b81f103" 26
 Revisar "src/modales/Expediente.jsx" "fcfbec363a978e3e208e4f3fce6baf2a43c22c53d677fae7b21ef10e81bd5554" 269
 Revisar "src/modales/Firma.jsx" "18ff477c8ef244322f6aa3bafa1026f7df302d1eade7ed74e4f57bc7698d8fa0" 108
-Revisar "src/modales/index.jsx" "bad94597ba21b2aff1a5f0ca9072f1432f3ccecadb9d04c829adcf1b09d5d644" 25
+Revisar "src/modales/index.jsx" "1338a9b63b480d1598d59ce98761213df830a057f3d0b7784b7d32b49bb2b923" 27
 Revisar "src/modales/Legal.jsx" "5e4030038bb6c93e4c1f6de866d843e27bf0bbe4280166f21f86dd4f615567a2" 49
 Revisar "src/modales/Salir.jsx" "0bd7ce4a5236b54183d4ec1ea42865cb048bbb21c808c31dfa0f91565674ce7f" 31
 Revisar "src/monitoreo.js" "03ec05cf078850c85acded7257113b5f3b56379fc3aeccfbd21a9c802493f913" 53
@@ -122,12 +123,12 @@ Revisar "src/nucleo/accesos.js" "e96b32639247abe26acfd08e9fa3fddc1421caf1c9350cc
 Revisar "src/nucleo/anclaje.js" "da68cdb52c3f263a03ef876ff06e3d5bb5738fc366f408ac031e7e91bc7d1e0a" 108
 Revisar "src/nucleo/asn1.js" "a8b328f5fb47e1f0f4717c5303a1a44fef38ec173913403393e56ea7b33c7267" 161
 Revisar "src/nucleo/avisos.js" "e6a32844b383144f603b92ccf50a5e2940e083e7ccd91cf1b182c6ee0c6a74d9" 59
-Revisar "src/nucleo/backend.js" "ef8757ff76e06441586ee5aa616b1f040673047b8dbec332633139988d75f6a0" 40
+Revisar "src/nucleo/backend.js" "003d404a9474b180df333fd5cb492863efa90fdd5b3806dc241668c3c7ab96d9" 60
 Revisar "src/nucleo/bloques.js" "37af412db8ab71795d327e16ae98c47ec373f8bf2cb330c0b84b6b72934476dd" 138
 Revisar "src/nucleo/cadena.js" "fe2b29427b1159dbaeed1eee136cc5a1c75fc86cb018e107d9605bbb6eeb0b5a" 25
 Revisar "src/nucleo/catalogos.js" "b288a5ed6301d0c06a1edc994566beb0f99a53c4e5427842b55a666bf9479e03" 93
 Revisar "src/nucleo/cfdi.js" "bd0d3e7fe9bfb824b6c53110f74b0bf8c123fedfebb40fa34e3890f97a8e4cb3" 271
-Revisar "src/nucleo/datos.js" "6627fcba74998e6f0b18b39a7afd859b3f19aa206a7406702fed32952890298a" 251
+Revisar "src/nucleo/datos.js" "203d5e3c5997c161d8bda9196c5e77e6383e254ef72a3eb67da87d9f6325e5c1" 257
 Revisar "src/nucleo/des.js" "d0be9135358b89a8454f8ad4ca46e47c9d852d70f52c48901db9d154c9701842" 212
 Revisar "src/nucleo/efirma.js" "d67024e42739da0bfc81ffb7d899cdcef3eecc222af7acd15ccb8da470e681bb" 425
 Revisar "src/nucleo/enlaces.js" "86c12690a3b04de1937611560051697cb7636b0750295ce066828bb7d954dd9e" 65
@@ -141,14 +142,14 @@ Revisar "src/pantallas/Acceso.jsx" "3dad92233ab974108aaadb2aaba4f7097cd15ad80b3e
 Revisar "src/pantallas/Documento.jsx" "78bbf02913b4e499b11eb93a67fa98d459326c6bc00397bcf2d7c0f6573b1353" 464
 Revisar "src/pantallas/Entrega.jsx" "a3bab84274316f7521598ca8908fa49f6967fcc220003ab2632f03b4125feef8" 167
 Revisar "src/pantallas/Expediente.jsx" "8f94fe700c2779696f6a654cf91f2ed73ac89b795f61426a004a044cb6b8e0aa" 593
-Revisar "src/pantallas/Inicio.jsx" "727fd39075ab1865029eb82d23f00b0a1d2f5932df3fc4721c7252054c4823c7" 365
+Revisar "src/pantallas/Inicio.jsx" "57328534a3b1b5d63090022213df27f8f27bea1f92ac3a09799a96087f0622a7" 373
 Revisar "src/pantallas/MenuLateral.jsx" "178d6dd09c02dbeb2e6458e341cff09cfa66e9dc4f2072b9fddfd5bf2adee608" 48
 Revisar "src/paquete.js" "00a164215a49ea438e0441870d5ee8f1c7d302a14df16a0f066addf91abf9a9c" 487
 Revisar "src/smartContract.js" "d7024cb8d0a47ca301400db3171182d0cc5de3d8da418bed598dc2b7d471b59e" 952
 Revisar "src/storage.js" "a00601636bc631c2a36155f3da84b5e3b0525083b9b4d3ad91b2665ff5484e18" 138
 Revisar "src/ui/CampoEnlace.jsx" "04d5d98987cf0959517c67eb21721b8bf6f628eb1ffd6b06805de97c1720708b" 58
 Revisar "src/ui/EfirmaPanel.jsx" "04650659f1c7e031613ad5f23d74f4d5af82be304a22bb8bef2227b772773f50" 124
-Revisar "src/ui/estilos.js" "3349f36154df2dd64762963bd0486bf762e042d6d7f8c429ae3ddc6c6409daed" 1232
+Revisar "src/ui/estilos.js" "8e0c3d0fb1a051c33bbda8ccb0d85392782f293f321f1a6de39fe07a3feebf84" 1239
 Revisar "src/ui/eventos.js" "16e3f79cab58b5dc32efe1f09e40aa7cf8857225c877a6cccd9f924b1b9d461e" 90
 Revisar "src/ui/FormDoc.jsx" "14cb0f9ea37711e864dd42754e3500fe389580ab8f767b12b2347454262696cf" 93
 Revisar "src/ui/formularios.js" "2814eccbcdebe6661091a923711809b983b5170b2a81fe842c6fa433ab25b458" 57

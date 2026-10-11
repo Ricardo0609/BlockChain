@@ -153,12 +153,18 @@ export const store = {
     catch(e){ console.error(e); return false; }
   },
 
+  /**
+   * ← ACTUALIZADO (11 oct): ya no devuelve false a secas.
+   *
+   * Antes se tragaba el error y devolvía false, así que la interfaz
+   * sólo podía decir «Error» mientras el motivo de verdad —«Sólo el
+   * dueño puede eliminarlo»— se quedaba en la consola, donde nadie
+   * lo ve. El que llama decide cómo contarlo; aquí sólo se avisa.
+   */
   async del(id){
-    try{
-      if(enServidor()){ await llamar("borrarOperacion", { opId:id }); return true; }
-      await deleteDoc(doc(db, COL, id));
-      return true;
-    }catch(e){ console.error(e); return false; }
+    if(enServidor()){ await llamar("borrarOperacion", { opId:id }); return true; }
+    await deleteDoc(doc(db, COL, id));
+    return true;
   },
 };
 

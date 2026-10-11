@@ -69,7 +69,15 @@ export function renderInicio(ctx){
             <button onClick={()=>{openDoc(x.id);setDrop(null);}}>Abrir</button>
             <button onClick={()=>{setMIn2(x.folder||"");setModal({t:"move",id:x.id});setDrop(null);}}>Mover a carpeta</button>
             <button onClick={()=>{copyLink(x.id);setDrop(null);}}>Copiar enlace</button>
-            <button className="danger" onClick={()=>{setModal({t:"del",id:x.id,name:x.title});setDrop(null);}}>Eliminar</button>
+            {/* ← NUEVO (11 oct): eliminar sólo donde se puede.
+                Borrar lo borra para TODOS, así que el servidor lo deja
+                sólo al dueño. El botón salía igual en los documentos
+                compartidos: el usuario confirmaba, esperaba el
+                cargando, y se llevaba un rechazo. Un botón que no va a
+                funcionar no debería estar. */}
+            {x.ownerUid===uid && (
+              <button className="danger" onClick={()=>{setModal({t:"del",id:x.id,name:x.title});setDrop(null);}}>Eliminar</button>
+            )}
           </div>
         )}
       </div>

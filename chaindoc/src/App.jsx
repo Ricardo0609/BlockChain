@@ -1411,9 +1411,33 @@ export default function ChainDoc(){
   };
 
   const delDoc = (id)=> conEspera("eliminando", async()=>{
-    const ok = await store.del(id);
-    if(ok){ await refresh(); notify("Documento eliminado"); } else notify("Error","err");
-    setModal(null);
+    try{
+      await store.del(id);
+      await refresh();
+      setModal(null);
+      notify("Documento eliminado");
+    }catch(e){
+      console.error(e);
+      // ← ACTUALIZADO (11 oct): el motivo en un modal, no en un aviso
+      // que se va solo.
+      //
+      // El servidor sólo deja borrar al dueño. Quien intentaba borrar
+      // un documento que le compartieron veía «Error» de paso, abajo
+      // a un lado, y el documento seguía en su lista sin explicación.
+      // Cada línea dice algo distinto: el título qué pasó, el texto
+      // por qué, y el detalle qué se puede hacer en su lugar.
+      const dueno = String(e?.code||"").endsWith("permission-denied");
+      setModal({
+        t: "aviso",
+        titulo: dueno ? "Sólo el dueño puede eliminarlo" : "No se pudo eliminar",
+        texto: dueno
+          ? "Este documento te lo compartieron. Borrarlo lo quitaría también para quien lo creó y para todos los demás con acceso."
+          : errorBackend(e),
+        detalle: dueno
+          ? "Pídele a quien lo creó que lo elimine, o que te retire el acceso."
+          : null,
+      });
+    }
   });
 
   const moveTo = (id,f)=> conEspera("moviendo", async()=>{
