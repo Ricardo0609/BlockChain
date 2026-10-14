@@ -106,3 +106,40 @@ describe("a quien se le ofrece la e.firma", () => {
     expect(aceptaEfirma(null)).toBe(false);
   });
 });
+
+// ── La recomendación de cada tipo (14 oct) ────────────────────
+//
+// Cuatro tarjetas con un ícono y un nombre no dicen cuál conviene. El
+// texto de cada una está detrás de una ⓘ, y estas pruebas existen para
+// que el día que se agregue un quinto tipo no se quede sin él.
+describe("la recomendación de cada tipo", () => {
+  it("todos los tipos tienen una, y no es un relleno", () => {
+    for(const t of TEMPLATES){
+      expect(typeof t.info, `«${t.name}» sin texto`).toBe("string");
+      expect(t.info.length, `«${t.name}» con texto demasiado corto`).toBeGreaterThan(120);
+    }
+  });
+
+  it("ninguna nombra un sector: el producto no es sólo para constructoras", () => {
+    // La regla del modelo de negocio: el nicho vive en el discurso y en
+    // la página de entrada, nunca en las palabras de la pantalla.
+    const prohibidas = ["constructora", "obra civil", "despacho contable", "albañilería"];
+    for(const t of TEMPLATES){
+      for(const mala of prohibidas){
+        expect(t.info.toLowerCase(), `«${t.name}» menciona «${mala}»`).not.toContain(mala);
+      }
+    }
+  });
+
+  it("sólo el contrato inteligente va destacado", () => {
+    const destacados = TEMPLATES.filter(t => t.destacado);
+    expect(destacados).toHaveLength(1);
+    expect(destacados[0].id).toBe("inteligente");
+    expect(destacados[0].smart).toBe(true);
+  });
+
+  it("el texto del contrato inteligente cierra con la tesis", () => {
+    const smart = TEMPLATES.find(t => t.id === "inteligente");
+    expect(smart.info).toContain("prueba lo que se cumplió");
+  });
+});

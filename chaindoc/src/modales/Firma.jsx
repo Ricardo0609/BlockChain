@@ -6,8 +6,8 @@ import { aceptaEfirma } from "../nucleo/catalogos";   // ← NUEVO (Etapa 5)
 
 export function modalFirma(ctx){
   const {
-    bioBusy, bioCreds, bioOk, d, modal, pass, saving, setLock, setModal, setPass, signWithBio,
-    trySign, unlockFiles, unlockFilesBio, user,
+    bioBusy, bioCreds, bioOk, d, desbloqueando, modal, pass, saving, setLock, setModal,
+    setPass, signWithBio, trySign, unlockFiles, unlockFilesBio, user,
   } = ctx;
   if(modal.t==="sign"){
     const canBio = bioOk && bioCreds.length>0;   // ← NUEVO
@@ -80,9 +80,14 @@ export function modalFirma(ctx){
         onChange={e=>setPass(e.target.value)} autoFocus={!canBio}
         onKeyDown={e=>e.key==="Enter"&&unlockFiles()} />
       <div className="modal-row">
-        <button className="btn btn-secondary" disabled={bioBusy}
+        <button className="btn btn-secondary" disabled={bioBusy||desbloqueando}
           onClick={()=>{setPass("");setModal(null);}}>Cancelar</button>
-        <button className="btn btn-primary" onClick={unlockFiles} disabled={bioBusy}>Desbloquear</button>
+        {/* ← ACTUALIZADO (14 oct): comprobar el código va al servidor.
+            Sin aviso de espera parecía que el botón no hacía nada. */}
+        <button className={`btn btn-primary ${desbloqueando?"esperando":""}`}
+          onClick={unlockFiles} disabled={bioBusy||desbloqueando}>
+          {desbloqueando ? "Desbloqueando…" : "Desbloquear"}
+        </button>
       </div>
     </div></div>
     );

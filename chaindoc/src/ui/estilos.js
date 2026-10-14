@@ -366,6 +366,43 @@ span.dup-lugar.aqui{cursor:default}
 .link-row.bloqueado:hover{border-color:var(--bordes);background:none}
 .chip-bloq{background:rgba(0,0,0,.06);color:var(--gris-400);font-weight:600;white-space:nowrap}
 
+/* ── RECOMENDACION DE CADA TIPO (14 oct) ──
+   La tarjeta necesita position:relative para colgar la i de su esquina.
+   La i queda clara hasta que se le pasa por encima: es una pregunta
+   disponible, no una advertencia. */
+.tpl{position:relative}
+.tpl-info{position:absolute;top:6px;right:6px;z-index:2;background:none;border:none;
+  cursor:pointer;color:var(--gris-200);display:inline-flex;align-items:center;
+  justify-content:center;padding:5px;border-radius:50%;line-height:0;transition:all .15s}
+.tpl-info:hover{color:var(--negro);background:rgba(0,0,0,.06)}
+.tpl-info[aria-expanded="true"]{color:var(--negro);background:rgba(0,0,0,.08)}
+.tpl-info:focus-visible{outline:2px solid var(--negro);outline-offset:1px}
+
+/* El contrato inteligente, marcado: es lo que nos distingue y hasta
+   ahora era una tarjeta mas de cuatro iguales. */
+.tpl.destacado{border-color:var(--t-smart)}
+.tpl.destacado .tpl-info{color:var(--t-smart-f)}
+.tpl.destacado.sel{border-color:var(--negro)}
+
+.tpl-ayuda{margin:4px 0 12px;padding:16px 18px;border-radius:14px;text-align:left;
+  background:var(--bg-soft);border:1.5px solid var(--gris-100)}
+.tpl-ayuda.destacado{background:#fffbeb;border-color:#fde68a}
+.tpl-ayuda-h{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.tpl-ayuda-h strong{font-family:var(--f-t);font-size:16px;font-weight:600}
+.tpl-ayuda p{font-size:14px;line-height:1.65;color:var(--gris-400);margin:0 0 9px}
+.tpl-ayuda p:last-child{margin-bottom:0}
+.tpl-ayuda.destacado p:last-child{color:var(--negro);font-weight:500}
+.tpl-badge{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+  color:#92400e;background:#fde68a;border-radius:20px;padding:3px 9px;white-space:nowrap}
+.tpl-ayuda-x{margin-left:auto;background:none;border:none;cursor:pointer;
+  color:var(--gris-200);display:inline-flex;padding:4px;border-radius:8px;line-height:0}
+.tpl-ayuda-x:hover{color:var(--negro);background:rgba(0,0,0,.06)}
+@media(max-width:768px){
+  .tpl-info{top:3px;right:3px;padding:4px}
+  .tpl-ayuda{padding:13px 14px;margin:2px 0 10px}
+  .tpl-ayuda p{font-size:13.5px}
+}
+
 /* ── PESTAÑAS DEL EXPEDIENTE (14 oct) ──
    Subrayado en vez de caja: son secciones del mismo documento, no
    botones que hacen cosas distintas. La barra se desliza al cambiar,

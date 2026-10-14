@@ -12,7 +12,7 @@ export function modalCrear(ctx){
     folders, handleFile, imp, impErr, impMeta, impText, mIn, mIn2, method, modal,
     onDrop, resetImport, runAnalysis, setCreateStep, setDragOver, setMIn, setMIn2,
     setMethod, setSmartErr, setSmartRes, setSmartText, setTpl, smartBusy, smartErr,
-    smartMsg, smartRes, smartText, tpl,
+    smartMsg, smartRes, smartText, tpl, tplInfo, setTplInfo,
   } = ctx;
   if(modal.t==="create"){
     const isSmart = tpl==="inteligente";   // ← NUEVO
@@ -26,13 +26,42 @@ export function modalCrear(ctx){
         <p className="sub">Elige el tipo de documento.</p>
         <div className="tpl-grid">
           {TEMPLATES.map(t=>(
-            <div key={t.id} className={`tpl ${tpl===t.id?"sel":""}`}
+            <div key={t.id} className={`tpl ${tpl===t.id?"sel":""} ${t.destacado?"destacado":""}`}
               onClick={()=>{ setTpl(t.id); setMethod(null); resetImport(); setCreateStep(1); }}>
+              {/* ← NUEVO (14 oct): la recomendación de cada tipo.
+                  stopPropagation porque este botón NO elige el tipo: si
+                  lo hiciera, preguntar «¿qué es esto?» te metería
+                  dentro de lo que estabas preguntando. */}
+              <button className="tpl-info" aria-expanded={tplInfo===t.id}
+                aria-label={`Para qué sirve: ${t.name}`} title="Para qué sirve"
+                onClick={e=>{ e.stopPropagation(); setTplInfo(tplInfo===t.id ? null : t.id); }}>
+                <Icon n="info" size={17}/>
+              </button>
               <span className="tpl-ico"><Icon n={t.ico} size={40}/></span>
               <span className="tpl-n">{t.name}</span>
             </div>
           ))}
         </div>
+
+        {/* Debajo de la rejilla y no flotando sobre la tarjeta: en el
+            teléfono son dos columnas y un globo no cabría sin taparlo
+            todo. Aquí se lee completo a cualquier ancho. */}
+        {(()=>{
+          const t = TEMPLATES.find(x=>x.id===tplInfo);
+          if(!t) return null;
+          return (
+            <div className={`tpl-ayuda ${t.destacado?"destacado":""}`} role="region"
+              aria-label={`Para qué sirve: ${t.name}`}>
+              <div className="tpl-ayuda-h">
+                {t.destacado && <span className="tpl-badge">{t.destacado}</span>}
+                <strong>{t.name}</strong>
+                <button className="tpl-ayuda-x" aria-label="Cerrar"
+                  onClick={()=>setTplInfo(null)}><Icon n="close" size={18}/></button>
+              </div>
+              {t.info.split("\n\n").map((p,i)=><p key={i}>{p}</p>)}
+            </div>
+          );
+        })()}
 
         <div className="modal-row">
           <button className="btn btn-secondary rojo" onClick={closeCreate}>Cancelar</button>

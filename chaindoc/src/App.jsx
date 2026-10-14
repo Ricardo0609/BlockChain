@@ -660,13 +660,13 @@ export default function ChainDoc(){
   // ← NUEVO: abre y cierra el asistente de creación en un solo lugar
   const openCreate = ()=>{
     setMIn(""); setMIn2(""); setTpl("contrato");
-    setMethod(null); setCreateStep(0); resetImport();
+    setMethod(null); setCreateStep(0); resetImport(); setTplInfo(null);
     setSmartText(""); setSmartRes(null); setSmartErr("");   // ← NUEVO
     setModal({t:"create"});
   };
   const closeCreate = ()=>{
     setModal(null); setMIn(""); setMIn2("");
-    setMethod(null); setCreateStep(0); resetImport();
+    setMethod(null); setCreateStep(0); resetImport(); setTplInfo(null);
     setSmartText(""); setSmartRes(null); setSmartErr("");   // ← NUEVO
   };
 
@@ -1017,6 +1017,14 @@ export default function ChainDoc(){
   // recibe la pestaña del contrato del anterior.
   const [expTab, setExpTab] = useState("expediente");
 
+  // ← NUEVO (14 oct): la recomendación abierta en el paso 1 de crear, y
+  // la espera del botón de desbloquear los adjuntos.
+  //
+  // `tplInfo` guarda el id del tipo cuya ⓘ está abierta, no un booleano:
+  // así abrir una cierra la anterior sin tener que acordarse de hacerlo.
+  const [tplInfo, setTplInfo] = useState(null);
+  const [desbloqueando, setDesbloqueando] = useState(false);
+
   const [enlReq,  setEnlReq]  = useState(null);
   const [enlUrl,  setEnlUrl]  = useState("");
   const [enlNom,  setEnlNom]  = useState("");
@@ -1097,12 +1105,18 @@ export default function ChainDoc(){
 
   // ← NUEVO: los adjuntos sólo se abren tras validar el código de firma
   const unlockFiles = async()=>{
+    if(desbloqueando) return;
     if(!tieneCodigo){ notify("No tienes código de firma configurado","err"); return; }
+    // ← NUEVO (14 oct): comprobar el código va al servidor, y hasta
+    // ahora el botón se quedaba igual mientras tanto. En una conexión
+    // lenta parecía que no había pasado nada y se le daba otra vez.
+    setDesbloqueando(true);
     try{
       await llamar("verificarCodigoFirma", { codigo: pass.trim() });
       setFilesOpen(true); setPass(""); setModal(null);
       notify("Documentos desbloqueados ✓");
     }catch(e){ console.error(e); notify(errorBackend(e),"err"); }
+    finally{ setDesbloqueando(false); }
   };
 
   // ← NUEVO: misma puerta, abierta con biometría
@@ -1716,7 +1730,7 @@ export default function ChainDoc(){
     MAX_IMGS, moveTo, migrarDatos, migrando, migrarArchivosDatos, migrandoArch, acctEmail, addImage, attachEvidence, authBusy, authMode, authStep,
     bioBusy, bioCreds, bioOk, cancelarSolicitud, closeCreate, confirmarConversion,
     content, convOculto, copyLink, creando, createDoc, createExpediente, createStep, d, delDoc, doLogin,
-    expTab, setExpTab,
+    expTab, setExpTab, tplInfo, setTplInfo, desbloqueando,
     abrirEnlace, cerrarEnlace, guardarEnlace, entregarEnlaceReq,
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
     doLogout, doReset, doShare, doSignCode, doSignup, doVerify, docs, dragOver, drop,
@@ -1768,7 +1782,11 @@ export default function ChainDoc(){
 
   // ── RENDER: LOADING ──
   if(screen==="loading") return (<><style>{ESTILOS}</style>
-    <div className="loading"><div className="spin"/><p>Conectando con la cadena…</p></div></>);
+    {/* ← ACTUALIZADO (14 oct): decía «Conectando con la cadena…».
+        Nombraba la pieza de adentro, no lo que el usuario está
+        esperando, y a quien entra por primera vez «la cadena» no le
+        dice nada. */}
+    <div className="loading"><div className="spin"/><p>Cargando documentos…</p></div></>);
 
   // ── RENDER: AUTH ──
   if(screen==="auth") return renderAcceso(ctx);

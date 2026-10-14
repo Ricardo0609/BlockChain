@@ -17,12 +17,54 @@
 //
 // "carpeta", "subir", "escanear" y "en blanco" salieron de aquí: el
 // método de creación es el paso 2 y las carpetas tienen su propio modal.
+//
+// ← NUEVO (14 oct): cada tipo lleva su recomendación.
+//
+// Cuatro tarjetas con un ícono y un nombre no dicen cuál te conviene, y
+// el nombre es justo lo que menos ayuda: alguien que nunca ha usado
+// esto no sabe qué es un «contrato inteligente» ni por qué un recibo
+// sería distinto de una factura. El texto va detrás de una ⓘ y no a la
+// vista: quien ya sabe elige en dos segundos, y quien no, pregunta sin
+// salir de la pantalla.
 export const TEMPLATES = [
-  { id:"contrato",    ico:"contract",     name:"Documento de texto", body:"" },
-  { id:"factura",     ico:"receipt_long", name:"Factura",  form:"factura", body:"" },
-  { id:"recibo",      ico:"receipt",      name:"Recibo",   form:"recibo",  body:"" },
+  { id:"contrato",    ico:"contract",     name:"Documento de texto", body:"",
+    info:"Una hoja en blanco para lo que no cabe en un formulario: un contrato sencillo, "
+       + "un acuerdo entre dos partes, una minuta, unas condiciones de servicio. Escribe "
+       + "lo que necesites y fírmalo.\n\n"
+       + "Cada cambio queda registrado con su fecha y su autor, así que después puedes "
+       + "probar qué decía el documento y desde cuándo.\n\n"
+       + "Si mientras lo escribes resulta que sí es un contrato con entregas y pagos, lo "
+       + "puedes convertir en contrato inteligente sin perder su historial, sus firmas ni su ID." },
+
+  { id:"factura",     ico:"receipt_long", name:"Factura",  form:"factura", body:"",
+    info:"Para guardar una factura que YA existe: la que te emitieron o la que emitiste.\n\n"
+       + "Si subes el XML del CFDI, aquí se le pregunta al SAT si sigue vigente, se cruzan "
+       + "los RFC contra la lista 69-B de empresas señaladas, y el importe se lee solo del "
+       + "archivo. Nadie teclea cifras, así que nadie las puede ajustar al capturarlas.\n\n"
+       + "Y se vuelve a preguntar cada día: si el SAT la cancela dentro de tres meses, te "
+       + "enteras antes de deducirla.\n\n"
+       + "Esto no emite facturas. Registra las que ya están timbradas." },
+
+  { id:"recibo",      ico:"receipt",      name:"Recibo",   form:"recibo",  body:"",
+    info:"Para los pagos que no llevan factura: un recibo de honorarios, un anticipo en "
+       + "efectivo, el pago de un día de trabajo.\n\n"
+       + "Sirve para dejar constancia de un gasto que existió aunque no tenga un CFDI "
+       + "detrás, con su importe, su fecha, quién lo recibió y la huella del comprobante "
+       + "que lo respalda.\n\n"
+       + "Si el pago sí tiene factura, usa Factura: comprueba mucho más." },
+
   // No crea un documento: crea un expediente con lista de comprobantes.
-  { id:"inteligente", ico:"rule",         name:"Contrato inteligente", smart:true, body:"" },
+  { id:"inteligente", ico:"rule",         name:"Contrato inteligente", smart:true, body:"",
+    destacado:"Lo que nos distingue",
+    info:"Pega el contrato y la IA lee qué se prometió: las partes, los montos, las fechas "
+       + "límite y la lista de comprobantes que habrá que reunir para demostrar que se cumplió.\n\n"
+       + "A partir de ahí el expediente se llena solo. Pides cada comprobante con un enlace "
+       + "—quien lo entrega no necesita cuenta—, el sistema compara lo pactado contra lo "
+       + "comprobado, avisa de lo que está por vencer y detecta si un mismo comprobante se "
+       + "usó dos veces en dos contratos distintos.\n\n"
+       + "Al final exportas un paquete que un tercero puede verificar por su cuenta, sin "
+       + "entrar aquí y sin internet.\n\n"
+       + "Un contrato dice lo que se prometió. Esto prueba lo que se cumplió." },
 ];
 
 // ← NUEVO: paso 2 del flujo de creación.
