@@ -36,6 +36,7 @@ export function renderExpediente(ctx){
     setShareModo, setShareTodo, setShareReqs, anclajesPorHash,
     abrirEnlace, cerrarEnlace, guardarEnlace,
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
+    expTab, setExpTab,
   } = ctx;
   const st = expedienteStatus(d);
   const mt = calcularMontos(d);   // ← NUEVO: derivado, no almacenado
@@ -49,7 +50,52 @@ export function renderExpediente(ctx){
   const fases = estadoFases(d);          // ← NUEVO
   const fActual = faseActual(d);         // ← NUEVO
   const faseSelOk = faseSel && fases.some(f=>f.id===faseSel) ? faseSel : null;
+  // ← NUEVO (14 oct): el expediente en pestañas.
+  //
+  // Antes todo iba en una sola columna: avance, montos, fases,
+  // requisitos, línea de tiempo, consultas, contrato y adjuntos. En un
+  // expediente con varios requisitos eso son varias pantallas de
+  // scroll, y lo que casi nunca se mira —el contrato, la cadena— queda
+  // en medio de lo que sí se usa.
+  //
+  // Son cuatro porque son cuatro preguntas distintas: qué falta, qué ha
+  // pasado, qué se entregó y qué se pactó.
+  const nArchivos = (d.requisitos||[]).reduce((n,r)=>n+archivosDe(r).length, 0);
+  const PESTANAS = [
+    { id:"expediente", txt:"Expediente" },
+    { id:"tiempo",     txt:"Línea de tiempo" },
+    { id:"archivos",   txt:"Archivos", n:nArchivos, candado:!filesOpen && nArchivos>0 },
+    { id:"contrato",   txt:"Contrato" },
+  ];
+  const tab = PESTANAS.some(x=>x.id===expTab) ? expTab : "expediente";
+
   return (<div className="exp">
+    {/* Flechas izquierda y derecha para moverse sin el ratón: son
+        pestañas, y el teclado las recorre como tales. */}
+    <nav className="exp-tabs" role="tablist" aria-label="Secciones del expediente">
+      {PESTANAS.map((x,i)=>(
+        <button key={x.id} role="tab" id={`tab-${x.id}`}
+          aria-selected={tab===x.id} aria-controls={`panel-${x.id}`}
+          tabIndex={tab===x.id ? 0 : -1}
+          className={`exp-tab ${tab===x.id?"on":""}`}
+          onClick={()=>setExpTab(x.id)}
+          onKeyDown={e=>{
+            const paso = e.key==="ArrowRight" ? 1 : e.key==="ArrowLeft" ? -1 : 0;
+            if(!paso) return;
+            e.preventDefault();
+            const sig = PESTANAS[(i + paso + PESTANAS.length) % PESTANAS.length];
+            setExpTab(sig.id);
+            document.getElementById(`tab-${sig.id}`)?.focus();
+          }}>
+          {x.candado && <Icon n="lock" size={15}/>}
+          <span>{x.txt}</span>
+          {x.n>0 && <span className="exp-tab-n">{x.n}</span>}
+        </button>
+      ))}
+    </nav>
+
+    {tab==="expediente" && (
+    <div role="tabpanel" id="panel-expediente" aria-labelledby="tab-expediente">
     <div className={`exp-head ${st.estado}`}>
       <div className="exp-bar-wrap">
         <div className="exp-bar"><div className="exp-fill" style={{width:`${st.porcentaje}%`}}/></div>
@@ -479,12 +525,23 @@ export function renderExpediente(ctx){
       );
     })}
 
-    {/* ← NUEVO: la historia de la operación, abierta por defecto.
-        Es lo que distingue un expediente de una carpeta de archivos. */}
-    <details className="exp-src tl-wrap" open>
-      <summary>Línea de tiempo de la operación</summary>
+    {d.analisis && (
+      <p className="exp-foot">
+        Requisitos extraídos por {d.analisis.modelo} el {fmtFull(d.analisis.fecha)}.
+        Revisados y aceptados por {d.owner}.
+      </p>
+    )}
+    </div>
+    )}
+
+    {/* ← ACTUALIZADO (14 oct): la historia de la operación, ahora en su
+        propia pestaña y sin plegar. Es lo que distingue un expediente de
+        una carpeta de archivos: merece una pantalla, no un acordeón. */}
+    {tab==="tiempo" && (
+    <div role="tabpanel" id="panel-tiempo" aria-labelledby="tab-tiempo">
+    <div className="tl-wrap">
       <Timeline chain={d.chain} anclajes={anclajesPorHash}/>
-    </details>
+    </div>
 
     {/* ← NUEVO: quién ha consultado este expediente */}
     {(()=>{
@@ -515,23 +572,28 @@ export function renderExpediente(ctx){
       );
     })()}
 
-    <details className="exp-src">
-      <summary>Ver contrato base</summary>
-      <div className="paper-ro">{d.content}</div>
-    </details>
+    </div>
+    )}
 
-    {/* ← NUEVO: documentos adjuntos, protegidos por el código de firma */}
+    {tab==="contrato" && (
+    <div role="tabpanel" id="panel-contrato" aria-labelledby="tab-contrato">
+      <div className="paper-ro">{d.content || "Este expediente no tiene texto de contrato."}</div>
+    </div>
+    )}
+
+    {/* ← ACTUALIZADO (14 oct): los adjuntos, en su pestaña. El candado
+        no cambia: siguen pidiendo el código de firma o la biometría. */}
+    {tab==="archivos" && (
+    <div role="tabpanel" id="panel-archivos" aria-labelledby="tab-archivos">
     {(()=>{
       // ← ACTUALIZADO: se aplanan todos los comprobantes de todos los requisitos
       const conArchivo = (d.requisitos||[]).flatMap(r=>
         archivosDe(r).map(a=>({ ...a, reqId:r.id, reqTitulo:r.titulo })));
       return (
         <div className="adj">
-          <div className="adj-h">
-            <span className="adj-t">Documentos adjuntos</span>
-            <span className="adj-n">{conArchivo.length}</span>
-          </div>
-
+          {/* ← QUITADO (14 oct): el encabezado «Documentos adjuntos» con
+              su conteo. La pestaña ya dice «Archivos» y ya trae el
+              número; repetirlo dos centímetros abajo no informaba. */}
           {conArchivo.length===0 ? (
             <p className="adj-empty">
               Aún no se ha adjuntado ningún comprobante. Límite actual: {LIMITE_MB} MB por archivo
@@ -583,11 +645,7 @@ export function renderExpediente(ctx){
         </div>
       );
     })()}
-    {d.analisis && (
-      <p className="exp-foot">
-        Requisitos extraídos por {d.analisis.modelo} el {fmtFull(d.analisis.fecha)}.
-        Revisados y aceptados por {d.owner}.
-      </p>
+    </div>
     )}
   </div>);
 }

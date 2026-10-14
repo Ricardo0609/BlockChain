@@ -1010,6 +1010,13 @@ export default function ChainDoc(){
   // `enlReq` guarda en qué requisito está abierto el campo. Es uno a la
   // vez a propósito: dos formularios abiertos invitan a pegar la
   // dirección en el que no era.
+  // ← NUEVO (14 oct): qué pestaña del expediente está abierta.
+  // Vive aquí y no en la pantalla porque renderExpediente es una
+  // función, no un componente, y porque hay que poder reiniciarla al
+  // abrir otro documento: si no, entras a un expediente nuevo y te
+  // recibe la pestaña del contrato del anterior.
+  const [expTab, setExpTab] = useState("expediente");
+
   const [enlReq,  setEnlReq]  = useState(null);
   const [enlUrl,  setEnlUrl]  = useState("");
   const [enlNom,  setEnlNom]  = useState("");
@@ -1477,6 +1484,7 @@ export default function ChainDoc(){
     setFilesOpen(false);                                        // ← NUEVO: se re-bloquea al abrir otro
     setVinculos({});                                            // ← NUEVO: limpia el anterior
     setFaseSel(null);                                           // ← NUEVO
+    setExpTab("expediente");                                    // ← NUEVO: siempre se entra por la primera
     setUnlocked(!estaProtegido(dd)); setEdit(false); setDirty(false);
     setUrlDoc(id); setScreen("doc");
     verificarVinculos(dd);                                      // ← NUEVO: sin await, no bloquea
@@ -1708,6 +1716,7 @@ export default function ChainDoc(){
     MAX_IMGS, moveTo, migrarDatos, migrando, migrarArchivosDatos, migrandoArch, acctEmail, addImage, attachEvidence, authBusy, authMode, authStep,
     bioBusy, bioCreds, bioOk, cancelarSolicitud, closeCreate, confirmarConversion,
     content, convOculto, copyLink, creando, createDoc, createExpediente, createStep, d, delDoc, doLogin,
+    expTab, setExpTab,
     abrirEnlace, cerrarEnlace, guardarEnlace, entregarEnlaceReq,
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
     doLogout, doReset, doShare, doSignCode, doSignup, doVerify, docs, dragOver, drop,

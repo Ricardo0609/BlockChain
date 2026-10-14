@@ -1,6 +1,6 @@
 # ============================================================
 #  chaindoc - revisar-todo.ps1
-#  Referencia fijada el 11 oct. 2026 en esta maquina, con todo en verde.
+#  Referencia fijada el 14 oct. 2026 en esta maquina, con todo en verde.
 #
 #  Comprueba 107 archivos comparando su HUELLA SHA-256 completa
 #  contra la que tenian cuando se fijo la referencia. Es mas estricto
@@ -75,7 +75,7 @@ Revisar "functions/lib/sat.js" "1fb76cd2eadd0e09379dda7f5418478283ed8321d0706a34
 Revisar "functions/lib/sello.js" "3d47774dc712de6ff69155bf4a5fb2a595355acf5ffd48f19af9fd279d0a746e" 87
 Revisar "functions/lib/zip.js" "41a47093d5bc2d1d2318bae827c3c20a1f1783422b0a52f6376316e4d7bf49a6" 120
 Revisar "functions/package.json" "bb3d139787437ec411d1456a50b3fafb72679b98c9488d88dcb2202ef0f0170d" 20
-Revisar "index.html" "6e006bbcf48e1af46feffcabd6cc705cc4f30f0f8dd785061e25f617e0881290" 20
+Revisar "index.html" "f1c38a2a19118fce9dec89f4e5036b846c7a841b923bc26dd9eb7036d9356b52" 20
 Revisar "pruebas/anclaje.test.js" "a97a709e7a1bb160b1c1bbbf8313070e939fb9d6ae2df6a6135e738b058be1a1" 344
 Revisar "pruebas/anclaje-e2e.test.js" "48da2a354674af81e0d9011540b138e3b769779af6c8316be84af32935589f8d" 146
 Revisar "pruebas/archivos.test.js" "2697e28d98b6a1baecbec8d2b615e9dfc1c6549c9c31fe8e2c243395952ed565" 104
@@ -100,7 +100,7 @@ Revisar "pruebas/sat.test.js" "dd1f4461f4ef9a4f9bae492d89bb725b794b50621b984bf62
 Revisar "pruebas/sello.test.js" "fbaf5b43f7a14c286438c5db7525a0414de19c8882187b287b497ffe5e28a839" 161
 Revisar "pruebas/servidor.test.js" "1e226925493590822d199ac2d1f6f6ada23219bfdb70deddea9ca14ec8d04fcc" 85
 Revisar "pruebas/utilidades.test.js" "312f7b7be521dc00a5bdd24a0bb4aa5c84d3b05d68e63b798d8706fb9043c519" 94
-Revisar "src/App.jsx" "caeaabe0c4d34839b6c693e9e3caeb2886463b3b5c2433c725098c1ffa51850c" 1772
+Revisar "src/App.jsx" "77243e5962772e85459ac67ea74a6dadaf03c97852e5e365db62d5964928177b" 1781
 Revisar "src/auth.js" "d13bea31217043f590df6b4721694dfec17b6c7363b698e31e503ed8d84ba3fe" 169
 Revisar "src/biometric.js" "4f1a7761207b2cd2f19aecafb9b0af0fb726a4b4863b11e93cdd26e3e3f5cf50" 258
 Revisar "src/fileImport.js" "62b0ae92ced5ada3579b560847fc475a2e3aa40f1bf2e5c98fc0cac2c53b0ea1" 187
@@ -141,15 +141,15 @@ Revisar "src/nucleo/sello.js" "549b2b41f63ceb9de9d45f11fef58d053d3fe65bac0e9f4e4
 Revisar "src/pantallas/Acceso.jsx" "3dad92233ab974108aaadb2aaba4f7097cd15ad80b3ed8324abf0323706a69b0" 128
 Revisar "src/pantallas/Documento.jsx" "78bbf02913b4e499b11eb93a67fa98d459326c6bc00397bcf2d7c0f6573b1353" 464
 Revisar "src/pantallas/Entrega.jsx" "a3bab84274316f7521598ca8908fa49f6967fcc220003ab2632f03b4125feef8" 167
-Revisar "src/pantallas/Expediente.jsx" "8f94fe700c2779696f6a654cf91f2ed73ac89b795f61426a004a044cb6b8e0aa" 593
-Revisar "src/pantallas/Inicio.jsx" "57328534a3b1b5d63090022213df27f8f27bea1f92ac3a09799a96087f0622a7" 373
+Revisar "src/pantallas/Expediente.jsx" "4ea0f44187466ee6d9499257511daf834fd8ee41045ca9f501e56fbc9a44487a" 651
+Revisar "src/pantallas/Inicio.jsx" "bb77a5d7d08c873a24d6fb4223cf2da876d94a6e65818a632848b07bd82889d2" 395
 Revisar "src/pantallas/MenuLateral.jsx" "178d6dd09c02dbeb2e6458e341cff09cfa66e9dc4f2072b9fddfd5bf2adee608" 48
 Revisar "src/paquete.js" "00a164215a49ea438e0441870d5ee8f1c7d302a14df16a0f066addf91abf9a9c" 487
 Revisar "src/smartContract.js" "d7024cb8d0a47ca301400db3171182d0cc5de3d8da418bed598dc2b7d471b59e" 952
 Revisar "src/storage.js" "a00601636bc631c2a36155f3da84b5e3b0525083b9b4d3ad91b2665ff5484e18" 138
 Revisar "src/ui/CampoEnlace.jsx" "04d5d98987cf0959517c67eb21721b8bf6f628eb1ffd6b06805de97c1720708b" 58
 Revisar "src/ui/EfirmaPanel.jsx" "04650659f1c7e031613ad5f23d74f4d5af82be304a22bb8bef2227b772773f50" 124
-Revisar "src/ui/estilos.js" "8e0c3d0fb1a051c33bbda8ccb0d85392782f293f321f1a6de39fe07a3feebf84" 1239
+Revisar "src/ui/estilos.js" "605808372567faa636cfe7ff7e7be2680f9e30fde99bc577cdd0a1867b8ddf80" 1277
 Revisar "src/ui/eventos.js" "16e3f79cab58b5dc32efe1f09e40aa7cf8857225c877a6cccd9f924b1b9d461e" 90
 Revisar "src/ui/FormDoc.jsx" "14cb0f9ea37711e864dd42754e3500fe389580ab8f767b12b2347454262696cf" 93
 Revisar "src/ui/formularios.js" "2814eccbcdebe6661091a923711809b983b5170b2a81fe842c6fa433ab25b458" 57

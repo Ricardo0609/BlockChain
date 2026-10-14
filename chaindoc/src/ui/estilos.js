@@ -366,6 +366,44 @@ span.dup-lugar.aqui{cursor:default}
 .link-row.bloqueado:hover{border-color:var(--bordes);background:none}
 .chip-bloq{background:rgba(0,0,0,.06);color:var(--gris-400);font-weight:600;white-space:nowrap}
 
+/* ── PESTAÑAS DEL EXPEDIENTE (14 oct) ──
+   Subrayado en vez de caja: son secciones del mismo documento, no
+   botones que hacen cosas distintas. La barra se desliza al cambiar,
+   que es lo que dice «sigues en el mismo sitio, mirando otra parte». */
+.exp-tabs{display:flex;gap:4px;border-bottom:1.5px solid var(--gris-100);
+  margin-bottom:20px;overflow-x:auto;scrollbar-width:none}
+.exp-tabs::-webkit-scrollbar{display:none}
+.exp-tab{position:relative;display:inline-flex;align-items:center;gap:7px;
+  background:none;border:none;cursor:pointer;white-space:nowrap;flex:0 0 auto;
+  font-family:var(--f-p);font-size:15px;font-weight:500;color:var(--gris-300);
+  padding:11px 14px;transition:color .15s}
+.exp-tab::after{content:"";position:absolute;left:10px;right:10px;bottom:-1.5px;height:2.5px;
+  background:var(--negro);border-radius:2px;transform:scaleX(0);transition:transform .18s ease}
+.exp-tab:hover{color:var(--negro)}
+.exp-tab.on{color:var(--negro);font-weight:600}
+.exp-tab.on::after{transform:scaleX(1)}
+.exp-tab:focus-visible{outline:2px solid var(--negro);outline-offset:-2px;border-radius:8px}
+.exp-tab .msym{color:var(--gris-200)}
+.exp-tab.on .msym{color:var(--negro)}
+.exp-tab-n{font-size:12px;font-weight:600;color:var(--gris-300);background:var(--gris-100);
+  border-radius:20px;padding:1px 7px;min-width:20px;text-align:center}
+.exp-tab.on .exp-tab-n{background:var(--negro);color:#fff}
+@media(max-width:768px){
+  .exp-tabs{gap:0;margin-bottom:16px}
+  .exp-tab{font-size:14px;padding:10px 11px}
+}
+@media (prefers-reduced-motion: reduce){ .exp-tab::after{transition:none} }
+
+/* ← NUEVO (14 oct): el papel del contrato, ya sin el acordeon que lo
+   envolvia, necesita su propio aire. */
+[id="panel-contrato"] .paper-ro{margin-top:4px}
+
+/* ← NUEVO (14 oct): el rol propio en la tarjeta. Gris, no de color:
+   dice quien eres, no si algo esta bien o mal. */
+.chip-rol{background:var(--gris-100);color:var(--gris-400);border:1px solid var(--bordes);
+  font-weight:600}
+.chip-rol.soy-dueno{background:#fff;color:var(--negro);border-color:var(--negro)}
+
 /* ← NUEVO (11 oct): la segunda linea del aviso, la que dice que SI
    se puede hacer. Mas pequena que la explicacion y en caja, para que
    se lea como la salida y no como mas de lo mismo. */

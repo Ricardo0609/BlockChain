@@ -15,6 +15,7 @@ import { renderModales } from "../modales";
 import { ESTILOS } from "../ui/estilos";
 import { TEXTO_AVISO, ordenar, esGrave } from "../nucleo/avisos";
 import { estaProtegido } from "../nucleo/datos";
+import { rolDe, ROL_TEXTO } from "../nucleo/accesos";
 import { TIPOS_DOC, esApaisado, tipoDeDocumento } from "../nucleo/catalogos";
 export function renderInicio(ctx){
   const {
@@ -29,6 +30,23 @@ export function renderInicio(ctx){
   const mine      = docs.filter(x=>x.ownerUid===uid);
   const shared    = docs.filter(x=>x.ownerUid!==uid);
   const shown     = filterF ? docs.filter(x=>x.folder===filterF) : (view==="documentos"?mine:docs);
+
+  // ← NUEVO (14 oct): tu papel en el documento, en la misma fila de
+  // etiquetas que el tipo y los bloques.
+  //
+  // Sólo sale cuando hay alguien más de por medio: en una lista donde
+  // todo es tuyo y de nadie más, «Propietario» en cada tarjeta no
+  // informa, estorba. Aparece si te lo compartieron —y entonces dice
+  // con qué papel entras— o si tú lo compartiste, y entonces recuerda
+  // que lo que ves lo ve alguien más.
+  const rolEnTarjeta = (x)=>{
+    const compartido = (x.sharedWith||[]).length > 0
+      || Object.keys(x.roles||{}).length > 0;
+    if(x.ownerUid===uid && !compartido) return null;
+    const rol = rolDe(x, uid, acctEmail);
+    if(!rol) return null;
+    return { rol, texto: rol==="propietario" ? "Dueño" : (ROL_TEXTO[rol]||rol) };
+  };
 
   const Card = (x)=>{
     const sg = x.chain.filter(b=>b.action==="FIRMA").length;
@@ -49,6 +67,10 @@ export function renderInicio(ctx){
         <div className="card-prev">{x.content||"Sin contenido aún…"}</div>
         <div className="card-meta">Última edición: {fmtShort(x.lastModified)}</div>
         <div className="chips">
+          {(()=>{ const r = rolEnTarjeta(x); return r && (
+            <span className={`chip chip-rol ${r.rol==="propietario"?"soy-dueno":""}`}
+              title="Tu papel en este documento">{r.texto}</span>
+          ); })()}
           {/* ← NUEVO: los expedientes muestran su avance */}
           {ex && (
             <span className={`chip chip-exp ${ex.estado}`}>
