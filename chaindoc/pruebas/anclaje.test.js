@@ -15,6 +15,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   CABECERA,
   arbolMerkle,
@@ -328,6 +329,44 @@ describe("hablar con los calendarios", () => {
     const falso = async () => respuesta(new Uint8Array(0));
     await expect(sellarRaiz(raiz, {
       calendarios: ["https://a.test"], fetchImpl: falso })).rejects.toThrow(/ningun-calendario/);
+  });
+});
+
+// ← NUEVO (14 oct): el horario del anclaje vive en dos sitios que
+// tienen que decir lo mismo — el cron de la función programada y el
+// ayudante que calcula «cuándo será el próximo» para la interfaz. Si
+// alguien mueve uno y olvida el otro, nada se rompe: simplemente la
+// app anuncia una hora y el anclaje ocurre a otra, y eso no lo nota
+// nadie hasta que un cliente pregunta. Esta prueba los ata.
+describe("el horario del anclaje diario", () => {
+  const fuente = readFileSync(
+    new URL("../functions/index.js", import.meta.url), "utf8");
+
+  const cron = fuente.match(
+    /anclajeDiario = onSchedule\(\s*\{\s*schedule:\s*"(\d+) (\d+) \* \* \*",\s*timeZone:\s*"([^"]+)"/);
+
+  it("corre una vez al día, de madrugada, en hora de México", () => {
+    expect(cron).not.toBeNull();
+    const [, minuto, hora, zona] = cron;
+    expect(zona).toBe("America/Mexico_City");
+    expect(Number(hora)).toBeLessThan(5);        // madrugada, no mañana
+    expect(Number(minuto)).not.toBe(0);          // nunca en punto: hay cola
+  });
+
+  it("no cae en la hora en punto ni en la media", () => {
+    const minuto = Number(cron[1]);
+    expect(minuto % 30).not.toBe(0);
+  });
+
+  it("el «próximo anclaje» que se enseña es esa misma hora en UTC", () => {
+    const [, minuto, hora] = cron;
+    const utc = fuente.match(
+      /function proximaMadrugada[\s\S]*?d\.setUTCHours\((\d+), (\d+), 0, 0\)/);
+    expect(utc).not.toBeNull();
+    // México es UTC-6 todo el año desde que se quitó el horario de
+    // verano en 2022, así que la conversión es una suma fija.
+    expect(Number(utc[1])).toBe((Number(hora) + 6) % 24);
+    expect(Number(utc[2])).toBe(Number(minuto));
   });
 });
 

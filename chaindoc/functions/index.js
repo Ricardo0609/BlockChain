@@ -2129,9 +2129,15 @@ async function confirmarPendientes({ ahora = new Date(), fetchImpl } = {}){
   return { revisados: snap.size, confirmados, aunMuyRecientes: esperando };
 }
 
-/** Todos los días de madrugada, cuando no hay nadie usando la app. */
+/** Todos los días de madrugada, cuando no hay nadie usando la app.
+ *
+ * ← ACTUALIZADO (14 oct): pasa de las 3:17 a la 1:12 de la mañana.
+ * El minuto raro es a propósito: en la hora en punto se juntan los
+ * trabajos programados de medio mundo, y los calendarios de
+ * OpenTimestamps son servidores públicos y gratuitos. A y:12 no hay
+ * cola. */
 export const anclajeDiario = onSchedule(
-  { schedule: "17 3 * * *", timeZone: "America/Mexico_City",
+  { schedule: "12 1 * * *", timeZone: "America/Mexico_City",
     timeoutSeconds: 300, memory: "512MiB" },
   async () => {
     const r = await anclarPendientes();
@@ -2231,12 +2237,13 @@ export const anclajesDe = onCall(
     };
   });
 
-/** La próxima vez que corre el anclaje diario (3:17 hora de México). */
+/** La próxima vez que corre el anclaje diario (1:12 hora de México). */
 function proximaMadrugada(desde = new Date()){
   const d = new Date(desde);
-  // El servidor corre en UTC; México es UTC-6, así que 3:17 local
-  // son las 9:17 UTC.
-  d.setUTCHours(9, 17, 0, 0);
+  // El servidor corre en UTC; México es UTC-6 todo el año desde que
+  // en 2022 se quitó el horario de verano, así que la 1:12 local son
+  // las 7:12 UTC, sin excepciones de temporada.
+  d.setUTCHours(7, 12, 0, 0);
   if(d <= desde) d.setUTCDate(d.getUTCDate() + 1);
   return d;
 }

@@ -255,6 +255,12 @@ img,svg{max-width:100%}
 .h-v{font-family:monospace;font-size:10px;word-break:break-all;line-height:1.5}
 .h-v.cur{color:var(--verde)}
 .h-v.prv{color:#3b82f6}
+/* ← NUEVO (14 oct): la comprobación al pie de la pestaña «Ediciones».
+   Mismo ancho que las tarjetas para que se lea como el cierre de la
+   lista y no como una barra aparte. */
+.hist-check{display:flex;flex-direction:column;align-items:stretch;gap:12px;width:327px;padding-top:4px}
+.hist-check .vban{margin-bottom:0;text-align:center}
+.hist-check-n{font-size:14px;line-height:1.5;color:var(--gris-200);text-align:center}
 
 /* ── SIDE MENU ── */
 .menu-ov{position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.4);backdrop-filter:blur(2px);display:flex;justify-content:flex-end;animation:fO .2s ease}
@@ -978,6 +984,10 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .exp-file-m{font-size:12px;color:var(--gris-300);margin-top:2px}
 .exp-file-h{font-family:var(--f-m,ui-monospace,monospace);font-size:11px;color:var(--gris-300);
   word-break:break-all;margin:6px 0 8px}
+/* ← NUEVO (14 oct): el ojo que descubre la huella dentro del
+   expediente. Más chico que el del historial: ahí es la única acción
+   de la tarjeta, aquí convive con «Ver», «Descargar» y «Quitar». */
+.exp-ojo{font-size:13px;margin-top:6px}
 .exp-src{margin-top:22px;border-top:1px solid var(--bordes);padding-top:14px}
 .exp-src summary{cursor:pointer;font-size:14px;color:var(--gris-400);font-weight:500}
 .exp-foot{font-size:12px;color:var(--gris-300);margin-top:16px;font-style:italic}
@@ -1261,6 +1271,8 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   .hcard-box{font-size:14px;padding:10px;border-radius:10px}
   .hcard-eye{font-size:14px}
   .h-v{font-size:9px}
+  .hist-check{width:100%}
+  .hist-check-n{font-size:13px}
 
   /* menú lateral */
   .menu{width:100%;max-width:300px;padding:20px 24px}

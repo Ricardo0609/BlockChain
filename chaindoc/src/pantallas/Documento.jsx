@@ -4,7 +4,6 @@ import { FORMS } from "../ui/formularios";
 import { FormDoc } from "../ui/FormDoc";
 import { IcoBack, IcoEye, IcoFinger, Icon } from "../ui/iconos";
 import { Timeline } from "../ui/Timeline";
-import { enlaceDeBloque } from "../nucleo/anclaje";
 import { aiConfigured, dondeEstaAdjunto, hayQueRevisarRFCs } from "../smartContract";
 import { deviceLabel } from "../biometric";
 import { fmtFull, fmtShort } from "../nucleo/formato";
@@ -26,7 +25,11 @@ export function renderDocumento(ctx){
     setHist, setHistTab, setLinkErr, setLinkExp, setLock, setLockInput, setMIn, setMenu,
     setModal, setPass, setShowHashes, setTitle, showHashes, smartBusy, title, uid,
     setEnlaceNuevo, setShareModo, setShareTodo, setShareReqs,
-    anclajesPorHash, resumenDeAnclaje, anclando, anclarYa,
+    // ← ACTUALIZADO (14 oct): sólo queda anclajesPorHash, que es lo que
+    // la Línea de tiempo usa para marcar las fechas ya publicadas en
+    // Bitcoin. resumenDeAnclaje, anclando y anclarYa se fueron con el
+    // aviso; siguen existiendo en App.jsx por si vuelven a hacer falta.
+    anclajesPorHash,
     unlockDocBio, unlocked, user, verifVin, verificarVinculos, verifyRes,
     puedo, miRol, ROL_TEXTO, revisarProveedores, revisando69B, hallazgos69B,
   } = ctx;
@@ -153,13 +156,10 @@ export function renderDocumento(ctx){
         </div>
       )}
 
-      {verifyRes && (
-        <div className={`vban ${verifyRes.valid?"ok":"bad"}`}>
-          {verifyRes.valid
-            ? "✓ Cadena íntegra — todos los bloques son criptográficamente válidos"
-            : `✗ Cadena comprometida — fallo detectado en el bloque #${verifyRes.failedAt}`}
-        </div>
-      )}
+      {/* ← MOVIDO (14 oct): el resultado de la comprobación se fue al
+          historial, junto al botón que la dispara. Salía aquí arriba
+          mientras el botón vivía al final de la página: había que
+          comprobar, subir a leer, y volver a bajar. */}
 
       <div className="paper">
         {/* ← NUEVO: los expedientes se ven como lista de comprobantes, no como papel */}
@@ -318,51 +318,30 @@ export function renderDocumento(ctx){
         </div>
       )}
 
-      {/* ← NUEVO (Etapa 5): lo único de esta pantalla que no depende
-          de nosotros. Todo lo demás lo afirma chaindoc; esto lo afirma
-          la cadena de Bitcoin, y el enlace lleva a comprobarlo fuera. */}
-      {resumenDeAnclaje && resumenDeAnclaje.total > 0 && (
-        <div className={`ancla-caja ${resumenDeAnclaje.completo ? "lista" : "espera"}`}>
-          <Icon n={resumenDeAnclaje.completo ? "verified" : "schedule"} size={18}/>
-          <div className="ancla-b">
-            {resumenDeAnclaje.confirmados > 0 ? (<>
-              <b>
-                {resumenDeAnclaje.completo
-                  ? "La fecha de esta historia está publicada en Bitcoin."
-                  : `${resumenDeAnclaje.confirmados} de ${resumenDeAnclaje.total} bloques con fecha publicada en Bitcoin.`}
-              </b>
-              <div className="ancla-d">
-                Ya no depende de nosotros: cualquiera puede comprobarla por su cuenta,
-                y nadie —chaindoc incluido— puede cambiarla.
-                {resumenDeAnclaje.primeraAltura && <>
-                  {" "}<a href={enlaceDeBloque(resumenDeAnclaje.primeraAltura)}
-                    target="_blank" rel="noreferrer">Ver el bloque {resumenDeAnclaje.primeraAltura} ↗</a>
-                </>}
-              </div>
-            </>) : (<>
-              <b>Todavía sin publicar en Bitcoin.</b>
-              <div className="ancla-d">
-                El anclaje corre una vez al día, de madrugada. Hasta entonces la fecha
-                la sostiene nuestro servidor, que es justo lo que esto viene a resolver.
-              </div>
-            </>)}
-            {(resumenDeAnclaje.sinAnclar > 0 || resumenDeAnclaje.pendientes > 0) && (
-              <div className="ancla-pie">
-                {resumenDeAnclaje.sinAnclar > 0 &&
-                  `${resumenDeAnclaje.sinAnclar} bloque${resumenDeAnclaje.sinAnclar===1?"":"s"} en espera del próximo anclaje. `}
-                {resumenDeAnclaje.pendientes > 0 &&
-                  `${resumenDeAnclaje.pendientes} ya mandado${resumenDeAnclaje.pendientes===1?"":"s"}, esperando a que se mine el bloque de Bitcoin. `}
-                <button className="lnk" disabled={anclando} onClick={anclarYa}>
-                  {anclando ? "Anclando…" : "Anclar ahora"}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* ← QUITADO (14 oct): el aviso del anclaje ya no se pinta aquí.
+          Era la caja que más jerga soltaba de toda la pantalla —bloques
+          en espera, bloques que se minan, «Anclar ahora»— y lo hacía
+          justo arriba del documento, antes de que nadie la pidiera. El
+          anclaje corre solo todas las madrugadas, así que no hay nada
+          que el usuario tenga que decidir ni vigilar.
 
+          La prueba no se pierde: cuando Bitcoin confirma la fecha,
+          sigue apareciendo en el historial, pestaña Línea de tiempo,
+          con su enlace para comprobarla fuera de chaindoc. Ahí se mira
+          cuando se busca; ya no se grita cuando no se busca.
+
+          Los estilos .ancla-caja siguen en estilos.js, sin usar, por si
+          algún día quieres volver a enseñar el estado en algún sitio. */}
+
+      {/* ← MOVIDO (14 oct): «Verificar integridad» se fue al historial,
+          pestaña Ediciones. Aquí era el primero de cuatro botones y el
+          más críptico de todos: lo que comprueba son las ediciones, y
+          ahí es donde se mira.
+          ← ACTUALIZADO (14 oct): la barra sólo se pinta si lleva algo.
+          Los otros tres botones son de expediente, así que en un
+          documento de texto se quedaba vacía: 40 px de hueco al pie. */}
+      {d.kind==="expediente" && (
       <div className="acc-final">
-        <button className="btn btn-secondary" onClick={doVerify}>⬡ Verificar integridad</button>
         {/* ← NUEVO: revisa de nuevo los documentos adjuntos */}
         {d.kind==="expediente" && (
           <button className="btn btn-secondary" disabled={verifVin}
@@ -393,6 +372,7 @@ export function renderDocumento(ctx){
           </button>
         )}
       </div>
+      )}
     </div>
 
     {histOpen && (
@@ -449,6 +429,40 @@ export function renderDocumento(ctx){
                 )}
               </div>
             ))}
+            {/* ← MOVIDO (14 oct): la comprobación vive donde se mira lo que
+                comprueba. Debajo de la última edición: primero lees qué
+                pasó, y ahí mismo compruebas que nadie lo cambió después.
+                Antes el botón estaba al final del documento y el
+                resultado salía arriba del todo. */}
+            {histTab==="Ediciones" && eds.length>0 && (
+              <div className="hist-check">
+                <button className="btn btn-secondary" onClick={doVerify}>
+                  Comprobar que nada se alteró
+                </button>
+                {verifyRes && (
+                  <div className={`vban ${verifyRes.valid?"ok":"bad"}`}>
+                    {verifyRes.valid
+                      ? "✓ Todo cuadra — ninguno de estos registros se cambió después de guardarse"
+                      /* ← ACTUALIZADO (14 oct): antes decía «fallo en el
+                         bloque #N». El número es el índice interno: el
+                         primer registro es el #0, y «el bloque 0» no le
+                         dice a nadie qué revisar. Mejor por quién y
+                         cuándo, que es lo que se busca en la lista. */
+                      : (()=>{
+                          const mal = d.chain?.[verifyRes.failedAt];
+                          return mal
+                            ? `✗ Hay una alteración — no cuadra el registro de ${mal.author} del ${fmtFull(mal.timestamp)}`
+                            : "✗ Hay una alteración — el historial no cuadra con lo que se guardó";
+                        })()}
+                  </div>
+                )}
+                <div className="hist-check-n">
+                  Se recalcula la huella de cada registro y se compara con la
+                  que quedó guardada. Si alguien hubiera editado el historial
+                  por su cuenta, las huellas dejarían de coincidir.
+                </div>
+              </div>
+            )}
             {histTab!=="Línea de tiempo" &&
              (histTab==="Ediciones"?eds:histTab==="Firmas"?sigs:shs).length===0 &&
               <div className="empty">Sin registros en esta categoría.</div>}

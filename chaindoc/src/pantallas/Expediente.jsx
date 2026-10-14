@@ -1,6 +1,6 @@
 // Vista del contrato inteligente: fases, montos, requisitos, línea de tiempo.
 
-import { Icon } from "../ui/iconos";
+import { Icon, IcoEye } from "../ui/iconos";
 import { LIMITE_MB, isPreviewable } from "../storage";
 import { Timeline } from "../ui/Timeline";
 import {
@@ -37,6 +37,10 @@ export function renderExpediente(ctx){
     abrirEnlace, cerrarEnlace, guardarEnlace,
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
     expTab, setExpTab,
+    // ← NUEVO (14 oct): el mismo interruptor que usa el historial para
+    // enseñar u ocultar hashes. Aquí las claves van con prefijo «ev:»
+    // para que no choquen con los índices de bloque del historial.
+    showHashes, setShowHashes,
   } = ctx;
   const st = expedienteStatus(d);
   const mt = calcularMontos(d);   // ← NUEVO: derivado, no almacenado
@@ -396,12 +400,23 @@ export function renderExpediente(ctx){
                     ? `${a.host || "enlace"} · entregado ${fmtFull(a.subidoEn)} · ${a.subidoPor}`
                     : `${(a.tam/1024).toFixed(0)} KB · ${fmtFull(a.subidoEn)} · ${a.subidoPor}`}
               </div>
-              {/* La huella de un enlace es la de su DIRECCIÓN, no la de
+              {/* ← ACTUALIZADO (14 oct): la huella ya no se enseña sola.
+                  Era lo primero que se leía debajo del nombre y no le
+                  dice nada a quien sube un recibo. Queda detrás del ojo,
+                  igual que en el historial, para quien la vaya a usar.
+
+                  La huella de un enlace es la de su DIRECCIÓN, no la de
                   lo que haya en ella. Decirlo en la etiqueta evita que
                   un SHA-256 parezca prometer más de lo que prueba. */}
-              <div className="exp-file-h">
-                {esEnlace(a) ? "SHA-256 de la dirección " : "SHA-256 "}{a.hash}
-              </div>
+              <button className="hcard-eye exp-ojo"
+                onClick={()=>setShowHashes({...showHashes,["ev:"+aid]:!showHashes["ev:"+aid]})}>
+                <IcoEye/> {showHashes["ev:"+aid] ? "Ocultar huella" : "Ver huella"}
+              </button>
+              {showHashes["ev:"+aid] && (
+                <div className="exp-file-h">
+                  {esEnlace(a) ? "SHA-256 de la dirección " : "SHA-256 "}{a.hash}
+                </div>
+              )}
               {esEnlace(a) && (
                 <div className="exp-url-nota">
                   Queda probada la dirección y su fecha de entrega ({fmtFull(a.subidoEn)}).
@@ -624,7 +639,15 @@ export function renderExpediente(ctx){
                       {a.monto!=null && ` · ${fmtMonto(a.monto, d.moneda||"MXN")}`}
                       {" · "}{fmtFull(a.subidoEn)}
                     </div>
-                    <div className="exp-file-h">SHA-256 {a.hash}</div>
+                    {/* ← ACTUALIZADO (14 oct): también aquí la huella va
+                        detrás del ojo. Esta lista es para abrir y
+                        descargar archivos, no para leer hashes. */}
+                    <button className="hcard-eye exp-ojo"
+                      onClick={()=>setShowHashes({...showHashes,["ev:"+aidDe(a)]:!showHashes["ev:"+aidDe(a)]})}>
+                      <IcoEye/> {showHashes["ev:"+aidDe(a)] ? "Ocultar huella" : "Ver huella"}
+                    </button>
+                    {showHashes["ev:"+aidDe(a)] &&
+                      <div className="exp-file-h">SHA-256 {a.hash}</div>}
                   </div>
                   <div className="adj-acts">
                     {a.origen==="interno" ? (

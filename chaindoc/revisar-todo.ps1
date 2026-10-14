@@ -57,7 +57,7 @@ function Revisar($rel, $esperada, $lineas){
 
 Revisar "eslint.config.js" "33dc28b22c2c24247e06413f3a08df3e46ab558c753e25b01e9c7ec86b79d9cc" 27
 Revisar "firestore.rules" "63f7e614659ee1f249c7e5602b9e9e1b469c1d935b295803d9711dca60591e68" 199
-Revisar "functions/index.js" "334191a2b4da95e871c58053ca1afbd559efe225f381e647853030ebc245a102" 2441
+Revisar "functions/index.js" "e4ca23e699c73fbec50b27921311c790de94d522785f0223cb9b67bfce73733f" 2448
 Revisar "functions/lib/anclaje.js" "b84a76dcb0ce8e38292fd730e2b2c618ca586688aafdc500633a550b6b98acf5" 529
 Revisar "functions/lib/bloques.js" "37af412db8ab71795d327e16ae98c47ec373f8bf2cb330c0b84b6b72934476dd" 138
 Revisar "functions/lib/cfdi.js" "bd0d3e7fe9bfb824b6c53110f74b0bf8c123fedfebb40fa34e3890f97a8e4cb3" 271
@@ -76,7 +76,7 @@ Revisar "functions/lib/sello.js" "3d47774dc712de6ff69155bf4a5fb2a595355acf5ffd48
 Revisar "functions/lib/zip.js" "41a47093d5bc2d1d2318bae827c3c20a1f1783422b0a52f6376316e4d7bf49a6" 120
 Revisar "functions/package.json" "bb3d139787437ec411d1456a50b3fafb72679b98c9488d88dcb2202ef0f0170d" 20
 Revisar "index.html" "f1c38a2a19118fce9dec89f4e5036b846c7a841b923bc26dd9eb7036d9356b52" 20
-Revisar "pruebas/anclaje.test.js" "a97a709e7a1bb160b1c1bbbf8313070e939fb9d6ae2df6a6135e738b058be1a1" 344
+Revisar "pruebas/anclaje.test.js" "30f8b29531b126d8fdf61b22a6d9aa8e49d36f85782ad745010ea5a6182121b1" 383
 Revisar "pruebas/anclaje-e2e.test.js" "48da2a354674af81e0d9011540b138e3b769779af6c8316be84af32935589f8d" 146
 Revisar "pruebas/archivos.test.js" "2697e28d98b6a1baecbec8d2b615e9dfc1c6549c9c31fe8e2c243395952ed565" 104
 Revisar "pruebas/bloques.test.js" "4c67a9dc4f94304de048dadac75bb41645aa25bf1afa8478bda1b04520af7a7b" 133
@@ -139,9 +139,9 @@ Revisar "src/nucleo/legal.js" "ee1a567e7c2430ad93fb3e22b96ff766049ba1c0243d117c4
 Revisar "src/nucleo/rfc.js" "7e13188a98627525b485efb7df84eebbeb93ed86d27193bed37e248053c708a9" 134
 Revisar "src/nucleo/sello.js" "549b2b41f63ceb9de9d45f11fef58d053d3fe65bac0e9f4e46a394d8ddbfb377" 106
 Revisar "src/pantallas/Acceso.jsx" "3dad92233ab974108aaadb2aaba4f7097cd15ad80b3ed8324abf0323706a69b0" 128
-Revisar "src/pantallas/Documento.jsx" "78bbf02913b4e499b11eb93a67fa98d459326c6bc00397bcf2d7c0f6573b1353" 464
+Revisar "src/pantallas/Documento.jsx" "4f4fd28eff69327f7bfb692a7bed2661f2e47746c1d45972048bc054db993254" 478
 Revisar "src/pantallas/Entrega.jsx" "a3bab84274316f7521598ca8908fa49f6967fcc220003ab2632f03b4125feef8" 167
-Revisar "src/pantallas/Expediente.jsx" "4ea0f44187466ee6d9499257511daf834fd8ee41045ca9f501e56fbc9a44487a" 651
+Revisar "src/pantallas/Expediente.jsx" "80ada1b856b542c176822e9d26c8a95a6114f58272d98f12e6020a046409c37e" 674
 Revisar "src/pantallas/Inicio.jsx" "bb77a5d7d08c873a24d6fb4223cf2da876d94a6e65818a632848b07bd82889d2" 395
 Revisar "src/pantallas/MenuLateral.jsx" "178d6dd09c02dbeb2e6458e341cff09cfa66e9dc4f2072b9fddfd5bf2adee608" 48
 Revisar "src/paquete.js" "00a164215a49ea438e0441870d5ee8f1c7d302a14df16a0f066addf91abf9a9c" 487
@@ -149,7 +149,7 @@ Revisar "src/smartContract.js" "d7024cb8d0a47ca301400db3171182d0cc5de3d8da418bed
 Revisar "src/storage.js" "a00601636bc631c2a36155f3da84b5e3b0525083b9b4d3ad91b2665ff5484e18" 138
 Revisar "src/ui/CampoEnlace.jsx" "04d5d98987cf0959517c67eb21721b8bf6f628eb1ffd6b06805de97c1720708b" 58
 Revisar "src/ui/EfirmaPanel.jsx" "04650659f1c7e031613ad5f23d74f4d5af82be304a22bb8bef2227b772773f50" 124
-Revisar "src/ui/estilos.js" "e291db4f8af69fe5868bf302930542a308e746062721da461f0373273da43c0d" 1314
+Revisar "src/ui/estilos.js" "246a0257e6eb161de0e3b0938aeb7ed4ae383cc873480d90cafb2b2277fcce76" 1326
 Revisar "src/ui/eventos.js" "16e3f79cab58b5dc32efe1f09e40aa7cf8857225c877a6cccd9f924b1b9d461e" 90
 Revisar "src/ui/FormDoc.jsx" "14cb0f9ea37711e864dd42754e3500fe389580ab8f767b12b2347454262696cf" 93
 Revisar "src/ui/formularios.js" "2814eccbcdebe6661091a923711809b983b5170b2a81fe842c6fa433ab25b458" 57
