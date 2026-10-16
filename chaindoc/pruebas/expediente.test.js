@@ -7,6 +7,7 @@ import {
   montoDeDocumento, panelExpedientes, debeRegistrarConsulta, resumenConsultas,
   misPendientes, cerrarSolicitudes, archivosDe,
   rfcsDeExpediente, hayQueRevisarRFCs,
+  conMontosVigentes, montoVigente,
 } from "../src/smartContract";
 
 const pdf = (aid, hash, monto, subidoEn = "2026-09-21T10:00:00Z") =>
@@ -112,6 +113,111 @@ describe("fases", () => {
 
   it("sin fases devuelve lista vacía", () => {
     expect(estadoFases(contrato({ fases: [] }))).toEqual([]);
+  });
+});
+
+// ← NUEVO (16 oct): el importe de un comprobante que es un documento
+// de chaindoc lo dice el documento, no la copia que se guardo al
+// adjuntarlo.
+//
+// El error que esto cierra: al adjuntar un recibo se copiaba su
+// importe al expediente y ahi se quedaba. Si despues corregias el
+// recibo, el contrato seguia sumando la cifra vieja; y como el campo
+// del expediente era editable, se podia dejar a mano una cifra
+// distinta de la del recibo que la respalda. Dos verdades para el
+// mismo dinero, sin que nada avisara.
+describe("el importe manda desde el documento, no desde el contrato", () => {
+  const recibo = (id, total) =>
+    ({ id, title: `Recibo ${id}`, kind: "documento", tplId: "recibo", fields: { total } });
+  const adjunto = (aid, docId, monto) =>
+    ({ aid, origen: "interno", docId, numId: "01", nombre: "Recibo", monto });
+
+  const conRecibos = () => contrato({ requisitos: [
+    { id: "r1", titulo: "Materiales", monto: 22000, archivos: [
+      adjunto("a1", "d1", 5000), adjunto("a2", "d2", 7000)] },
+  ] });
+
+  it("relee el importe del documento aunque la copia diga otra cosa", () => {
+    const docs = [recibo("d1", "9000"), recibo("d2", "7000")];
+    const v = conMontosVigentes(conRecibos(), docs);
+    expect(archivosDe(v.requisitos[0]).map(a => a.monto)).toEqual([9000, 7000]);
+  });
+
+  it("corregir el recibo cambia lo comprobado en el contrato", () => {
+    const antes = calcularMontos(conMontosVigentes(
+      conRecibos(), [recibo("d1", "5000"), recibo("d2", "7000")]));
+    expect(antes.comprobado).toBe(12000);
+
+    const despues = calcularMontos(conMontosVigentes(
+      conRecibos(), [recibo("d1", "5500"), recibo("d2", "7000")]));
+    expect(despues.comprobado).toBe(12500);
+  });
+
+  it("si el documento se queda sin importe, deja de sumar", () => {
+    const v = conMontosVigentes(conRecibos(), [recibo("d1", ""), recibo("d2", "7000")]);
+    expect(archivosDe(v.requisitos[0])[0].monto).toBe(null);
+    expect(calcularMontos(v).comprobado).toBe(7000);
+  });
+
+  it("un documento que no esta a la vista conserva lo ultimo que se supo", () => {
+    // te compartieron el contrato pero no el recibo
+    const v = conMontosVigentes(conRecibos(), [recibo("d2", "7000")]);
+    expect(archivosDe(v.requisitos[0]).map(a => a.monto)).toEqual([5000, 7000]);
+  });
+
+  it("un archivo suelto no lo toca nadie: su importe se escribe a mano", () => {
+    const exp = contrato({ requisitos: [
+      { id: "r1", titulo: "Materiales", monto: 22000, archivos: [pdf("p1", "hh", 3000)] },
+    ] });
+    // aunque exista un documento con ese mismo aid, no es su origen
+    const v = conMontosVigentes(exp, [{ id: "p1", fields: { total: "99999" } }]);
+    expect(archivosDe(v.requisitos[0])[0].monto).toBe(3000);
+  });
+
+  it("lo que decide es el origen, no que traiga un docId suelto", () => {
+    // Un enlace, o un registro viejo, puede acarrear un docId sin ser
+    // un documento de chaindoc. Si bastara con el docId para releer, el
+    // importe escrito a mano se sobrescribiria solo.
+    const suelto = { aid: "x1", origen: "enlace", docId: "d1", monto: 3000 };
+    expect(montoVigente(suelto, [recibo("d1", "99999")])).toBe(3000);
+    expect(montoVigente({ aid: "x2", docId: "d1", monto: 10 },
+                        [recibo("d1", "99999")])).toBe(10);
+  });
+
+  it("no modifica el expediente guardado: es una vista", () => {
+    const exp = conRecibos();
+    const copia = JSON.parse(JSON.stringify(exp));
+    conMontosVigentes(exp, [recibo("d1", "9000"), recibo("d2", "1")]);
+    expect(exp).toEqual(copia);
+  });
+
+  it("si nada cambia, devuelve el mismo objeto", () => {
+    const exp = conRecibos();
+    expect(conMontosVigentes(exp, [recibo("d1", "5000"), recibo("d2", "7000")])).toBe(exp);
+    expect(conMontosVigentes(exp, [])).toBe(exp);
+  });
+
+  it("un requisito del formato viejo no acaba contando dos veces", () => {
+    const exp = contrato({ requisitos: [
+      { id: "r1", titulo: "Materiales", monto: 22000, archivo: adjunto("a1", "d1", 5000) },
+    ] });
+    const v = conMontosVigentes(exp, [recibo("d1", "8000")]);
+    expect(archivosDe(v.requisitos[0])).toHaveLength(1);
+    expect(v.requisitos[0].archivo).toBeUndefined();
+    expect(calcularMontos(v).comprobado).toBe(8000);
+  });
+
+  it("un expediente sin requisitos no se rompe", () => {
+    expect(conMontosVigentes({ requisitos: [] }, [])).toEqual({ requisitos: [] });
+    expect(conMontosVigentes(null, [])).toBe(null);
+  });
+
+  it("montoVigente, caso por caso", () => {
+    expect(montoVigente(adjunto("a1", "d1", 5000), [recibo("d1", "6000")])).toBe(6000);
+    expect(montoVigente(adjunto("a1", "d1", 5000), [])).toBe(5000);
+    expect(montoVigente(pdf("p1", "hh", 3000), [recibo("p1", "6000")])).toBe(3000);
+    expect(montoVigente({ origen: "interno", docId: "d1" }, [recibo("d1", "6000")])).toBe(6000);
+    expect(montoVigente(null, [])).toBe(null);
   });
 });
 

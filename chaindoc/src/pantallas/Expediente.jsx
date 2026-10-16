@@ -9,6 +9,7 @@ import {
   calcularMontos,
   claveDup,
   comprobadoDe,
+  conMontosVigentes,
   destinoDuplicado,
   duplicados,
   duplicadosDe,
@@ -43,7 +44,12 @@ export function renderExpediente(ctx){
     showHashes, setShowHashes,
   } = ctx;
   const st = expedienteStatus(d);
-  const mt = calcularMontos(d);   // ← NUEVO: derivado, no almacenado
+  // ← NUEVO (16 oct): la vista con los importes al día. Los
+  // comprobantes que son documentos de chaindoc traen su importe del
+  // propio documento, releído ahora, no de la copia que se guardó al
+  // adjuntarlos. Es una vista: no se guarda, igual que los vínculos.
+  const dv = conMontosVigentes(d, docs);
+  const mt = calcularMontos(dv);   // ← NUEVO: derivado, no almacenado
   const rv = resumenVinculos(vinculos);   // ← NUEVO
   // ← ACTUALIZADO: se usa la versión viva del expediente abierto, no la
   // copia de la lista, para que un vínculo recién hecho ya cuente.
@@ -128,7 +134,8 @@ export function renderExpediente(ctx){
         <Icon n="warning" size={20}/>
         <div>
           <strong>
-            {rv.alterados>0 && `${rv.alterados} comprobante${rv.alterados===1?"":"s"} con la cadena reescrita`}
+            {/* ← ACTUALIZADO (16 oct): decía «con la cadena reescrita» */}
+            {rv.alterados>0 && `${rv.alterados} comprobante${rv.alterados===1?"":"s"} que ya no coincide${rv.alterados===1?"":"n"} con su documento`}
             {rv.alterados>0 && rv.faltantes>0 && " · "}
             {rv.faltantes>0 && `${rv.faltantes} sin acceso`}
           </strong>
@@ -310,7 +317,7 @@ export function renderExpediente(ctx){
     </div>
 
     {/* ← ACTUALIZADO: cada requisito admite varios comprobantes */}
-    {(d.requisitos||[]).map((r,i)=>{
+    {(dv.requisitos||[]).map((r,i)=>{
       if(faseSelOk && r.fase!==faseSelOk) return null;   // ← NUEVO: filtro por fase
       const lista = archivosDe(r);
       const suma  = comprobadoDe(r);
@@ -451,15 +458,31 @@ export function renderExpediente(ctx){
                   significa algo. En un entregable, un documento o un
                   enlace no hay monto que anotar, y el campo vacío sólo
                   servía para dejar el expediente pareciendo incompleto. */}
+              {/* ← ACTUALIZADO (16 oct): el importe de un documento de
+                  chaindoc ya no se escribe aquí. Lo dice el documento.
+                  Antes era un campo editable y se podía dejar en el
+                  contrato una cifra distinta de la del recibo que la
+                  respalda, sin que nada avisara: justo lo contrario de
+                  lo que este producto promete. Para cambiarlo se edita
+                  el recibo, y aquí se actualiza solo.
+                  Un archivo suelto —un PDF, una foto— no tiene
+                  documento que leer, así que ese sí se escribe a mano. */}
               {llevaImporte(r, a) && (
                 <div className="exp-monto">
                   <span className="mnt-lbl">Importe:</span>
-                  <input className="exp-monto-in" inputMode="decimal" placeholder="0.00"
-                    defaultValue={a.monto ?? ""}
-                    onBlur={e=>setMontoReq(r.id, aid, e.target.value)}
-                    onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()} />
-                  {a.origen==="interno" && a.monto!=null &&
-                    <span className="tag">leído del documento</span>}
+                  {a.origen==="interno" ? (<>
+                    <span className="exp-monto-fijo">
+                      {a.monto!=null ? fmtMonto(a.monto, d.moneda||"MXN") : "Sin importe"}
+                    </span>
+                    <span className="tag">
+                      {a.monto!=null ? "del documento" : "el documento no trae importe"}
+                    </span>
+                  </>) : (<>
+                    <input className="exp-monto-in" inputMode="decimal" placeholder="0.00"
+                      defaultValue={a.monto ?? ""}
+                      onBlur={e=>setMontoReq(r.id, aid, e.target.value)}
+                      onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()} />
+                  </>)}
                 </div>
               )}
 
@@ -498,7 +521,7 @@ export function renderExpediente(ctx){
                 pidieron; el lector y el auditor no suben nada. */}
             {(!puedoSubirA || puedoSubirA(r.id)) && (
               <label className="exp-up">
-                <span>{listo ? "Agregar otro comprobante" : "Adjuntar comprobante"}</span>
+                <span>{listo ? "Adjuntar otro archivo" : "Adjuntar archivo"}</span>
                 <input type="file" style={{display:"none"}} disabled={saving}
                   onChange={e=>{ attachEvidence(r.id, e.target.files?.[0]); e.target.value=""; }} />
               </label>

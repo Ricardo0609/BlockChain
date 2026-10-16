@@ -49,6 +49,9 @@ import {
   enServidor,
   estaProtegido,
 } from "./nucleo/datos";
+import {
+  claveCarpetas, leerCarpetas, tieneCarpetasPropias, carpetasEnUso,
+} from "./nucleo/carpetas";
 import { llamar, errorBackend } from "./nucleo/backend";
 import { leerAvisos } from "./nucleo/avisos";
 import {
@@ -74,7 +77,14 @@ export default function ChainDoc(){
   // Una cuenta nueva empieza SIN carpetas: la tarjeta punteada
   // "Nueva carpeta" es la que invita a crear la primera. Tres carpetas
   // puestas de oficio suponen de que trata el trabajo de quien entra.
-  const [folders,setFolders] = useState(()=>{ try{return JSON.parse(localStorage.getItem("cd_folders"))||[];}catch{return [];} });
+  //
+  // ← ACTUALIZADO (16 oct): las carpetas se guardaban en una sola clave
+  // del navegador, "cd_folders", igual para todas las cuentas. El
+  // resultado era que una cuenta recién creada abría con las carpetas
+  // de quien hubiera entrado antes en ese mismo navegador — por eso
+  // seguían saliendo Contratos, Facturas y Recibos aunque el valor de
+  // arranque ya fuera una lista vacía. Ahora cada cuenta tiene la suya.
+  const [folders,setFolders] = useState([]);
   const [view,setView]       = useState("inicio");
   const [d,setD]             = useState(null);
   const [editMode,setEdit]   = useState(false);
@@ -184,7 +194,25 @@ export default function ChainDoc(){
   const notify = (m,t="ok")=>{ setNotif({m,t}); setTimeout(()=>setNotif(null),3200); };
 
   useEffect(()=>{ const h=()=>setDrop(null); document.addEventListener("click",h); return ()=>document.removeEventListener("click",h); },[]);
-  useEffect(()=>{ localStorage.setItem("cd_folders",JSON.stringify(folders)); },[folders]);
+  // ← ACTUALIZADO (16 oct): una lista de carpetas por cuenta.
+  //
+  // Se carga al abrir sesión y se sana al llegar los documentos: si la
+  // cuenta todavía no tiene lista propia, adopta las carpetas que de
+  // verdad estén en uso y ninguna más. Así una cuenta nueva abre
+  // vacía, y una que ya guardaba cosas en «Contratos» no pierde ese
+  // cajón; las carpetas vacías que venían de oficio no vuelven.
+  //
+  // Quién está por sanar no se lleva en un ref: lo dice la propia
+  // clave del navegador, que es la que manda. Un ref aquí acabaría
+  // leído durante el render, dentro de refresh.
+  useEffect(()=>{
+    if(!uid) return;
+    // Una cuenta sin lista propia y sin carpetas todavía está por
+    // sanar: escribirle "[]" ahora crearía la clave y la sanación ya
+    // no ocurriría nunca.
+    if(folders.length === 0 && !tieneCarpetasPropias(uid)) return;
+    localStorage.setItem(claveCarpetas(uid), JSON.stringify(folders));
+  },[folders, uid]);
 
   // ← NUEVO: se pregunta una vez si el dispositivo tiene Face ID / huella
   useEffect(()=>{ bioAvailable().then(setBioOk); },[]);
@@ -204,6 +232,17 @@ export default function ChainDoc(){
     const l = await store.list(id, mail);
     l.sort((a,b)=>new Date(b.lastModified)-new Date(a.lastModified));
     setDocs(l);
+    // ← NUEVO (16 oct): la sanación de las carpetas, una sola vez por
+    // cuenta. Si nunca guardó lista propia, adopta las carpetas en las
+    // que de verdad tiene documentos — ni una más. Una cuenta nueva no
+    // tiene documentos, así que abre vacía, que es lo que se busca.
+    // Al escribir la clave, la cuenta deja de estar por sanar: esto no
+    // vuelve a entrar aunque refresh se llame cien veces.
+    if(id && !tieneCarpetasPropias(id)){
+      const enUso = carpetasEnUso(l);
+      localStorage.setItem(claveCarpetas(id), JSON.stringify(enUso));
+      setFolders(enUso);
+    }
   };
 
   // ── INTEGRIDAD DE LOS VÍNCULOS ──
@@ -280,11 +319,15 @@ export default function ChainDoc(){
         setBioCreds([]);                                       // ← NUEVO
         setSelloId(null);                                      // ← NUEVO
         setDocs([]); setD(null); setScreen("auth");
+        setFolders([]);                                        // ← NUEVO (16 oct)
         return;
       }
 
       const profile = await getProfile(account.uid);
       setUid(account.uid);
+      // ← NUEVO (16 oct): las carpetas son de la cuenta, no del
+      // navegador. Se cargan aquí, al saber quién entró.
+      setFolders(leerCarpetas(account.uid));
       setUser(profile?.name || account.displayName || "");
       setAcctEmail(account.email || "");
       // ← NUEVO: quien se registro antes de que existieran estos textos,
@@ -679,7 +722,7 @@ export default function ChainDoc(){
       { accion:"EDICIÓN", contenido:body.slice(0,200) },
       { title, content:body, fields: d.tplId ? fields : null },
       { autor:user, autorUid:uid });
-    if(up){ setD(up); setContent(body); setDirty(false); setEdit(false); notify("Bloque registrado en la cadena ✓"); }
+    if(up){ setD(up); setContent(body); setDirty(false); setEdit(false); notify("Documento actualizado ✓"); }
     else notify("Error al guardar","err");
     setSaving(false);
   };
@@ -989,7 +1032,7 @@ export default function ChainDoc(){
       setD(r.doc);
       notify(r.cerradas
         ? `Evidencia registrada ✓ ${r.cerradas} solicitud${r.cerradas===1?"":"es"} atendida${r.cerradas===1?"":"s"}`
-        : "Evidencia registrada en la cadena ✓");
+        : "Archivo adjuntado ✓");
     }catch(e){
       console.error(e);
       if(ruta) await descartarSubida(ruta);   // no dejar basura en el almacén
@@ -1063,7 +1106,7 @@ export default function ChainDoc(){
       cerrarEnlace();
       notify(r.cerradas
         ? `Enlace registrado ✓ ${r.cerradas} solicitud${r.cerradas===1?"":"es"} atendida${r.cerradas===1?"":"s"}`
-        : "Enlace registrado en la cadena ✓");
+        : "Enlace registrado ✓");
     }catch(e){
       console.error(e);
       setEnlErr(errorBackend(e) || "No se pudo registrar el enlace.");

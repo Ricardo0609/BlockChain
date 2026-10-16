@@ -391,13 +391,18 @@ export function estadoVinculo(archivo, docActual) {
     return {
       estado: "ampliado", nuevos: n, acciones,
       hashActual: cabeza.hash, desde: posteriores[0]?.timestamp || null,
-      texto: `${n} bloque${n === 1 ? "" : "s"} nuevo${n === 1 ? "" : "s"} desde que se adjuntó: ${acciones.join(", ").toLowerCase()}.`,
+      // ← ACTUALIZADO (16 oct): decía «N bloques nuevos desde que se
+      // adjuntó». Lo que importa no es cuántos registros hay, sino que
+      // el documento siguió su curso y su historia sigue entera.
+      texto: `${n === 1 ? "Hubo un cambio" : `Hubo ${n} cambios`} desde que se adjuntó (${acciones.join(", ").toLowerCase()}). Su historia sigue completa.`,
     };
   }
 
   return {
     estado: "alterado", hashActual: cabeza.hash,
-    texto: "La huella registrada ya no aparece en la historia de este documento. Su cadena fue reescrita o reemplazada.",
+    // ← ACTUALIZADO (16 oct): sin hablar de cadenas. Lo que hay que
+    // entender es que este ya no es el documento que se adjuntó.
+    texto: "Este ya no es el documento que se adjuntó: su historia fue rehecha o reemplazada por otra.",
   };
 }
 
@@ -429,6 +434,66 @@ export function montoDeDocumento(doc) {
   if (crudo == null || crudo === "") return null;
   const n = parseFloat(String(crudo).replace(/[^0-9.-]/g, ""));
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * El importe que vale HOY para un comprobante.
+ *
+ * ← NUEVO (16 oct): un comprobante que es un documento de chaindoc
+ * —un recibo, una factura— tiene su importe escrito en el propio
+ * documento. Al adjuntarlo se copiaba ese número al expediente y ahí
+ * se quedaba: si después corregías el recibo, el contrato seguía
+ * sumando la cifra vieja, y el campo del expediente se podía editar a
+ * mano para que dijera otra cosa distinta de la del recibo. Dos
+ * verdades para el mismo dinero.
+ *
+ * Ahora manda el documento. Esta función lo relee cada vez.
+ *
+ * Si el documento no está a la vista —te compartieron el expediente
+ * pero no el recibo— se queda lo último que se supo de él, que es lo
+ * que quedó anotado al adjuntarlo. Mejor una cifra con fecha que un
+ * hueco.
+ *
+ * Para un archivo subido suelto (un PDF, una foto) no hay documento
+ * que leer: su importe se escribe a mano y es el que vale.
+ */
+export function montoVigente(archivo, docs = []) {
+  if (archivo?.origen !== "interno") return archivo?.monto ?? null;
+  const src = (docs || []).find((x) => x?.id === archivo.docId);
+  if (!src) return archivo?.monto ?? null;
+  return montoDeDocumento(src);
+}
+
+/**
+ * El expediente con los importes al día, para mirarlo y para sumarlo.
+ *
+ * Es una vista: se calcula al abrir y no se guarda nunca, igual que
+ * los vínculos. Así no puede quedar una cifra vieja contradiciendo al
+ * documento que la originó.
+ *
+ * El paquete de evidencia NO pasa por aquí a propósito: ese se arma
+ * para que alguien lo verifique sin chaindoc y años después, así que
+ * lleva lo que quedó asentado, no lo que diga una pantalla.
+ */
+export function conMontosVigentes(exp, docs = []) {
+  if (!exp?.requisitos?.length) return exp;
+  let cambio = false;
+  const requisitos = exp.requisitos.map((r) => {
+    const lista = archivosDe(r);
+    let cambioAqui = false;
+    const archivos = lista.map((a) => {
+      const m = montoVigente(a, docs);
+      if (m === (a?.monto ?? null)) return a;
+      cambioAqui = true;
+      return { ...a, monto: m };
+    });
+    if (!cambioAqui) return r;
+    cambio = true;
+    const resto = { ...r };
+    delete resto.archivo;        // el formato viejo, que archivosDe ya absorbió
+    return { ...resto, archivos };
+  });
+  return cambio ? { ...exp, requisitos } : exp;
 }
 
 /**

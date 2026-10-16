@@ -332,9 +332,19 @@ export function renderInicio(ctx){
           <span className={`sec-arrow ${openSec.docs?"":"closed"}`}><Icon n="expand_more" size={28}/></span>
           <span className="sec-t">Documentos</span>
         </div>
+        {/* ← ACTUALIZADO (16 oct): cuando no hay nada, la sección ofrece
+            el botón en vez de mandar a buscarlo. Decía «crea el primero
+            con el botón de abajo» y el botón estaba fuera de la vista,
+            al pie de la página. Va punteado, como «Nueva carpeta», para
+            que las dos secciones vacías se lean igual. */}
         {openSec.docs && (recientes.length
           ? <div className="cards">{recientes.map(Card)}</div>
-          : <div className="empty">No hay documentos aún.<br/>Crea el primero con el botón de abajo.</div>)}
+          : <div className="cards">
+              <div className="card punteada" onClick={openCreate}>
+                <span className="punteada-mas">+</span>
+                <span className="punteada-t">Crear documento</span>
+              </div>
+            </div>)}
 
         <div className="sec-h" onClick={()=>setOpenSec({...openSec,comp:!openSec.comp})}>
           <span className={`sec-arrow ${openSec.comp?"":"closed"}`}><Icon n="expand_more" size={28}/></span>

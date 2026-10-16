@@ -19,6 +19,17 @@ export const ESTILOS = `
      conserva el contraste que necesita para leerse. */
   --t-texto:#60a5fa; --t-factura:#4ade80; --t-recibo:#a78bfa; --t-smart:#fbbf24;
   --t-texto-f:#2563eb; --t-factura-f:#16a34a; --t-recibo-f:#7c3aed; --t-smart-f:#b45309;
+  /* ← NUEVO (16 oct): un tercer tono, el del borde de la tarjeta.
+     Mismo color, un paso más claro. Antes el borde usaba la versión
+     media y una rejilla de seis tarjetas se leía como seis avisos
+     compitiendo; con esta el tipo se sigue reconociendo de un vistazo
+     pero la pantalla deja de gritar.
+     El ámbar baja dos pasos y no uno: el amarillo es el más luminoso
+     de los cuatro y al mismo nivel que los otros seguía dominando la
+     rejilla, sobre todo cuando hay varios contratos inteligentes.
+     No se tocó --t-smart, que es lo que destaca el contrato
+     inteligente en el modal de crear: ahí sí tiene que llamar. */
+  --t-texto-b:#93c5fd; --t-factura-b:#86efac; --t-recibo-b:#c4b5fd; --t-smart-b:#fde68a;
   --sh-sm:0px 0px 2px rgba(0,0,0,.04),0px 2px 4px rgba(0,0,0,.06);
   --sh:0px 0px 4px rgba(0,0,0,.04),0px 8px 16px rgba(0,0,0,.08);
   --sh-card:0px 0px 6px rgba(0,0,0,.04),0px 6px 12px rgba(0,0,0,.06);
@@ -119,13 +130,21 @@ img,svg{max-width:100%}
 .card{--c-tipo:var(--bordes);--c-tipo-f:var(--gris-400);background:#fff;border:2px solid var(--c-tipo);border-radius:16px;
   padding:16px;width:262px;box-shadow:var(--sh-sm);cursor:pointer;transition:all .15s;
   display:flex;flex-direction:column;gap:14px;position:relative}
-.card.tipo-texto{--c-tipo:var(--t-texto);--c-tipo-f:var(--t-texto-f)}
-.card.tipo-factura{--c-tipo:var(--t-factura);--c-tipo-f:var(--t-factura-f)}
-.card.tipo-recibo{--c-tipo:var(--t-recibo);--c-tipo-f:var(--t-recibo-f)}
-.card.tipo-smart{--c-tipo:var(--t-smart);--c-tipo-f:var(--t-smart-f)}
+.card.tipo-texto{--c-tipo:var(--t-texto-b);--c-tipo-f:var(--t-texto-f)}
+.card.tipo-factura{--c-tipo:var(--t-factura-b);--c-tipo-f:var(--t-factura-f)}
+.card.tipo-recibo{--c-tipo:var(--t-recibo-b);--c-tipo-f:var(--t-recibo-f)}
+.card.tipo-smart{--c-tipo:var(--t-smart-b);--c-tipo-f:var(--t-smart-f)}
 /* Los comprobantes van acostados: la forma se reconoce antes que el color. */
 .card.ancha{width:323px}
 .card.ancha .card-prev{height:75px}
+/* ← NUEVO (16 oct): la tarjeta vacía que invita a crear el primer
+   documento. Misma caja que las demás y el mismo punteado que «Nueva
+   carpeta», para que una sección vacía se lea igual que la otra. */
+.card.punteada{border-style:dashed;border-color:var(--bordes);background:var(--bg-soft);
+  box-shadow:none;align-items:center;justify-content:center;gap:6px;min-height:150px}
+.card.punteada:hover{border-color:var(--gris-300);transform:none;box-shadow:var(--sh-sm)}
+.punteada-mas{font-size:30px;line-height:1;color:var(--gris-200);font-weight:300}
+.punteada-t{font-family:var(--f-p);font-weight:500;font-size:16px;color:var(--gris-300)}
 .card:hover{border-color:var(--c-tipo);transform:translateY(-2px);box-shadow:var(--sh)}
 .card-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .card-t{font-family:var(--f-t);font-weight:500;font-size:20px;color:var(--gris-300);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -606,6 +625,9 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   font-family:var(--f-p);font-size:14px;color:var(--negro);outline:none;
   font-variant-numeric:tabular-nums;background:#fff}
 .exp-monto-in:focus{border-color:var(--negro)}
+/* ← NUEVO (16 oct): el importe que viene del documento. Sin caja ni
+   borde: lo que no se puede escribir no debe parecer un campo. */
+.exp-monto-fijo{font-family:var(--f-p);font-weight:600;font-size:15px;color:var(--negro)}
 @media(max-width:760px){
   .mnt-fila{gap:14px}
   .mnt-dato{min-width:104px}
