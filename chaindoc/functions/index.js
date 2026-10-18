@@ -26,6 +26,9 @@ import {
 import { normalizarEnlace, nombreDeEnlace, textoFirmado } from "./lib/enlaces.js";
 import { claveDeSello, semillaDeOrden, VERSION_SELLO } from "./lib/sello.js";
 import {
+  bloquea, esDestinatario, estadoAcuerdo, motivoBloqueo, permiteEstado, PLAZOS,
+} from "./lib/acuerdo.js";
+import {
   limpiarCambios, validarEvento, revisarCambioDeAcceso,
   rolDe, puede, permisoDeEvento, puedeSubirA,
   ROLES, ROL_TEXTO, esDueno, debeRegistrarConsulta, LIMITES,
@@ -100,6 +103,18 @@ function exigir(op, uid, email, accion){
     throw new HttpsError("permission-denied",
       `Tu rol en este documento (${ROL_TEXTO[rol] || rol}) no permite esta acción.`);
   }
+  // ← NUEVO (18 oct): el rol dice quién eres; el estado dice si lo que
+  // pides tiene sentido ahora mismo. Un contrato que las dos partes
+  // firmaron no lo edita nadie, ni el dueño: si el dueño pudiera
+  // cambiar lo firmado, la firma no diría nada, y ese es justamente
+  // el valor que esto viene a añadir.
+  //
+  // Va aquí y no en cada función porque `exigir` es la única puerta:
+  // puesto en un solo sitio no se le puede olvidar a nadie.
+  if(bloquea(op, accion)){
+    throw new HttpsError("failed-precondition",
+      motivoBloqueo(estadoAcuerdo(op).estado, accion));
+  }
   return rol;
 }
 
@@ -117,9 +132,15 @@ async function leerOperacion(id){
  * Corazón del sistema: agrega un bloque y aplica los cambios de campos
  * en la misma transacción. O pasan las dos cosas, o ninguna.
  */
-async function asentar({ opId, evento, cambios, uid, email, autor, tocarFecha = true, exigirAcceso = true, permiso }){
+async function asentar({ opId, evento, cambios, uid, email, autor, tocarFecha = true, exigirAcceso = true, permiso, camposServidor = null }){
   const ev = validarEvento(evento);
-  const campos = limpiarCambios(cambios);
+  // ← NUEVO (18 oct): `camposServidor` se salta el filtro de campos
+  // editables, y por eso sólo lo usan las funciones de aquí dentro.
+  // El acuerdo —quién firmó, cuándo, con qué fuerza— NO está en
+  // CAMPOS_EDITABLES a propósito: si lo estuviera, cualquiera con
+  // acceso podría escribirse una firma ajena por la vía de guardar
+  // campos, y toda esta función sobraría.
+  const campos = { ...limpiarCambios(cambios), ...(camposServidor || {}) };
 
   const refOp = db.doc(`${OPS}/${opId}`);
 
@@ -1139,6 +1160,217 @@ export const verificarCodigoFirma = onCall(OPCIONES, async (req) => {
   const { uid } = quien(req);
   await revisarCodigo(uid, req.data?.codigo);
   return { ok: true };
+});
+
+// ══════════════════════════════════════════════════════════════
+// LA DOBLE FIRMA DEL CONTRATO
+//
+// Un contrato dice lo que se prometió; chaindoc prueba lo que se
+// cumplió. Hasta aquí el expediente lo armaba una sola parte: los
+// requisitos, los montos y las fechas los ponía quien lo creaba, y si
+// el cliente decía «yo nunca acordé eso», no había nada que
+// contestarle.
+//
+// Estas tres funciones son las únicas que pueden escribir el campo
+// `acuerdo`. No está en CAMPOS_EDITABLES, así que no hay otra vía:
+// nadie se puede escribir una firma ajena guardando campos.
+// ══════════════════════════════════════════════════════════════
+
+/** Una firma del acuerdo, con la fuerza que de verdad tiene. */
+function marcaDeAcuerdo({ parte, momento, uid, email, nombre, fuerza }){
+  return {
+    parte, momento,
+    uid: uid || null,
+    email: (email || "").toLowerCase() || null,
+    nombre: nombre || null,
+    fuerza,
+    fecha: new Date().toISOString(),
+  };
+}
+
+/**
+ * Quien tiene que contestar es el destinatario, y nadie más.
+ *
+ * ← ACTUALIZADO (18 oct): esta es la ÚNICA puerta de aceptar y
+ * rechazar. Antes pedía además el permiso de rol «aprobar», y eso
+ * dejaba fuera al destinatario que ya colaboraba en el contrato como
+ * editor: la pantalla le ofrecía el botón —porque la pantalla mira el
+ * correo, que es lo correcto— y el servidor se lo negaba.
+ *
+ * Mirar el correo basta y sobra: `acuerdo.paraEmail` lo escribe el
+ * servidor al poner el contrato en firme, el campo no está entre los
+ * editables, así que no hay forma de ponerse de destinatario uno
+ * mismo. El rol sólo tiene que dar acceso al documento, nada más.
+ */
+function exigirDestinatario(op, email){
+  if(!esDestinatario(op, email)){
+    throw new HttpsError("permission-denied",
+      "Este contrato está esperando la firma de otra persona.");
+  }
+}
+
+/**
+ * Poner el contrato en firme y mandarlo a la otra parte.
+ *
+ * Firma quien envía, el contenido queda fijo y el destinatario recibe
+ * acceso de aprobador. La firma va aquí y no al crear el expediente a
+ * propósito: una firma sólo significa algo si lo que se firmó ya no
+ * puede cambiar, y al crear el contrato todavía se está armando.
+ */
+export const ponerEnFirme = onCall(OPCIONES, async (req) => {
+  const { uid, email } = quien(req);
+  exigirCorreoVerificado(req);
+
+  const { opId, codigo, requiereConformidad } = req.data || {};
+  if(!opId) throw new HttpsError("invalid-argument", "Falta el identificador de la operación.");
+  const correo = correoValido(req.data?.correo);
+  if(correo === String(email || "").toLowerCase()){
+    throw new HttpsError("invalid-argument", "No puedes mandarte el contrato a ti mismo a firmar.");
+  }
+
+  const op = (await db.doc(`${OPS}/${opId}`).get()).data();
+  if(!op) throw new HttpsError("not-found", "La operación no existe.");
+  if(op.kind !== "expediente"){
+    throw new HttpsError("failed-precondition", "Sólo un contrato inteligente se manda a firmar.");
+  }
+  if(!(op.requisitos || []).length){
+    throw new HttpsError("failed-precondition", "El contrato no tiene ningún punto que cumplir.");
+  }
+
+  await revisarCodigo(uid, codigo);
+  const autor = await nombreDe(uid, email);
+
+  // El destinatario necesita acceso para poder leerlo y firmarlo.
+  //
+  // ← ACTUALIZADO (18 oct): sólo si no tenía ninguno. Antes le ponía
+  // «aprobador» siempre, y a quien ya colaboraba como editor le
+  // quitaba de paso el derecho a editar y a subir comprobantes.
+  // Mandar un contrato a firmar no es motivo para degradar a nadie.
+  if(!rolDe(op, null, correo)) await ponerAcceso(opId, correo, "aprobador");
+
+  const plazos = plazosPedidos(req.data?.plazos);
+  const acuerdo = {
+    pedidoEn: new Date().toISOString(),
+    paraEmail: correo,
+    paraNombre: req.data?.nombre ? String(req.data.nombre).slice(0, 120) : null,
+    requiereConformidad: Boolean(requiereConformidad),
+    plazos,
+    firmas: [marcaDeAcuerdo({
+      parte: "emisor", momento: "aceptacion",
+      uid, email, nombre: autor, fuerza: "cuenta",
+    })],
+  };
+
+  const { doc } = await asentar({
+    opId, uid, email, autor, permiso: "editar",
+    evento: {
+      accion: "ACUERDO",
+      contenido: `Contrato puesto en firme y mandado a firmar a ${correo}`,
+      meta: { tipo: "puesto-en-firme", correo, requiereConformidad: acuerdo.requiereConformidad },
+    },
+    camposServidor: { acuerdo },
+  });
+  return { doc };
+});
+
+/** Los plazos que pide el cliente, saneados; los de arranque si no vienen. */
+function plazosPedidos(p){
+  const recordatorios = (Array.isArray(p?.recordatorios) ? p.recordatorios : [])
+    .map((n) => Math.trunc(Number(n)))
+    .filter((n) => Number.isFinite(n) && n > 0 && n <= 365)
+    .sort((a, b) => a - b)
+    .slice(0, 4);
+  const silencio = Math.trunc(Number(p?.silencio));
+  return {
+    recordatorios: recordatorios.length ? recordatorios : PLAZOS.recordatorios,
+    silencio: Number.isFinite(silencio) && silencio > 0 && silencio <= 365
+      ? silencio : PLAZOS.silencio,
+  };
+}
+
+/** La otra parte acepta: el contrato pasa a vigente. */
+export const aceptarContrato = onCall(OPCIONES, async (req) => {
+  const { uid, email } = quien(req);
+  const { opId, codigo } = req.data || {};
+  if(!opId) throw new HttpsError("invalid-argument", "Falta el identificador de la operación.");
+
+  const op = (await db.doc(`${OPS}/${opId}`).get()).data();
+  if(!op) throw new HttpsError("not-found", "La operación no existe.");
+  exigirDestinatario(op, email);
+
+  const { estado } = estadoAcuerdo(op);
+  if(!permiteEstado(estado, "aceptar")){
+    throw new HttpsError("failed-precondition", motivoBloqueo(estado, "aceptar"));
+  }
+
+  await revisarCodigo(uid, codigo);
+  const autor = await nombreDe(uid, email);
+
+  const acuerdo = {
+    ...op.acuerdo,
+    firmas: [...(op.acuerdo.firmas || []), marcaDeAcuerdo({
+      parte: "receptor", momento: "aceptacion",
+      uid, email, nombre: autor, fuerza: "cuenta",
+    })],
+  };
+
+  const { doc } = await asentar({
+    opId, uid, email, autor, permiso: "ver",
+    evento: {
+      accion: "ACUERDO",
+      contenido: `${autor} aceptó el contrato`,
+      meta: { tipo: "aceptado", fuerza: "cuenta" },
+    },
+    camposServidor: { acuerdo },
+  });
+  return { doc };
+});
+
+/**
+ * La otra parte no acepta, con un motivo.
+ *
+ * No destruye nada: queda asentado que lo revisó y no lo aceptó, con
+ * la fecha. Quien lo mandó puede corregir y volver a mandarlo, y el
+ * rechazo deja de contar en cuanto hay una petición más nueva.
+ */
+export const rechazarContrato = onCall(OPCIONES, async (req) => {
+  const { uid, email } = quien(req);
+  const { opId } = req.data || {};
+  if(!opId) throw new HttpsError("invalid-argument", "Falta el identificador de la operación.");
+  const motivo = String(req.data?.motivo || "").trim();
+  if(!motivo) throw new HttpsError("invalid-argument", "Falta el motivo.");
+
+  const op = (await db.doc(`${OPS}/${opId}`).get()).data();
+  if(!op) throw new HttpsError("not-found", "La operación no existe.");
+  exigirDestinatario(op, email);
+
+  const { estado } = estadoAcuerdo(op);
+  if(!permiteEstado(estado, "rechazar")){
+    throw new HttpsError("failed-precondition", motivoBloqueo(estado, "rechazar"));
+  }
+
+  const autor = await nombreDe(uid, email);
+  const acuerdo = {
+    ...op.acuerdo,
+    rechazo: {
+      motivo: motivo.slice(0, 80),
+      detalle: String(req.data?.detalle || "").trim().slice(0, 600) || null,
+      fecha: new Date().toISOString(),
+      porEmail: String(email || "").toLowerCase(),
+      porNombre: autor,
+    },
+  };
+
+  const { doc } = await asentar({
+    opId, uid, email, autor, permiso: "ver",
+    evento: {
+      accion: "ACUERDO",
+      contenido: `${autor} no aceptó el contrato: ${acuerdo.rechazo.motivo}`,
+      meta: { tipo: "rechazado", motivo: acuerdo.rechazo.motivo },
+    },
+    camposServidor: { acuerdo },
+  });
+  return { doc };
 });
 
 /** Firmar con código: el servidor comprueba y sella el bloque. */

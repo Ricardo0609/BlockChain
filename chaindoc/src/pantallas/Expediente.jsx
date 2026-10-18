@@ -42,6 +42,10 @@ export function renderExpediente(ctx){
     // enseñar u ocultar hashes. Aquí las claves van con prefijo «ev:»
     // para que no choquen con los índices de bloque del historial.
     showHashes, setShowHashes,
+    // ← NUEVO (18 oct): en qué punto está el acuerdo, y si lo que
+    // espera es mi firma. Lo segundo no se deduce del rol: ser
+    // aprobador no basta, tiene que ser la persona a la que se mandó.
+    acu, esperaMiFirma,
   } = ctx;
   const st = expedienteStatus(d);
   // ← NUEVO (16 oct): la vista con los importes al día. Los
@@ -106,6 +110,66 @@ export function renderExpediente(ctx){
 
     {tab==="expediente" && (
     <div role="tabpanel" id="panel-expediente" aria-labelledby="tab-expediente">
+
+    {/* ← NUEVO (18 oct): la doble firma.
+        En qué punto está el acuerdo, y lo único que toca hacer ahora.
+        Va antes del avance a propósito: de nada sirve mirar cuántos
+        comprobantes faltan si el contrato todavía no lo aceptó nadie. */}
+    {acu.estado!=="borrador" && (
+      <div className={`acu-banda ${acu.tono}`}>
+        <Icon n="handshake" size={18}/>
+        <div className="acu-banda-b">
+          <strong>{acu.etiqueta}</strong>
+          <div className="acu-banda-d">
+            {acu.estado==="en_firma" && (esperaMiFirma
+              ? "Léelo con calma. Si estás de acuerdo, acéptalo; si no, dilo y quien lo mandó podrá corregirlo."
+              : `Esperando a ${acu.paraNombre || acu.paraEmail}${acu.diasEsperando>0?` · ${acu.diasEsperando} día${acu.diasEsperando===1?"":"s"}`:""}.`)}
+            {acu.estado==="vigente" && "Las dos partes lo aceptaron. Lo que se suba de aquí en adelante respalda este acuerdo."}
+            {acu.estado==="rechazado" && (<>
+              {acu.rechazo?.porNombre || "La otra parte"} no lo aceptó: {acu.rechazo?.motivo}.
+              {acu.rechazo?.detalle && <><br/><em>«{acu.rechazo.detalle}»</em></>}
+              <br/>Puedes corregirlo y volver a mandarlo.
+            </>)}
+            {acu.estado==="sin_firmar" && "Nunca llegó a aceptarse y pasó la fecha. Puedes corregirlo y mandarlo otra vez."}
+            {acu.estado==="entregado" && "Esperando la conformidad final."}
+            {acu.estado==="sin_respuesta" && "Se pidió la conformidad y no hubo respuesta. Lo entregado y las fechas quedan asentados."}
+            {acu.estado==="cerrado" && "Terminado y aceptado por las dos partes."}
+          </div>
+          {esperaMiFirma && (
+            <div className="acu-banda-acts">
+              <button className="btn btn-primary" onClick={()=>{setPass("");setModal({t:"aceptar"});}}>
+                Aceptar y firmar
+              </button>
+              <button className="btn btn-secondary" onClick={()=>setModal({t:"rechazar"})}>
+                No acepto
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* En borrador, lo que toca es mandarlo a firmar. */}
+    {acu.estado==="borrador" && puedo("editar") && (
+      <div className="acu-banda neutro">
+        <Icon n="handshake" size={18}/>
+        <div className="acu-banda-b">
+          <strong>Este contrato todavía no lo aceptó nadie</strong>
+          <div className="acu-banda-d">
+            Mientras sea borrador puedes cambiar lo que quieras. Cuando esté
+            listo, mándalo a la otra parte: firmas tú, el contenido queda fijo
+            y queda constancia de que los dos estuvieron de acuerdo.
+          </div>
+          <div className="acu-banda-acts">
+            <button className="btn btn-primary"
+              onClick={()=>{setPass("");setModal({t:"enFirme"});}}>
+              Poner en firme y enviar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     <div className={`exp-head ${st.estado}`}>
       <div className="exp-bar-wrap">
         <div className="exp-bar"><div className="exp-fill" style={{width:`${st.porcentaje}%`}}/></div>
@@ -494,8 +558,15 @@ export function renderExpediente(ctx){
                 <a className="btn btn-tertiary" style={{marginRight:8}} href={a.url}
                    target="_blank" rel="noopener noreferrer nofollow">Abrir enlace</a>
               )}
-              <button className="btn btn-tertiary"
-                onClick={()=>removeEvidence(r.id, aid)}>Retirar</button>
+              {/* ← NUEVO (18 oct): «Retirar» no tenía ninguna puerta.
+                  El servidor sí lo rechazaba, pero el botón se
+                  ofrecía igual y fallaba al pulsarlo. Ahora pregunta,
+                  y de paso hereda la regla del acuerdo: de un
+                  contrato en firma no se retira nada. */}
+              {(!puedo || puedo("retirar")) && (
+                <button className="btn btn-tertiary"
+                  onClick={()=>removeEvidence(r.id, aid)}>Retirar</button>
+              )}
             </div>
             );
           })}

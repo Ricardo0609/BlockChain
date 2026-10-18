@@ -8,6 +8,10 @@ export const ACCIONES = new Set([
   "CREACIÓN", "EDICIÓN", "FIRMA", "COMPARTIDO", "EVIDENCIA", "VINCULADO",
   "CONSULTA", "SOLICITUD", "CONVERSIÓN", "EXPORTACIÓN", "MIGRACIÓN",
   "VALIDACIÓN",
+  // ← NUEVO (18 oct): aceptar o rechazar el contrato. Una aceptación
+  // es una firma, pero un rechazo no, y los dos tienen que caber en
+  // la misma historia.
+  "ACUERDO",
 ]);
 
 /**
@@ -85,6 +89,7 @@ export function permisoDeEvento(evento = {}){
     // Una validación la escribe el servidor con lo que dijo el SAT;
     // quien la pide sólo necesita poder ver el documento.
     case "VALIDACIÓN":   return "ver";
+    case "ACUERDO":      return "aprobar";
     case "EVIDENCIA":
       if(tipo === "baja" || tipo === "imagen-baja") return "retirar";
       if(tipo === "vinculo") return "vincular";

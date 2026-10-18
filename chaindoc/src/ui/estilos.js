@@ -281,6 +281,40 @@ img,svg{max-width:100%}
 .hist-check .vban{margin-bottom:0;text-align:center}
 .hist-check-n{font-size:14px;line-height:1.5;color:var(--gris-200);text-align:center}
 
+/* ── LA DOBLE FIRMA ── */
+/* ← NUEVO (18 oct): la banda que dice en qué punto está el acuerdo.
+   Va arriba del avance porque de nada sirve mirar cuántos
+   comprobantes faltan si el contrato no lo aceptó nadie todavía. */
+.acu-banda{display:flex;gap:12px;align-items:flex-start;border-radius:12px;
+  padding:14px 16px;margin-bottom:16px;border:1px solid var(--bordes);background:var(--bg-soft)}
+.acu-banda.espera{border-color:#f0d9b5;background:#fdf6ec}
+.acu-banda.bien{border-color:#86efac;background:#f0fdf4}
+.acu-banda.mal{border-color:#fca5a5;background:var(--rojo-soft)}
+.acu-banda-b{flex:1;min-width:0}
+.acu-banda-b strong{font-family:var(--f-p);font-weight:600;font-size:16px;display:block;margin-bottom:4px}
+.acu-banda-d{font-size:14px;line-height:1.55;color:var(--gris-400)}
+.acu-banda-d em{font-style:italic}
+.acu-banda-acts{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.acu-fijo{background:var(--bg-soft);border:1px solid var(--bordes);border-radius:10px;
+  padding:12px 14px;margin-bottom:18px}
+.acu-fijo-t{font-size:11.5px;letter-spacing:1.2px;text-transform:uppercase;
+  color:var(--gris-400);margin-bottom:8px}
+.acu-fijo-l{display:flex;justify-content:space-between;gap:16px;font-size:14.5px;padding:3px 0}
+.acu-fijo-l span:last-child{color:var(--gris-300)}
+.acu-check{display:flex;gap:11px;align-items:flex-start;border:1px solid var(--bordes);
+  border-radius:10px;padding:12px 14px;margin:16px 0 4px;cursor:pointer}
+.acu-check input{width:18px;height:18px;margin-top:1px;flex-shrink:0;accent-color:var(--negro)}
+.acu-check strong{display:block;font-size:14.5px;font-weight:600;margin-bottom:3px}
+.acu-check em{display:block;font-size:13px;line-height:1.5;color:var(--gris-300);font-style:normal}
+.acu-acepto{background:var(--bg-soft);border:1px solid var(--bordes);border-radius:10px;
+  padding:14px 15px;font-size:14.5px;line-height:1.55;margin-bottom:18px}
+.acu-nota{font-size:12.5px;line-height:1.6;color:var(--gris-300);margin:10px 0 0}
+.acu-motivos{display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
+.acu-motivo{display:flex;align-items:center;gap:11px;border:1px solid var(--bordes);
+  border-radius:10px;padding:11px 14px;cursor:pointer;font-size:14.5px}
+.acu-motivo.on{border-color:var(--negro);border-width:1.5px}
+.acu-motivo input{width:17px;height:17px;margin:0;flex-shrink:0;accent-color:var(--negro)}
+
 /* ── SIDE MENU ── */
 .menu-ov{position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.4);backdrop-filter:blur(2px);display:flex;justify-content:flex-end;animation:fO .2s ease}
 .menu{background:#fff;width:386px;max-width:100%;height:100%;padding:24px 56px;display:flex;flex-direction:column;align-items:center;gap:24px;animation:slR .25s ease}

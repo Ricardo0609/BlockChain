@@ -1,5 +1,6 @@
 // Despacha el modal abierto (ctx.modal.t) al archivo que lo dibuja.
 
+import { modalAcuerdo } from "./Acuerdo";
 import { modalAjustes } from "./Ajustes";
 import { modalAviso } from "./Aviso";
 import { modalCarpetas } from "./Carpetas";
@@ -13,6 +14,7 @@ import { modalSalir } from "./Salir";
 
 export function renderModales(ctx){
   return modalCrear(ctx)
+    ?? modalAcuerdo(ctx)
     ?? modalAviso(ctx)
     ?? modalCarpetas(ctx)
     ?? modalFirma(ctx)

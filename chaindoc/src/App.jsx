@@ -52,6 +52,7 @@ import {
 import {
   claveCarpetas, leerCarpetas, tieneCarpetasPropias, carpetasEnUso,
 } from "./nucleo/carpetas";
+import { bloquea, esperaFirmaDe, estadoAcuerdo } from "./nucleo/acuerdo";
 import { llamar, errorBackend } from "./nucleo/backend";
 import { leerAvisos } from "./nucleo/avisos";
 import {
@@ -155,6 +156,15 @@ export default function ChainDoc(){
   // no se ha consultado; se pide al abrirlo y no bloquea nada si falla.
   const [anclaje,setAnclaje]         = useState(null);
   const [anclando,setAnclando]       = useState(false);
+
+  // ← NUEVO (18 oct): la doble firma del contrato.
+  const [firmaBusy,setFirmaBusy]     = useState(false);
+  const [enFirmeCorreo,setEnFirmeCorreo] = useState("");
+  const [enFirmeNombre,setEnFirmeNombre] = useState("");
+  const [enFirmeConf,setEnFirmeConf]     = useState(false);
+  const [enFirmeErr,setEnFirmeErr]       = useState("");
+  const [rechMotivo,setRechMotivo]   = useState("");
+  const [rechDetalle,setRechDetalle] = useState("");
   // ← NUEVO: lo legal. `legalOk` es la casilla del registro; `legalTab`
   // recuerda qué documento se estaba leyendo al cambiar de pestaña.
   const [legalOk,setLegalOk]         = useState(false);
@@ -1343,6 +1353,68 @@ export default function ChainDoc(){
   // ← NUEVO (Etapa 5): forzar el anclaje sin esperar a la madrugada.
   // Sirve para probarlo y para el día que alguien necesite el paquete
   // ya mismo.
+  // ── LA DOBLE FIRMA DEL CONTRATO ──
+  //
+  // El estado se deriva del propio documento, no se guarda: lo calcula
+  // `estadoAcuerdo` cada vez. Así no puede quedar una pastilla en
+  // pantalla diciendo «vigente» sobre un contrato que nadie aceptó.
+  const acu = estadoAcuerdo(d);
+
+  // Si este contrato está esperando MI firma. La misma función que usa
+  // el servidor para decidirlo, para que no puedan discrepar.
+  const esperaMiFirma = esperaFirmaDe(d, acctEmail);
+
+  const mandarAFirmar = async()=>{
+    if(!enServidor()){ notify("Esto necesita el servidor activo","err"); return; }
+    const correo = enFirmeCorreo.trim().toLowerCase();
+    if(!correo.includes("@")){ setEnFirmeErr("Escribe el correo de la otra parte."); return; }
+    if(correo === (acctEmail||"").toLowerCase()){
+      setEnFirmeErr("Ese es tu propio correo."); return;
+    }
+    if(pass.trim().length<4){ setEnFirmeErr("Escribe tu código de firma."); return; }
+    setFirmaBusy(true); setEnFirmeErr("");
+    try{
+      const r = await llamar("ponerEnFirme", {
+        opId: d.id, correo, nombre: enFirmeNombre.trim() || null,
+        requiereConformidad: enFirmeConf, codigo: pass.trim(),
+      });
+      setD(r.doc); setModal(null); setPass("");
+      setEnFirmeCorreo(""); setEnFirmeNombre(""); setEnFirmeConf(false);
+      await refresh();
+      notify(`Contrato mandado a firmar a ${correo} ✓`);
+    }catch(e){ console.error(e); setEnFirmeErr(errorBackend(e)); }
+    finally{ setFirmaBusy(false); }
+  };
+
+  const aceptarElContrato = async()=>{
+    if(!enServidor()){ notify("Esto necesita el servidor activo","err"); return; }
+    if(pass.trim().length<4){ notify("Escribe tu código de firma","err"); return; }
+    setFirmaBusy(true);
+    try{
+      const r = await llamar("aceptarContrato", { opId: d.id, codigo: pass.trim() });
+      setD(r.doc); setModal(null); setPass("");
+      await refresh();
+      notify("Aceptaste el contrato ✓");
+    }catch(e){ console.error(e); notify(errorBackend(e),"err"); }
+    finally{ setFirmaBusy(false); }
+  };
+
+  const rechazarElContrato = async()=>{
+    if(!enServidor()){ notify("Esto necesita el servidor activo","err"); return; }
+    if(!rechMotivo){ notify("Elige un motivo","err"); return; }
+    setFirmaBusy(true);
+    try{
+      const r = await llamar("rechazarContrato", {
+        opId: d.id, motivo: rechMotivo, detalle: rechDetalle.trim() || null,
+      });
+      setD(r.doc); setModal(null);
+      setRechMotivo(""); setRechDetalle("");
+      await refresh();
+      notify("Mandamos tu respuesta");
+    }catch(e){ console.error(e); notify(errorBackend(e),"err"); }
+    finally{ setFirmaBusy(false); }
+  };
+
   const anclarYa = async()=>{
     setAnclando(true);
     try{
@@ -1808,8 +1880,18 @@ export default function ChainDoc(){
     pedirConCuenta,
     accesos: listaDeAccesos(d),
     miRol: rolDe(d, uid, acctEmail),
-    puedo: (accion)=>puede(rolDe(d, uid, acctEmail), accion),
-    puedoSubirA: (reqId)=>puedeSubirA(d, rolDe(d, uid, acctEmail), acctEmail, reqId),
+    // ← ACTUALIZADO (18 oct): el rol dice quién eres; el estado del
+    // acuerdo dice si lo que pides tiene sentido ahora. Va aquí, en el
+    // único sitio donde la interfaz pregunta «¿puedo?», para no tener
+    // que acordarse en cada botón.
+    puedo: (accion)=> !bloquea(d, accion) && puede(rolDe(d, uid, acctEmail), accion),
+    puedoSubirA: (reqId)=> !bloquea(d, "subir")
+      && puedeSubirA(d, rolDe(d, uid, acctEmail), acctEmail, reqId),
+    acu, esperaMiFirma,
+    mandarAFirmar, aceptarElContrato, rechazarElContrato,
+    firmaBusy, rechMotivo, setRechMotivo, rechDetalle, setRechDetalle,
+    enFirmeCorreo, setEnFirmeCorreo, enFirmeNombre, setEnFirmeNombre,
+    enFirmeConf, setEnFirmeConf, enFirmeErr,
     verificado, verifBusy, reenviarVerificacion, comprobarVerificacion,
     verificarFiscal, verificandoFiscal,
     revisarProveedores, revisando69B, hallazgos69B,

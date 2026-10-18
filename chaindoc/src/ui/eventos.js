@@ -26,6 +26,18 @@ export const EVENTOS = {
       return "Firma registrada";
     },
   },
+  // ← NUEVO (18 oct): la doble firma del contrato.
+  "ACUERDO": {
+    ico:"handshake", tono:"firma",
+    titulo:(b)=>{
+      const t = b.meta?.tipo;
+      if(t==="puesto-en-firme") return "Mandado a firmar";
+      if(t==="aceptado")        return "Contrato aceptado";
+      if(t==="rechazado")       return "Contrato no aceptado";
+      if(t==="conformidad")     return "Conformidad dada";
+      return "Acuerdo";
+    },
+  },
   "COMPARTIDO": {
     ico:"group_add", tono:"comparte",
     titulo:(b)=> b.meta?.tipo==="revocado" ? "Acceso retirado"
