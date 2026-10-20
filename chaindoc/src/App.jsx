@@ -52,7 +52,7 @@ import {
 import {
   claveCarpetas, leerCarpetas, tieneCarpetasPropias, carpetasEnUso,
 } from "./nucleo/carpetas";
-import { bloquea, esperaFirmaDe, estadoAcuerdo } from "./nucleo/acuerdo";
+import { bloquea, decideAhora, esperaFirmaDe, estadoAcuerdo } from "./nucleo/acuerdo";
 import { llamar, errorBackend } from "./nucleo/backend";
 import { leerAvisos } from "./nucleo/avisos";
 import {
@@ -67,6 +67,7 @@ import {
 import { renderAcceso } from "./pantallas/Acceso";
 import { renderEntrega } from "./pantallas/Entrega";
 import { renderDocumento } from "./pantallas/Documento";
+import { renderRevision } from "./pantallas/Revision";
 import { renderInicio } from "./pantallas/Inicio";
 import { ESTILOS } from "./ui/estilos";
 export default function ChainDoc(){
@@ -1364,9 +1365,20 @@ export default function ChainDoc(){
   // el servidor para decidirlo, para que no puedan discrepar.
   const esperaMiFirma = esperaFirmaDe(d, acctEmail);
 
-  const mandarAFirmar = async()=>{
+  // ← NUEVO (20 oct): si todavía tengo algo que decidir sobre este
+  // contrato, abrirlo me lleva a leerlo, no al expediente.
+  const decision = decideAhora(d, acctEmail);
+
+  // ← ACTUALIZADO (20 oct): acepta el correo de quien lo llama.
+  //
+  // Antes sólo leía `enFirmeCorreo`, el del modal de poner en firme,
+  // porque mandar a firmar vivía en su propia puerta. Ahora vive
+  // dentro de Compartir, que tiene su propio campo de correo
+  // (`mIn`), y el modal viejo se queda como atajo. Los dos llaman
+  // aquí; cambia nada más de dónde sale el correo.
+  const mandarAFirmar = async(correoDe=null, nombreDe=null)=>{
     if(!enServidor()){ notify("Esto necesita el servidor activo","err"); return; }
-    const correo = enFirmeCorreo.trim().toLowerCase();
+    const correo = String(correoDe ?? enFirmeCorreo).trim().toLowerCase();
     if(!correo.includes("@")){ setEnFirmeErr("Escribe el correo de la otra parte."); return; }
     if(correo === (acctEmail||"").toLowerCase()){
       setEnFirmeErr("Ese es tu propio correo."); return;
@@ -1375,11 +1387,12 @@ export default function ChainDoc(){
     setFirmaBusy(true); setEnFirmeErr("");
     try{
       const r = await llamar("ponerEnFirme", {
-        opId: d.id, correo, nombre: enFirmeNombre.trim() || null,
+        opId: d.id, correo, nombre: String(nombreDe ?? enFirmeNombre).trim() || null,
         requiereConformidad: enFirmeConf, codigo: pass.trim(),
       });
       setD(r.doc); setModal(null); setPass("");
       setEnFirmeCorreo(""); setEnFirmeNombre(""); setEnFirmeConf(false);
+      setMIn(""); setShareErr(""); setShareFound(null); setShareRol("involucrado");
       await refresh();
       notify(`Contrato mandado a firmar a ${correo} ✓`);
     }catch(e){ console.error(e); setEnFirmeErr(errorBackend(e)); }
@@ -1887,7 +1900,7 @@ export default function ChainDoc(){
     puedo: (accion)=> !bloquea(d, accion) && puede(rolDe(d, uid, acctEmail), accion),
     puedoSubirA: (reqId)=> !bloquea(d, "subir")
       && puedeSubirA(d, rolDe(d, uid, acctEmail), acctEmail, reqId),
-    acu, esperaMiFirma,
+    acu, esperaMiFirma, decision,
     mandarAFirmar, aceptarElContrato, rechazarElContrato,
     firmaBusy, rechMotivo, setRechMotivo, rechDetalle, setRechDetalle,
     enFirmeCorreo, setEnFirmeCorreo, enFirmeNombre, setEnFirmeNombre,
@@ -1918,6 +1931,12 @@ export default function ChainDoc(){
 
   // ── RENDER: HOME ──
   if(screen==="home") return renderInicio(ctx);
+
+  // ── RENDER: REVISIÓN DEL CONTRATO ──
+  // Va antes que el documento: mientras tengas algo que decidir sobre
+  // este contrato, lo primero es el contrato. Al expediente se entra
+  // después de haberlo aceptado.
+  if(decision) return (<><style>{ESTILOS}</style>{renderRevision(ctx)}</>);
 
   // ── RENDER: DOC ──
   return renderDocumento(ctx);

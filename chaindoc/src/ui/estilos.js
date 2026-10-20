@@ -315,6 +315,51 @@ img,svg{max-width:100%}
 .acu-motivo.on{border-color:var(--negro);border-width:1.5px}
 .acu-motivo input{width:17px;height:17px;margin:0;flex-shrink:0;accent-color:var(--negro)}
 
+/* ── REVISAR UN CONTRATO ANTES DE ENTRAR ── */
+/* ← NUEVO (20 oct): la pantalla que ve quien tiene que firmar. Es una
+   pagina y no un modal: un contrato se lee, y hay que poder irse a
+   consultarlo y volver. */
+.rev{max-width:760px;margin:0 auto;padding:28px 24px 60px}
+.rev-aviso{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--bordes);
+  background:var(--bg-soft);border-radius:12px;padding:14px 16px;margin-bottom:24px}
+.rev-aviso.mal{border-color:#fca5a5;background:var(--rojo-soft)}
+.rev-aviso strong{display:block;font-family:var(--f-p);font-weight:600;font-size:16px;margin-bottom:4px}
+.rev-aviso-d{font-size:14px;line-height:1.6;color:var(--gris-400)}
+.rev-aviso-d em{font-style:italic}
+.rev-de{font-size:14.5px;color:var(--gris-400);margin-bottom:7px}
+.rev-t{font-family:var(--f-t);font-weight:500;font-size:32px;line-height:1.2;
+  letter-spacing:-.015em;margin:0 0 22px}
+.rev-datos{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:26px}
+.rev-dato{flex:1 1 180px;border:1px solid var(--bordes);border-radius:10px;padding:12px 14px}
+.rev-dato-l{font-size:11.5px;letter-spacing:1.1px;text-transform:uppercase;
+  color:var(--gris-400);margin-bottom:5px}
+.rev-dato-v{font-family:var(--f-p);font-weight:600;font-size:19px}
+.rev-dato-v.chico{font-size:14.5px;font-weight:400;line-height:1.5}
+.rev-rol{color:var(--gris-300)}
+.rev-sec{margin-bottom:26px}
+.rev-sec-t{font-size:11.5px;letter-spacing:1.1px;text-transform:uppercase;
+  color:var(--gris-400);margin-bottom:9px}
+.rev-texto{max-height:420px;overflow:auto;min-height:0;font-size:16.5px;line-height:1.75;
+  border:1px solid var(--bordes);border-radius:10px;padding:16px 18px;background:var(--bg-soft)}
+.rev-reqs{display:flex;flex-direction:column;gap:8px}
+.rev-req{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--bordes);
+  border-radius:10px;padding:12px 14px}
+.rev-req-n{width:23px;height:23px;flex-shrink:0;border-radius:50%;border:1.5px solid var(--bordes);
+  display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--gris-400)}
+.rev-req-b{flex:1;min-width:0}
+.rev-req-t{font-size:15px}
+.rev-req-d{font-size:13.5px;line-height:1.5;color:var(--gris-300);margin-top:2px}
+.rev-req-m{font-size:13px;color:var(--gris-300);white-space:nowrap}
+.rev-acts{display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+  border-top:1px solid var(--bordes);padding-top:22px}
+.rev-acts-n{font-size:13px;color:var(--gris-300);line-height:1.5}
+@media(max-width:760px){
+  .rev{padding:20px 16px 48px}
+  .rev-t{font-size:25px}
+  .rev-req-m{white-space:normal}
+  .rev-acts .btn{flex:1 1 100%}
+}
+
 /* ── SIDE MENU ── */
 .menu-ov{position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.4);backdrop-filter:blur(2px);display:flex;justify-content:flex-end;animation:fO .2s ease}
 .menu{background:#fff;width:386px;max-width:100%;height:100%;padding:24px 56px;display:flex;flex-direction:column;align-items:center;gap:24px;animation:slR .25s ease}

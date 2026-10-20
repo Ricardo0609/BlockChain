@@ -34,26 +34,100 @@ export const CAMPOS_EDITABLES = new Set([
 // Compartir ya no es "todo o nada". Al electricista que sube su factura
 // no tiene por qué verle los pagos al plomero, ni tocar las fases.
 
-export const ROLES = ["propietario", "editor", "aportador", "aprobador", "lector", "auditor"];
+export const ROLES = [
+  "propietario", "involucrado", "lector", "auditor",
+  // ← Siguen valiendo, ya no se ofrecen. Ver ROLES_OFRECIDOS.
+  "editor", "aportador", "aprobador",
+];
+
+/**
+ * Los que se le OFRECEN a quien comparte. Son tres a propósito.
+ *
+ * ← NUEVO (20 oct). Había seis roles, y tres existían por cómo está
+ * hecho esto por dentro, no porque alguien los pidiera. Quien
+ * comparte un contrato no se pregunta «¿editor o aportador?»: se
+ * pregunta quién es esta persona respecto al trato. Son tres
+ * respuestas:
+ *
+ *   - **Involucrado** — la otra parte. Firma el contrato y sube lo
+ *     que le toca. No lo puede editar, y una vez aceptado no lo
+ *     puede editar nadie.
+ *   - **Lector** — lo ve y ya. El socio al que le enseñas en qué va.
+ *   - **Auditor** — entra al expediente completo y firma como
+ *     testigo, pero no tiene que aprobar el contrato antes. Es el
+ *     extra para quien quiera un tercero mirando.
+ *
+ * Los otros tres no se borran: hay documentos que ya los usan y
+ * quitarlos dejaría a esa gente sin permisos de un día para otro.
+ * Simplemente dejan de ofrecerse.
+ */
+export const ROLES_OFRECIDOS = ["involucrado", "lector", "auditor"];
 
 export const ROL_TEXTO = {
   propietario: "Propietario",
+  involucrado: "Involucrado",
+  lector:      "Lector",
+  auditor:     "Auditor",
   editor:      "Editor",
   aportador:   "Aportador",
   aprobador:   "Aprobador",
-  lector:      "Lector",
-  auditor:     "Auditor",
 };
 
+/** Lo que se le explica a quien comparte, en una línea. */
 /** Qué puede hacer cada rol. Lo que no está aquí, no se puede. */
 export const PERMISOS = {
   propietario: ["ver", "editar", "subir", "retirar", "firmar", "compartir", "pedir", "aprobar", "exportar", "proteger", "vincular", "borrar"],
+  // ← NUEVO (20 oct). Lleva «retirar» porque es quien sube: si se
+  // equivoca de archivo tiene que poder quitarlo él, sin pedirle
+  // permiso a nadie. No lleva «editar»: el contrato que aceptó no lo
+  // puede cambiar, y ésa es justo la garantía que firma.
+  involucrado: ["ver", "subir", "retirar", "firmar", "aprobar", "exportar"],
   editor:      ["ver", "editar", "subir", "retirar", "firmar", "pedir", "exportar", "proteger", "vincular"],
   aportador:   ["ver", "subir"],
   aprobador:   ["ver", "aprobar", "firmar", "exportar"],
   auditor:     ["ver", "exportar"],
   lector:      ["ver"],
 };
+
+/**
+ * Endereza el mapa de roles.
+ *
+ * ← NUEVO (20 oct): hace falta porque los roles se guardaron mal.
+ *
+ * Se escribían con `{ ["roles." + correo]: rol }`, y para Firestore un
+ * punto en el nombre de un campo NO es un punto: es «entra un nivel».
+ * Así que `roles.betolira@gmail.com` no guardaba el rol de ese correo,
+ * sino esto:
+ *
+ *     roles: { "betolira@gmail": { com: "aprobador" } }
+ *
+ * De ahí salían dos daños. Uno visible: la lista de accesos enseñaba
+ * el correo partido, «betolira@gmail», como si fuera otra persona. Y
+ * otro que no se veía y es el peor: al buscar el rol del correo
+ * entero no había nada, y se caía al apaño de compatibilidad que
+ * trata a cualquiera de `sharedWith` como EDITOR. Mandabas a alguien
+ * como aprobador y acababa con permiso para editar el documento.
+ *
+ * Esto rearma las piezas: junta los trozos con el punto que los
+ * separó y tira lo que quedó vacío de borrar un acceso. Se usa al
+ * leer y al escribir, así que los documentos que ya están mal se
+ * ponen bien solos, sin tener que migrar nada.
+ */
+export function sanearRoles(roles){
+  const salida = {};
+  const bajar = (nodo, clave) => {
+    if(typeof nodo === "string"){
+      if(ROLES.includes(nodo)) salida[clave] = nodo;
+      return;
+    }
+    if(!nodo || typeof nodo !== "object") return;
+    for(const [trozo, dentro] of Object.entries(nodo)){
+      bajar(dentro, clave ? `${clave}.${trozo}` : trozo);
+    }
+  };
+  bajar(roles && typeof roles === "object" ? roles : {}, "");
+  return salida;
+}
 
 /**
  * Rol de una persona en una operación.
@@ -67,7 +141,7 @@ export function rolDe(op, uid, email){
   if(op.ownerUid === uid) return "propietario";
   const correo = (email || "").toLowerCase();
   if(!correo) return null;
-  const rol = op.roles?.[correo];
+  const rol = sanearRoles(op.roles)[correo];
   if(rol && ROLES.includes(rol)) return rol;
   return (op.sharedWith || []).includes(correo) ? "editor" : null;
 }

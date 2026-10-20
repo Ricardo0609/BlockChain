@@ -150,10 +150,21 @@ export function estadoAcuerdo(exp, { hoy = new Date() } = {}) {
   if (!aceptoEmisor) return armar("borrador", { exp, plazos, hoy });
 
   if (!aceptoReceptor) {
+    // ← ARREGLADO (20 oct): la ventana para firmar la cierra el
+    // SILENCIO, no la fecha límite del contrato. Eran dos relojes
+    // metidos en uno.
+    //
+    // `fechaLimite` es cuándo hay que ENTREGAR el trabajo, y la saca
+    // la IA del texto del contrato. Usarla aquí hacía que un contrato
+    // con la fecha de entrega ya pasada naciera «sin_firmar» en el
+    // mismo instante de mandarlo: el destinatario lo abría y se iba
+    // derecho al expediente sin que nadie le pidiera firmar, y el
+    // emisor no tenía ni cómo saber por qué.
+    //
+    // Que la entrega vaya tarde es asunto de las partes y lo dice el
+    // expediente. No es motivo para que el contrato sea infirmable.
     const esperando = diasEntre(a.pedidoEn, hoy);
-    const vencido = exp?.fechaLimite
-      ? ymd(hoy) > String(exp.fechaLimite)
-      : esperando != null && esperando > plazos.silencio;
+    const vencido = esperando != null && esperando > plazos.silencio;
     return armar(vencido ? "sin_firmar" : "en_firma", { exp, plazos, hoy });
   }
 
@@ -225,8 +236,6 @@ function esPosterior(a, b) {
   const tb = new Date(b).getTime();
   return Number.isFinite(ta) && Number.isFinite(tb) && tb > ta;
 }
-
-const ymd = (f) => new Date(f).toISOString().slice(0, 10);
 
 /**
  * Qué deja hacer cada estado, al margen de quién seas.
@@ -324,6 +333,27 @@ export function esDestinatario(exp, email) {
 /** Si este contrato está esperando la firma de esta persona. */
 export const esperaFirmaDe = (exp, email, hoy = new Date()) =>
   estadoAcuerdo(exp, { hoy }).estado === "en_firma" && esDestinatario(exp, email);
+
+/**
+ * Si a esta persona le toca decidir sobre este contrato, y en qué punto.
+ *
+ * Devuelve "pendiente" si todavía tiene que leerlo y contestar,
+ * "rechazado" si ya dijo que no, y null si no es asunto suyo —porque
+ * no es el destinatario, porque ya lo aceptó, o porque el contrato
+ * siguió su camino.
+ *
+ * De esto depende a qué pantalla va al abrir el contrato: mientras
+ * tenga algo que decidir, lo primero es el contrato, no el expediente.
+ * Se deriva del estado y no de un «ya lo vio» guardado, que se
+ * desincroniza en cuanto cambia de dispositivo.
+ */
+export function decideAhora(exp, email, hoy = new Date()) {
+  if (!esDestinatario(exp, email)) return null;
+  const { estado } = estadoAcuerdo(exp, { hoy });
+  if (estado === "en_firma") return "pendiente";
+  if (estado === "rechazado") return "rechazado";
+  return null;
+}
 
 /** Si este documento está gobernado por la doble firma. */
 export const tieneAcuerdo = (exp) => Boolean(exp?.acuerdo?.pedidoEn);

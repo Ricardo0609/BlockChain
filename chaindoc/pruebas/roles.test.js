@@ -6,7 +6,7 @@
 import { describe, it, expect } from "vitest";
 import {
   ROLES, PERMISOS, rolDe, puede, permisoDeEvento, puedeSubirA,
-  revisarCambioDeAcceso, CAMPOS_EDITABLES,
+  revisarCambioDeAcceso, CAMPOS_EDITABLES, sanearRoles, ROLES_OFRECIDOS,
 } from "../functions/lib/permisos.js";
 import * as cliente from "../src/nucleo/accesos.js";
 
@@ -185,5 +185,120 @@ describe("servidor y navegador dicen lo mismo", () => {
     expect(new Set(lista.map((a) => a.correo)).size).toBe(lista.length);
     expect(lista.find((a) => a.correo === "luis@x.com").rol).toBe("aportador");
     expect(lista.find((a) => a.correo === "vieja@x.com").rol).toBe("editor");
+  });
+});
+// ── EL MAPA DE ROLES PARTIDO POR LOS PUNTOS ──────────────────────
+//
+// Los roles se guardaban con `{ ["roles." + correo]: rol }`, y para
+// Firestore el punto del correo no es un punto: es «entra un nivel».
+// Así que el rol de quien fuera acababa escondido un piso más abajo,
+// bajo un correo recortado.
+//
+// Lo peor no era el correo partido en la lista. Era que al buscar el
+// rol del correo entero no había nada y se caía al apaño de
+// compatibilidad, que trata a cualquiera de `sharedWith` como EDITOR:
+// mandabas a alguien como aprobador y se quedaba pudiendo editar.
+describe("roles guardados mal por los puntos del correo", () => {
+  const roto = {
+    id: "op2", ownerUid: "U1", ownerEmail: "ana@x.com",
+    sharedWith: ["betolira@gmail.com"],
+    roles: { "betolira@gmail": { com: "aprobador" } },
+  };
+
+  it("junta los trozos y devuelve el correo entero", () => {
+    expect(sanearRoles(roto.roles)).toEqual({ "betolira@gmail.com": "aprobador" });
+  });
+
+  it("aguanta los correos con varios puntos", () => {
+    expect(sanearRoles({ ana: { x: { com: { mx: "lector" } } } }))
+      .toEqual({ "ana.x.com.mx": "lector" });
+  });
+
+  it("tira lo que quedo vacio al retirar un acceso", () => {
+    expect(sanearRoles({ "betolira@gmail": {} })).toEqual({});
+    expect(sanearRoles({ "betolira@gmail": { com: "noexiste" } })).toEqual({});
+  });
+
+  it("no toca un mapa que ya estaba bien", () => {
+    expect(sanearRoles(op.roles)).toEqual(op.roles);
+    expect(sanearRoles(null)).toEqual({});
+    expect(sanearRoles("hola")).toEqual({});
+  });
+
+  // El daño de verdad: el aprobador se volvia editor sin que nadie lo
+  // decidiera.
+  it("el rol que vale es el que se le dio, no editor", () => {
+    expect(rolDe(roto, null, "betolira@gmail.com")).toBe("aprobador");
+    expect(cliente.rolDe(roto, null, "betolira@gmail.com")).toBe("aprobador");
+  });
+
+  it("y el servidor y el navegador siguen diciendo lo mismo", () => {
+    for(const correo of ["betolira@gmail.com", "betolira@gmail", "otro@x.com"]){
+      expect(cliente.rolDe(roto, null, correo)).toBe(rolDe(roto, null, correo));
+    }
+  });
+
+  it("la lista de accesos ya no enseña el correo recortado", () => {
+    const lista = cliente.listaDeAccesos(roto);
+    expect(lista.map((a) => a.correo)).toEqual(["ana@x.com", "betolira@gmail.com"]);
+    expect(lista.find((a) => a.correo === "betolira@gmail.com").rol).toBe("aprobador");
+  });
+
+  it("quien esta en sharedWith sin rol sigue siendo editor, como antes", () => {
+    expect(rolDe(op, null, "vieja@x.com")).toBe("editor");
+  });
+});
+
+// ── EL ROL «INVOLUCRADO» ─────────────────────────────────────────
+//
+// Había seis roles y tres existían por cómo está hecho esto por
+// dentro, no porque alguien los pidiera. Quien comparte un contrato no
+// se pregunta «¿editor o aportador?»: se pregunta quién es esta
+// persona respecto al trato.
+//
+// «Involucrado» es la otra parte: firma el contrato y sube lo que le
+// toca entregar. Lo que NO puede es editarlo — y eso no es un detalle
+// de permisos, es la garantía que firma.
+describe("el rol involucrado", () => {
+  it("sube lo suyo y puede quitarlo si se equivoco", () => {
+    for(const accion of ["ver", "subir", "retirar", "firmar", "aprobar", "exportar"]){
+      expect(puede("involucrado", accion)).toBe(true);
+    }
+  });
+
+  it("pero no puede cambiar el contrato que firmo", () => {
+    for(const accion of ["editar", "compartir", "borrar", "proteger"]){
+      expect(puede("involucrado", accion)).toBe(false);
+    }
+  });
+
+  it("reemplaza a aprobador justo en lo que le faltaba: subir", () => {
+    expect(puede("aprobador", "subir")).toBe(false);
+    expect(puede("involucrado", "subir")).toBe(true);
+  });
+
+  it("el servidor y el navegador dicen lo mismo de el", () => {
+    expect(cliente.PERMISOS.involucrado).toEqual(PERMISOS.involucrado);
+  });
+
+  it("se ofrecen tres roles, y los viejos siguen valiendo", () => {
+    expect(cliente.ROLES_OFRECIDOS).toEqual(["involucrado", "lector", "auditor"]);
+    // Las dos copias de la tabla tienen que decir lo mismo. Es lo que
+    // promete la cabecera de los dos archivos, y sin esta linea se
+    // podia cambiar una y dejar la otra.
+    expect(ROLES_OFRECIDOS).toEqual(cliente.ROLES_OFRECIDOS);
+    expect(ROLES).toEqual(cliente.ROLES);
+    for(const r of cliente.ROLES_OFRECIDOS) expect(ROLES).toContain(r);
+    // No se borran: hay documentos que ya los usan y quitarlos dejaria
+    // a esa gente sin permisos de un dia para otro.
+    for(const viejo of ["editor", "aportador", "aprobador"]) expect(ROLES).toContain(viejo);
+  });
+
+  it("todo rol que se puede asignar tiene permisos y nombre", () => {
+    for(const r of cliente.ROLES_ASIGNABLES){
+      expect(PERMISOS[r], r).toBeDefined();
+      expect(cliente.ROL_TEXTO[r], r).toBeTruthy();
+      expect(cliente.ROL_AYUDA[r], r).toBeTruthy();
+    }
   });
 });

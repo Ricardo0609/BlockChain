@@ -18,14 +18,23 @@
 import { IcoLink, Icon } from "../ui/iconos";
 import { tiempoRestante } from "../nucleo/invitaciones";
 import { fmtFull } from "../nucleo/formato";
+import { fmtMonto } from "../smartContract";
+import { ROLES_OFRECIDOS } from "../nucleo/accesos";
 
-const COMPLETOS = ["editor", "aprobador", "lector", "auditor"];
+/**
+ * Los roles que se ofrecen en un documento normal.
+ *
+ * Un documento de texto no tiene nada que aceptar ni nada que
+ * entregar, así que «Involucrado» no pinta nada ahí: sólo se ofrece
+ * en los contratos. Ver ROLES_OFRECIDOS en `nucleo/accesos.js`.
+ */
+const COMPLETOS = ["editor", "lector", "auditor"];
 
 const PLAZOS = [3, 7, 15, 30];
 
 export function modalCompartir(ctx){
   const {
-    d, modal, setModal, uid, mIn, setMIn, saving,
+    acu, d, modal, setModal, uid, mIn, setMIn, saving,
     doShare, revokeShare, shareBusy, shareErr, shareFound, setShareErr, setShareFound,
     shareModo, setShareModo, shareRol, setShareRol,
     shareReqs, setShareReqs, shareTodo, setShareTodo, pedirConCuenta,
@@ -33,6 +42,7 @@ export function modalCompartir(ctx){
     invDias, setInvDias, crearEnlace, enlaceNuevo, setEnlaceNuevo, copiarEnlace,
     enlaces, verEnlaces, revocarEnlace, copyLink,
     ROL_TEXTO, ROL_AYUDA, accesos, puedo, verificado, reenviarVerificacion, verifBusy,
+    enFirmeConf, setEnFirmeConf, enFirmeErr, firmaBusy, mandarAFirmar, pass, setPass,
   } = ctx;
   if(modal.t !== "share") return null;
 
@@ -41,6 +51,29 @@ export function modalCompartir(ctx){
   const pendientes = (d.requisitos||[]).filter(r=>r.estado!=="cumplido");
   const esExpediente = d.kind==="expediente";
   const modo = shareModo || "completo";
+
+  // ── UNA SOLA PUERTA (20 oct) ───────────────────────────────
+  //
+  // Mandar un contrato a firmar vivía en otro botón, dentro del
+  // expediente. Ricardo lo probó tres veces por el camino que le
+  // pedía la cabeza —Compartir— y el contrato nunca llegó a ponerse
+  // en firme: la otra parte entraba al expediente sin que nadie le
+  // pidiera firmar nada.
+  //
+  // La lección no es «faltaba un aviso». Es que cuando hay dos
+  // verbos para una intención, la gente elige el que dice su cabeza,
+  // no el que programamos. Así que compartir un contrato con la otra
+  // parte ES mandárselo a firmar, y pasa aquí.
+  //
+  // Sólo en borrador: un contrato ya mandado tiene una otra parte, y
+  // sólo una. A partir de ahí, compartir vuelve a ser compartir.
+  const enBorrador = esExpediente && (acu?.estado==="borrador") && puedo("editar");
+  const rolesCompletos = esExpediente
+    ? (enBorrador ? ROLES_OFRECIDOS : ROLES_OFRECIDOS.filter(r=>r!=="involucrado"))
+    : COMPLETOS;
+  const rol = rolesCompletos.includes(shareRol) ? shareRol : rolesCompletos[0];
+  const mandaAFirmar = rol==="involucrado";
+  const reqs = d.requisitos || [];
 
   const cerrar = ()=>{
     setModal(null); setEnlaceNuevo(null); setMIn("");
@@ -131,17 +164,43 @@ export function modalCompartir(ctx){
           {/* ── El detalle, según lo que eligió ── */}
           {modo==="completo" ? (
             <div className="modo-det">
-              <div className="rec-lbl">¿Qué puede hacer?</div>
+              <div className="rec-lbl">¿Quién es esta persona?</div>
               <div className="rol-lista">
-                {COMPLETOS.map(r=>(
-                  <label key={r} className={`rol-op ${shareRol===r?"on":""}`}>
-                    <input type="radio" name="rol" checked={shareRol===r}
+                {rolesCompletos.map(r=>(
+                  <label key={r} className={`rol-op ${rol===r?"on":""}`}>
+                    <input type="radio" name="rol" checked={rol===r}
                       onChange={()=>setShareRol(r)} />
                     <span className="rol-n">{ROL_TEXTO[r]}</span>
                     <span className="rol-d">{ROL_AYUDA[r]}</span>
                   </label>
                 ))}
               </div>
+
+              {/* Lo que va a quedar fijo al firmar. Va antes del correo
+                  y del código a propósito: es lo que se está firmando,
+                  y tiene que leerse antes de teclear nada. */}
+              {mandaAFirmar && (<>
+                <div className="acu-fijo">
+                  <div className="acu-fijo-t">Al firmar, esto queda fijo</div>
+                  <div className="acu-fijo-l">
+                    <span>{reqs.length} punto{reqs.length===1?"":"s"}</span><span>y sus importes</span>
+                  </div>
+                  {d.montoTotal!=null && (
+                    <div className="acu-fijo-l">
+                      <span>{fmtMonto(d.montoTotal, d.moneda||"MXN")}</span><span>total del contrato</span>
+                    </div>
+                  )}
+                  {d.fechaLimite && (
+                    <div className="acu-fijo-l"><span>{d.fechaLimite}</span><span>fecha límite</span></div>
+                  )}
+                  <div className="acu-fijo-l"><span>El texto del contrato</span><span>como está ahora</span></div>
+                </div>
+                <div className="enl-nota">
+                  Si después hay que cambiar algo, no se edita: se manda una
+                  versión nueva y se vuelve a firmar. Eso es lo que hace que la
+                  firma signifique algo.
+                </div>
+              </>)}
             </div>
           ) : (
             <div className="modo-det">
@@ -186,9 +245,29 @@ export function modalCompartir(ctx){
           {/* ── A quién ── */}
           <div className="rec-lbl">¿A quién?</div>
           <input className="inp" type="email" placeholder="correo@ejemplo.com" value={mIn}
-            disabled={shareBusy||saving||!verificado}
+            disabled={shareBusy||saving||firmaBusy||!verificado}
             onChange={e=>{setMIn(e.target.value);setShareErr("");setShareFound(null);}}
-            onKeyDown={e=>e.key==="Enter"&&modo==="completo"&&doShare()} />
+            onKeyDown={e=>e.key==="Enter"&&modo==="completo"&&!mandaAFirmar&&doShare()} />
+
+          {/* ── Tu firma, si es la otra parte ── */}
+          {modo==="completo" && mandaAFirmar && (<>
+            <label className="acu-check" htmlFor="sh-conf">
+              <input id="sh-conf" type="checkbox" checked={!!enFirmeConf}
+                onChange={e=>setEnFirmeConf(e.target.checked)} />
+              <span>
+                <strong>Pedir su conformidad al terminar</strong>
+                <em>Al final, los dos firman que quedó entregado. Para un trabajo
+                chico suele sobrar; para una obra, no.</em>
+              </span>
+            </label>
+
+            <label className="rec-lbl" htmlFor="sh-codigo">Tu código de firma</label>
+            <input id="sh-codigo" className="inp" type="password" placeholder="••••"
+              value={pass} disabled={firmaBusy}
+              onChange={e=>setPass(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&mandarAFirmar(mIn)} />
+            {enFirmeErr && <div className="share-err">{enFirmeErr}</div>}
+          </>)}
           {modo==="entregar" && (<>
             <textarea className="inp" style={{minHeight:64,resize:"vertical"}}
               placeholder="Mensaje (opcional): qué necesitas exactamente"
@@ -215,10 +294,18 @@ export function modalCompartir(ctx){
           {/* ── Cómo se lo mandas ── */}
           <div className="modal-row">
             {modo==="completo" ? (
-              <button className="btn btn-primary" onClick={doShare}
-                disabled={shareBusy||!mIn.trim()||!verificado}>
-                {shareBusy ? "Verificando…" : "Dar acceso"}
-              </button>
+              mandaAFirmar ? (
+                <button className={`btn btn-primary ${firmaBusy?"esperando":""}`}
+                  onClick={()=>mandarAFirmar(mIn)}
+                  disabled={firmaBusy||!mIn.trim()||!verificado}>
+                  {firmaBusy ? "Mandando…" : "Firmar y mandar"}
+                </button>
+              ) : (
+                <button className="btn btn-primary" onClick={doShare}
+                  disabled={shareBusy||!mIn.trim()||!verificado}>
+                  {shareBusy ? "Verificando…" : "Dar acceso"}
+                </button>
+              )
             ) : (<>
               <button className="btn btn-secondary" onClick={pedirConCuenta}
                 disabled={shareBusy||!mIn.trim()||!verificado}>
@@ -233,8 +320,9 @@ export function modalCompartir(ctx){
 
           {modo==="completo" && (
             <div className="enl-nota">
-              Para acceso completo hace falta cuenta y correo confirmado. Un enlace que
-              deje leer todo sin identificar a nadie se reenvía y acaba donde no debía.
+              {mandaAFirmar
+                ? "Le va a llegar el contrato para leerlo entero y aceptarlo o no. Hasta que lo acepte no entra al expediente, y mientras tanto el contrato no cambia."
+                : "Para acceso completo hace falta cuenta y correo confirmado. Un enlace que deje leer todo sin identificar a nadie se reenvía y acaba donde no debía."}
             </div>
           )}
         </>)}

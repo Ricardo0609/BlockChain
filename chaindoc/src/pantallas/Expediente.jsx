@@ -34,7 +34,7 @@ export function renderExpediente(ctx){
     setFilesOpen, setFocoDup, setMIn, setModal, setMontoReq, setPass,
     uid, verifVin, vinculos,
     puedo, puedoSubirA, verificarFiscal, verificandoFiscal, setEnlaceNuevo,
-    setShareModo, setShareTodo, setShareReqs, anclajesPorHash,
+    setShareModo, setShareTodo, setShareReqs, setShareRol, anclajesPorHash,
     abrirEnlace, cerrarEnlace, guardarEnlace,
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
     expTab, setExpTab,
@@ -130,7 +130,10 @@ export function renderExpediente(ctx){
               {acu.rechazo?.detalle && <><br/><em>«{acu.rechazo.detalle}»</em></>}
               <br/>Puedes corregirlo y volver a mandarlo.
             </>)}
-            {acu.estado==="sin_firmar" && "Nunca llegó a aceptarse y pasó la fecha. Puedes corregirlo y mandarlo otra vez."}
+            {/* ← ACTUALIZADO (20 oct): decía «pasó la fecha», y la fecha
+                ya no es lo que cierra el plazo de firma: lo cierra el
+                silencio del destinatario. */}
+            {acu.estado==="sin_firmar" && `Se mandó a firmar y nadie contestó en ${acu.plazos?.silencio||14} días. Puedes corregirlo y mandarlo otra vez.`}
             {acu.estado==="entregado" && "Esperando la conformidad final."}
             {acu.estado==="sin_respuesta" && "Se pidió la conformidad y no hubo respuesta. Lo entregado y las fechas quedan asentados."}
             {acu.estado==="cerrado" && "Terminado y aceptado por las dos partes."}
@@ -157,13 +160,17 @@ export function renderExpediente(ctx){
           <strong>Este contrato todavía no lo aceptó nadie</strong>
           <div className="acu-banda-d">
             Mientras sea borrador puedes cambiar lo que quieras. Cuando esté
-            listo, mándalo a la otra parte: firmas tú, el contenido queda fijo
-            y queda constancia de que los dos estuvieron de acuerdo.
+            listo, compártelo con la otra parte como <strong>Involucrado</strong>:
+            firmas tú, el contenido queda fijo, y hasta que esa persona lo acepte
+            no entra al expediente.
           </div>
           <div className="acu-banda-acts">
+            {/* ← ACTUALIZADO (20 oct): abre Compartir, no un modal
+                aparte. Eran dos puertas al mismo cuarto y la gente
+                entraba por la otra. */}
             <button className="btn btn-primary"
-              onClick={()=>{setPass("");setModal({t:"enFirme"});}}>
-              Poner en firme y enviar
+              onClick={()=>{setPass("");setShareRol("involucrado");setModal({t:"share"});}}>
+              Compartir y mandar a firmar
             </button>
           </div>
         </div>

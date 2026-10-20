@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import {
   ACCIONES_POR_ESTADO, ESTADOS, ETIQUETA, FUERZAS, GOBERNADAS, PLAZOS, TONO,
   TRANSICIONES, diasEntre, esperaRespuesta, estadoAcuerdo, firmaDe,
-  bloquea, esDestinatario, esperaFirmaDe, estadoBloquea, firmaronLasDos, firmasDe, motivoBloqueo, permiteEstado, plazosDe,
+  bloquea, decideAhora, esDestinatario, esperaFirmaDe, estadoBloquea, firmaronLasDos, firmasDe, motivoBloqueo, permiteEstado, plazosDe,
   puedeAhora, tieneAcuerdo, transicionValida,
 } from "../src/nucleo/acuerdo";
 
@@ -128,9 +128,33 @@ describe("cuando no sale bien", () => {
     expect(estadoAcuerdo(c, { hoy: HOY }).estado).toBe("en_firma");
   });
 
-  it("paso la fecha limite sin firmar: nunca llego a existir", () => {
+  // ← ARREGLADO (20 oct): antes esta prueba pedia lo contrario, y era
+  // el bug. La fecha limite es la de ENTREGAR el trabajo; usarla como
+  // plazo de firma hacia que un contrato con la entrega ya pasada
+  // naciera sin_firmar al mandarlo, y el destinatario entraba al
+  // expediente sin que le pidieran firmar nada.
+  it("la fecha limite ya pasada NO cierra el plazo de firma", () => {
     const c = enFirma();
     c.fechaLimite = "2026-10-01";
+    expect(estadoAcuerdo(c, { hoy: HOY }).estado).toBe("en_firma");
+  });
+
+  it("y el destinatario sigue teniendo que decidir", () => {
+    const c = enFirma();
+    c.fechaLimite = "2026-10-01";
+    expect(decideAhora(c, c.acuerdo.paraEmail, HOY)).toBe("pendiente");
+  });
+
+  it("mandado hoy con entrega para dentro de un mes: espera firma", () => {
+    const c = enFirma();
+    c.fechaLimite = "2026-11-30";
+    expect(estadoAcuerdo(c, { hoy: HOY }).estado).toBe("en_firma");
+  });
+
+  it("el silencio lo vence aunque la entrega siga en pie", () => {
+    const c = enFirma();
+    c.fechaLimite = "2026-11-30";
+    c.acuerdo.pedidoEn = dias(20);
     expect(estadoAcuerdo(c, { hoy: HOY }).estado).toBe("sin_firmar");
   });
 
@@ -488,5 +512,61 @@ describe("quien puede aceptar o rechazar", () => {
 
   it("en borrador no espera la firma de nadie", () => {
     expect(esperaFirmaDe({ id: "b", requisitos: [] }, "ana@correo.com", HOY)).toBe(false);
+  });
+});
+
+// A que pantalla va alguien al abrir un contrato.
+//
+// Mientras tenga algo que decidir, lo primero es el contrato y no el
+// expediente: ahi dentro la decision quedaba enterrada entre la barra
+// de avance y la lista de requisitos.
+//
+// Se deriva del estado y no de un "ya lo vio" guardado, que se
+// desincroniza en cuanto la persona cambia de dispositivo o borra los
+// datos del navegador.
+describe("a quien le toca decidir, y en que punto", () => {
+  it("al destinatario de un contrato en firma: pendiente", () => {
+    expect(decideAhora(enFirma(), "ana@correo.com", HOY)).toBe("pendiente");
+  });
+
+  it("al que ya dijo que no: rechazado", () => {
+    const c = enFirma({ rechazo: { motivo: "monto", fecha: dias(1) } });
+    expect(decideAhora(c, "ana@correo.com", HOY)).toBe("rechazado");
+  });
+
+  it("al que ya lo acepto: nada, que pase al expediente", () => {
+    expect(decideAhora(aceptado(), "ana@correo.com", HOY)).toBe(null);
+  });
+
+  it("a quien no es el destinatario: nada, aunque tenga acceso", () => {
+    expect(decideAhora(enFirma(), "otro@correo.com", HOY)).toBe(null);
+    const c = enFirma({ rechazo: { motivo: "monto", fecha: dias(1) } });
+    expect(decideAhora(c, "otro@correo.com", HOY)).toBe(null);
+  });
+
+  it("a quien lo mando: nada, el no decide", () => {
+    // firmo al mandarlo; lo suyo es esperar
+    expect(decideAhora(enFirma(), "luis@x.com", HOY)).toBe(null);
+  });
+
+  it("en un documento normal no hay nada que decidir", () => {
+    expect(decideAhora({ id: "r1", kind: "documento" }, "ana@correo.com", HOY)).toBe(null);
+    expect(decideAhora(null, "ana@correo.com", HOY)).toBe(null);
+  });
+
+  // ← ACTUALIZADO (20 oct): se vence por silencio, no por la fecha
+  // limite del contrato.
+  it("si vencio sin firmarse, ya no hay decision que tomar", () => {
+    const c = enFirma();
+    c.acuerdo.pedidoEn = dias(20);
+    expect(estadoAcuerdo(c, { hoy: HOY }).estado).toBe("sin_firmar");
+    expect(decideAhora(c, "ana@correo.com", HOY)).toBe(null);
+  });
+
+  it("tras corregirlo y volver a mandarlo, vuelve a tocarle", () => {
+    const c = enFirma({ rechazo: { motivo: "monto", fecha: dias(5) } });
+    c.acuerdo.pedidoEn = dias(1);
+    c.acuerdo.firmas = [firma("emisor", "aceptacion", { fecha: dias(1) })];
+    expect(decideAhora(c, "ana@correo.com", HOY)).toBe("pendiente");
   });
 });

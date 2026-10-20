@@ -30,7 +30,7 @@ import {
 } from "./lib/acuerdo.js";
 import {
   limpiarCambios, validarEvento, revisarCambioDeAcceso,
-  rolDe, puede, permisoDeEvento, puedeSubirA,
+  rolDe, puede, permisoDeEvento, puedeSubirA, sanearRoles,
   ROLES, ROL_TEXTO, esDueno, debeRegistrarConsulta, LIMITES,
 } from "./lib/permisos.js";
 import {
@@ -427,9 +427,15 @@ async function ponerAcceso(opId, correo, rol){
       throw new HttpsError("invalid-argument", "Demasiadas personas con acceso.");
     }
 
+    // ← ARREGLADO (20 oct): se escribía `[`roles.${correo}`]`, y para
+    // Firestore el punto del correo partía el campo en dos niveles.
+    // Se escribe el mapa entero, saneado de paso.
+    const roles = sanearRoles(op.roles);
+    roles[correo] = rol;
+
     t.update(refOp, {
       sharedWith: [...compartido],
-      [`roles.${correo}`]: rol,
+      roles,
       actualizadoEn: FieldValue.serverTimestamp(),
     });
     return { antes };
@@ -483,9 +489,15 @@ export const quitarAcceso = onCall(OPCIONES, async (req) => {
   const antes = rolDe(op, null, correo);
   if(!antes) return { doc: await leerOperacion(opId) };
 
+  // ← ARREGLADO (20 oct): igual que al dar acceso. Borrar
+  // `roles.<correo>` con punto no borraba a nadie: vaciaba el trozo de
+  // dentro y dejaba el de fuera como fantasma en la lista.
+  const roles = sanearRoles(op.roles);
+  delete roles[correo];
+
   await refOp.update({
     sharedWith: (op.sharedWith || []).filter((c) => c !== correo),
-    [`roles.${correo}`]: FieldValue.delete(),
+    roles,
     actualizadoEn: FieldValue.serverTimestamp(),
   });
 
@@ -1246,7 +1258,10 @@ export const ponerEnFirme = onCall(OPCIONES, async (req) => {
   // «aprobador» siempre, y a quien ya colaboraba como editor le
   // quitaba de paso el derecho a editar y a subir comprobantes.
   // Mandar un contrato a firmar no es motivo para degradar a nadie.
-  if(!rolDe(op, null, correo)) await ponerAcceso(opId, correo, "aprobador");
+  // ← ACTUALIZADO (20 oct): «involucrado», no «aprobador». La otra
+  // parte no sólo aprueba: después sube lo que le toque entregar, y
+  // con «aprobador» no podía.
+  if(!rolDe(op, null, correo)) await ponerAcceso(opId, correo, "involucrado");
 
   const plazos = plazosPedidos(req.data?.plazos);
   const acuerdo = {

@@ -23,6 +23,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { armarBloqueV2 } from "./bloques";
+import { decideAhora } from "./acuerdo";
 import { llamar } from "./backend";
 
 const ENV = (typeof import.meta !== "undefined" && import.meta.env) || {};
@@ -134,7 +135,20 @@ export const store = {
       }catch(e){ avisar("no se pudieron listar los documentos COMPARTIDOS contigo", e, `sharedWith contiene ${correo}`); }
     }
 
-    const lista = [...unicos.values()];
+    // ← NUEVO (20 oct): un contrato que TÚ rechazaste se te quita de
+    // la lista.
+    //
+    // Lo rechazaste: no es trabajo tuyo pendiente, y dejarlo ahí es
+    // ruido que no te deja ver lo que sí lo es. Al que lo mandó NO se
+    // le quita: es suyo, tiene que poder corregirlo y mandarlo otra
+    // vez, y tiene que ver que lo rechazaste.
+    //
+    // Se quita de la lista, no del mundo: si conservas el enlace,
+    // abrirlo te enseña tu propio rechazo con su motivo y su fecha.
+    // Ésa es tu constancia de que contestaste, y es lo último que
+    // conviene borrar en una herramienta que vende pruebas.
+    const lista = [...unicos.values()]
+      .filter((x) => decideAhora(x, correo) !== "rechazado");
     if(!enServidor()) return lista;
 
     // La lista del inicio necesita la cadena para contar bloques y firmas.

@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   limpiarCambios, validarEvento, revisarCambioDeAcceso,
   tieneAcceso, esDueno, debeRegistrarConsulta, ACCIONES, LIMITES,
+  CAMPOS_EDITABLES, permisoDeEvento,
 } from "../functions/lib/permisos.js";
 
 const op = {
@@ -81,5 +82,33 @@ describe("bitácora de consultas, decidida en el servidor", () => {
     const ayer = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
     const bloques = [{ action: "CONSULTA", meta: { uid: "U9" }, timestamp: `${ayer}T09:00:00.000Z` }];
     expect(debeRegistrarConsulta(op, bloques, "U9", "luis@x.com")).toBe(true);
+  });
+});
+
+// ← NUEVO (18 oct): el campo del acuerdo es del servidor y de nadie mas.
+//
+// Si `acuerdo` estuviera entre los campos editables, cualquiera con
+// acceso al documento podria escribirse una firma ajena por la via de
+// guardar campos, sin pasar por el codigo de firma. Toda la doble
+// firma se volveria decorativa, y nada fallaria a la vista.
+describe("el acuerdo no se escribe guardando campos", () => {
+  it("`acuerdo` no esta entre los campos editables", () => {
+    expect(CAMPOS_EDITABLES.has("acuerdo")).toBe(false);
+  });
+
+  it("limpiarCambios lo tira en silencio", () => {
+    const falso = { acuerdo: { firmas: [{ parte: "receptor" }] }, title: "Obra" };
+    expect(limpiarCambios(falso)).toEqual({ title: "Obra" });
+  });
+
+  it("ni por un camino parecido", () => {
+    for (const k of ["acuerdo", "firmas", "estado", "ownerUid", "roles", "sharedWith"]) {
+      expect(CAMPOS_EDITABLES.has(k)).toBe(false);
+    }
+  });
+
+  it("aceptar o rechazar es su propia accion, y pide aprobar", () => {
+    expect(ACCIONES.has("ACUERDO")).toBe(true);
+    expect(permisoDeEvento({ accion: "ACUERDO" })).toBe("aprobar");
   });
 });
