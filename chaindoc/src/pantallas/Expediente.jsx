@@ -3,6 +3,7 @@
 import { Icon, IcoEye } from "../ui/iconos";
 import { LIMITE_MB, isPreviewable } from "../storage";
 import { Timeline } from "../ui/Timeline";
+import { renderAccesos, conAccesoDe } from "./Accesos";
 import {
   aidDe,
   archivosDe,
@@ -35,6 +36,8 @@ export function renderExpediente(ctx){
     uid, verifVin, vinculos,
     puedo, puedoSubirA, verificarFiscal, verificandoFiscal, setEnlaceNuevo,
     setShareModo, setShareTodo, setShareReqs, setShareRol, anclajesPorHash,
+    // ← NUEVO (21 oct): la pestaña de quién más entra.
+    accesos,
     abrirEnlace, cerrarEnlace, guardarEnlace,
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
     expTab, setExpTab,
@@ -75,11 +78,22 @@ export function renderExpediente(ctx){
   // Son cuatro porque son cuatro preguntas distintas: qué falta, qué ha
   // pasado, qué se entregó y qué se pactó.
   const nArchivos = (d.requisitos||[]).reduce((n,r)=>n+archivosDe(r).length, 0);
+  // ← NUEVO (21 oct): quién más entra, igual que en el documento de
+  // texto. Sólo si está compartido: una pestaña que lleva a una lista
+  // vacía es una pestaña que estorba.
+  //
+  // Va al final a propósito. En un contrato lo primero es qué falta y
+  // qué ha pasado; quién tiene acceso se consulta de vez en cuando,
+  // pero cuando se consulta hay que poder CAMBIARLO ahí mismo, que es
+  // lo que antes obligaba a abrir el modal de compartir y reescribir
+  // el correo de alguien que ya estaba en la lista.
+  const conAcceso = conAccesoDe(accesos);
   const PESTANAS = [
     { id:"expediente", txt:"Expediente" },
     { id:"tiempo",     txt:"Línea de tiempo" },
     { id:"archivos",   txt:"Archivos", n:nArchivos, candado:!filesOpen && nArchivos>0 },
     { id:"contrato",   txt:"Contrato" },
+    ...(conAcceso.length ? [{ id:"accesos", txt:"Con acceso", n:conAcceso.length }] : []),
   ];
   const tab = PESTANAS.some(x=>x.id===expTab) ? expTab : "expediente";
 
@@ -696,6 +710,10 @@ export function renderExpediente(ctx){
       <div className="paper-ro">{d.content || "Este expediente no tiene texto de contrato."}</div>
     </div>
     )}
+
+    {/* El mismo panel que el documento de texto, no una copia: es la
+        misma pregunta y tiene que comportarse igual en los dos. */}
+    {tab==="accesos" && renderAccesos(ctx, { panelId:"panel-accesos", tabId:"tab-accesos" })}
 
     {/* ← ACTUALIZADO (14 oct): los adjuntos, en su pestaña. El candado
         no cambia: siguen pidiendo el código de firma o la biometría. */}

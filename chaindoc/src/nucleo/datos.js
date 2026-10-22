@@ -64,6 +64,7 @@ export const estaProtegido = (doc) => Boolean(doc?.protegido || doc?.password);
 export const CAMPOS_EDITABLES = [
   "title", "content", "fields", "folder", "password", "tplId",
   "kind", "requisitos", "fases", "solicitudes", "imagenes", "sharedWith", "roles",
+  "secciones",
   "fechaLimite", "montoTotal", "moneda", "partes", "resumen", "analisis",
   "convertidoDe", "source", "sourceFile",
 ];

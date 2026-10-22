@@ -7,6 +7,7 @@ import { Timeline } from "../ui/Timeline";
 import { aiConfigured, dondeEstaAdjunto, hayQueRevisarRFCs } from "../smartContract";
 import { deviceLabel } from "../biometric";
 import { fmtFull, fmtShort } from "../nucleo/formato";
+import { renderAccesos, conAccesoDe } from "./Accesos";
 import { renderExpediente } from "./Expediente";
 import { renderMenu } from "./MenuLateral";
 import { renderModales } from "../modales";
@@ -15,6 +16,7 @@ import { selloDe, firmaDe } from "../nucleo/bloques";
 import { Sello } from "../ui/Sello";
 import { esSelloViejo } from "../nucleo/sello";
 import { estaProtegido } from "../nucleo/datos";
+import { SECCIONES, motivoOcupada } from "../nucleo/secciones";
 import { ESTILOS } from "../ui/estilos";
 export function renderDocumento(ctx){
   const {
@@ -25,6 +27,11 @@ export function renderDocumento(ctx){
     setHist, setHistTab, setLinkErr, setLinkExp, setLock, setLockInput, setMIn, setMenu,
     setModal, setPass, setShowHashes, setTitle, showHashes, smartBusy, title, uid,
     setEnlaceNuevo, setShareModo, setShareTodo, setShareReqs,
+    // ← NUEVO (21 oct): pestañas de accesos y secciones apagables.
+    // Lo que usa el panel de accesos por dentro (cambiarRol, rolBusy,
+    // revokeShare) lo saca él de `ctx`; aquí sólo hace falta saber
+    // CUÁNTOS hay, para decidir si la pestaña existe.
+    accesos, docTab, setDocTab, secciones, setSecciones,
     // ← ACTUALIZADO (14 oct): sólo queda anclajesPorHash, que es lo que
     // la Línea de tiempo usa para marcar las fechas ya publicadas en
     // Bitcoin. resumenDeAnclaje, anclando y anclarYa se fueron con el
@@ -38,6 +45,40 @@ export function renderDocumento(ctx){
   // «Editar» ni «Firmar»; la decisión real la toma el servidor.
   const puede = (accion)=> !puedo || puedo(accion);
   const sigs = d.chain.filter(b=>b.action==="FIRMA");
+
+  // ← NUEVO (21 oct): quién más ve este documento, para las pestañas.
+  const conAcceso = conAccesoDe(accesos);
+  const DOC_TABS = [
+    { id:"documento", txt:"Documento" },
+    { id:"accesos",   txt:"Con acceso", n:conAcceso.length },
+  ];
+  const dtab = (d.kind!=="expediente" && conAcceso.length>0
+    && DOC_TABS.some(x=>x.id===docTab)) ? docTab : "documento";
+
+  // ← NUEVO (21 oct): las secciones de debajo del papel se pueden
+  // apagar. Una sección vacía que no se puede quitar no es neutra:
+  // parece un pendiente. Ver `nucleo/secciones.js`.
+  const cuentas = { imagenes:(d.imagenes||[]).length, firmas:sigs.length };
+  const verSec = (id)=> secciones?.[id] !== false;
+  const apagar = (id)=>{ setSecciones({...secciones, [id]:false}); setDirty(true); };
+  const prender = (id)=>{ setSecciones({...secciones, [id]:true}); setDirty(true); };
+  // Quitar una sección: sólo en edición y sólo si está vacía.
+  // Esconder una firma o una foto ya puestas sería esconder una
+  // prueba.
+  //
+  // Cuando NO se puede, sale el motivo escrito en vez de un botón
+  // apagado. Un botón gris sólo se explica al pasar el ratón por
+  // encima, y en un teléfono no hay ratón que pasar.
+  const quitarSec = (id)=>{
+    if(!editMode || d.kind==="expediente" || !puede("editar")) return null;
+    const motivo = motivoOcupada(id, cuentas);
+    if(motivo) return <span className="sec-no">{motivo}</span>;
+    return (
+      <button className="sec-x" onClick={()=>apagar(id)}>
+        <Icon n="close" size={16}/> Quitar sección
+      </button>
+    );
+  };
   const eds  = d.chain.filter(b=>b.action==="EDICIÓN"||b.action==="CREACIÓN");
   // ← ACTUALIZADO: los vínculos a expedientes también salen en esta pestaña
   const shs  = d.chain.filter(b=>b.action==="COMPARTIDO"||b.action==="VINCULADO");
@@ -126,6 +167,41 @@ export function renderDocumento(ctx){
           : <h1 className="doc-title">{d.title}</h1>}
       </div>
 
+      {/* ── PESTAÑAS (21 oct) ──────────────────────────────────
+          Sólo salen si el documento está compartido. Un documento
+          que es nada más tuyo no tiene accesos que mirar, y una
+          pestaña que lleva a una lista vacía es una pestaña que
+          estorba.
+
+          Van aquí, entre el título y el papel, como en los
+          expedientes: lo primero es el documento, y quién más lo ve
+          está a un clic sin tener que abrir el modal de compartir. */}
+      {d.kind!=="expediente" && conAcceso.length>0 && (
+        <nav className="exp-tabs doc-tabs" role="tablist" aria-label="Secciones del documento">
+          {DOC_TABS.map((x,i)=>(
+            <button key={x.id} role="tab" id={`d${x.id}-tab`}
+              aria-selected={dtab===x.id} aria-controls={`d${x.id}-panel`}
+              tabIndex={dtab===x.id ? 0 : -1}
+              className={`exp-tab ${dtab===x.id?"on":""}`}
+              onClick={()=>setDocTab(x.id)}
+              onKeyDown={e=>{
+                const paso = e.key==="ArrowRight" ? 1 : e.key==="ArrowLeft" ? -1 : 0;
+                if(!paso) return;
+                e.preventDefault();
+                setDocTab(DOC_TABS[(i + paso + DOC_TABS.length) % DOC_TABS.length].id);
+              }}>
+              {x.txt}
+              {x.n!=null && <span className="exp-tab-n">{x.n}</span>}
+            </button>
+          ))}
+        </nav>
+      )}
+
+      {/* ── Quién más lo ve, y con qué papel ── */}
+      {dtab==="accesos" && renderAccesos(ctx, { panelId:"daccesos-panel", tabId:"daccesos-tab" })}
+
+      {dtab==="documento" && (<>
+
       {/* ← NUEVO: en edición, un documento de texto puede volverse contrato inteligente */}
       {editMode && puedeConvertir(d) && !(convOculto||[]).includes(d.id) && (
         <div className="convertir">
@@ -207,13 +283,14 @@ export function renderDocumento(ctx){
 
       {/* ← NUEVO: evidencia visual del documento (no aplica a expedientes,
           que ya tienen su propia lista de comprobantes por requisito) */}
-      {d.kind!=="expediente" && (()=>{
+      {d.kind!=="expediente" && verSec("evidencia") && (()=>{
         const imgs = d.imagenes||[];
         return (
           <div className="galeria">
             <div className="adj-h">
               <span className="adj-t">Evidencia visual</span>
               <span className="adj-n">{imgs.length}</span>
+              {quitarSec("evidencia")}
             </div>
             <p className="gal-sub">
               Fotos que respaldan este documento: el ticket físico, el producto recibido,
@@ -255,6 +332,17 @@ export function renderDocumento(ctx){
         );
       })()}
 
+      {verSec("firmas") && (<>
+      {/* La cabecera sólo existe mientras editas: es el percherode
+          donde cuelga «Quitar sección». Fuera de edición el documento
+          se ve exactamente como siempre, con sus sellos y ya. */}
+      {editMode && d.kind!=="expediente" && puede("editar") && (
+        <div className="sec-cab">
+          <span className="adj-t">Firmas</span>
+          <span className="adj-n">{sigs.length}</span>
+          {quitarSec("firmas")}
+        </div>
+      )}
       <div className="sign-bar">
         {!iSigned && puede("firmar") && (
           <div className="sign-group">
@@ -286,6 +374,22 @@ export function renderDocumento(ctx){
         ))}
         {sigs.length===0 && <div className="sign-slot"><p>Firma pendiente</p></div>}
       </div>
+      </>)}
+
+      {/* ── Volver a poner lo que se quitó (21 oct) ──────────────
+          Sólo en edición y sólo lo que falta: dos botones fijos que
+          dijeran siempre lo mismo serían dos botones que casi siempre
+          sobran. Quien no quitó nada no ve ninguno. */}
+      {editMode && d.kind!=="expediente" && puede("editar") &&
+       SECCIONES.some(s=>!verSec(s.id)) && (
+        <div className="sec-add">
+          {SECCIONES.filter(s=>!verSec(s.id)).map(s=>(
+            <button key={s.id} className="btn btn-secondary" onClick={()=>prender(s.id)}>
+              <Icon n="add" size={18}/> {s.agregar}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ← ACTUALIZADO: antes no podía saltar de línea y ensanchaba toda la página en móvil */}
       {/* ← NUEVO (Etapa 4): resultado de la revisión de proveedores */}
@@ -373,6 +477,7 @@ export function renderDocumento(ctx){
         )}
       </div>
       )}
+      </>)}
     </div>
 
     {histOpen && (

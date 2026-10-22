@@ -53,6 +53,7 @@ import {
   claveCarpetas, leerCarpetas, tieneCarpetasPropias, carpetasEnUso,
 } from "./nucleo/carpetas";
 import { bloquea, decideAhora, esperaFirmaDe, estadoAcuerdo } from "./nucleo/acuerdo";
+import { limpiarSecciones, seccionesDe } from "./nucleo/secciones";
 import { llamar, errorBackend } from "./nucleo/backend";
 import { leerAvisos } from "./nucleo/avisos";
 import {
@@ -188,6 +189,14 @@ export default function ChainDoc(){
   // más de Compartir.
   const [solMsg,setSolMsg]         = useState("");
   const [fields,setFields]   = useState({});   // valores de la plantilla visual
+  // ← NUEVO (21 oct): qué bloques se enseñan debajo del papel. Se edita
+  // como el título o el contenido —cambia, queda sucio, y se guarda con
+  // «Guardar»— para que apagar una sección sea un bloque de la cadena y
+  // no un cambio invisible.
+  const [secciones,setSecciones] = useState({ evidencia:true, firmas:true });
+  // ← NUEVO (21 oct): qué pestaña del documento está abierta. Igual que
+  // `expTab` en los expedientes, y se vuelve a la primera al abrir otro.
+  const [docTab,setDocTab] = useState("documento");
   const [filterF,setFilterF] = useState(null);
   const [openSec,setOpenSec] = useState({carp:true,docs:true,comp:true});
   const [imp,setImp]         = useState(null);   // {stage,message,percent}
@@ -390,7 +399,7 @@ export default function ChainDoc(){
         const dd = await store.get(id);
         if(dd){
           setD(dd); setTitle(dd.title); setContent(dd.content||"");
-          setFields(dd.fields||{});
+          setFields(dd.fields||{}); setSecciones(seccionesDe(dd));
           setUnlocked(!estaProtegido(dd)); setScreen("doc");
           verificarVinculos(dd);                                 // ← NUEVO
           // ← NUEVO: al entrar por enlace directo la lista queda vacía y
@@ -707,6 +716,7 @@ export default function ChainDoc(){
 
     closeCreate();
     setD(nd); setTitle(name); setContent(nd.content); setFields(nd.fields||{});
+    setSecciones(seccionesDe(nd));
     setUnlocked(true); setEdit(true); setUrlDoc(id); setScreen("doc");
     }finally{ setCreando(false); }
   };
@@ -731,7 +741,8 @@ export default function ChainDoc(){
     const body = d.tplId ? serializeForm(d.tplId, fields) : content;
     const up = await aplicar(d,
       { accion:"EDICIÓN", contenido:body.slice(0,200) },
-      { title, content:body, fields: d.tplId ? fields : null },
+      { title, content:body, fields: d.tplId ? fields : null,
+        secciones: limpiarSecciones(secciones) },
       { autor:user, autorUid:uid });
     if(up){ setD(up); setContent(body); setDirty(false); setEdit(false); notify("Documento actualizado ✓"); }
     else notify("Error al guardar","err");
@@ -1521,6 +1532,34 @@ export default function ChainDoc(){
   };
 
   // ← NUEVO: retirar el acceso también queda asentado en la cadena
+  // ← NUEVO (21 oct): cambiarle el rol a alguien que ya tiene acceso.
+  //
+  // `doShare` ya sabía hacerlo, pero sólo desde el modal de compartir:
+  // había que volver a escribir el correo de alguien que ya está en la
+  // lista para cambiarle una cosa. Esto es lo mismo sin ese rodeo, y
+  // es lo que usan las pestañas de accesos.
+  const [rolBusy,setRolBusy] = useState("");
+  const cambiarRol = async(correo, rol)=>{
+    if(!correo || !rol) return;
+    if(rolDe(d, null, correo) === rol) return;
+    setRolBusy(correo);
+    try{
+      if(enServidor()){
+        const r = await compartirServidor(d.id, correo, rol);
+        setD(r.doc); notify(`${correo} entra ahora como ${ROL_TEXTO[rol]} ✓`);
+        return;
+      }
+      const up = await aplicar(d, {
+        accion:"COMPARTIDO",
+        contenido:`Rol de ${correo} cambiado a ${ROL_TEXTO[rol]}`,
+        meta:{ tipo:"cambio", correo, rol },
+      }, { roles:{ ...(d.roles||{}), [correo]: rol } }, { autor:user, autorUid:uid });
+      if(up){ setD(up); notify(`${correo} entra ahora como ${ROL_TEXTO[rol]} ✓`); }
+      else notify("No se pudo guardar","err");
+    }catch(e){ console.error(e); notify(errorBackend(e),"err"); }
+    finally{ setRolBusy(""); }
+  };
+
   const revokeShare = async(correo)=>{
     try{
       if(enServidor()){
@@ -1622,11 +1661,12 @@ export default function ChainDoc(){
     const dd = await store.get(id); if(!dd){ notify("No encontrado","err"); return; }
     setFocoDup(foco);
     setD(dd); setTitle(dd.title); setContent(dd.content||"");
-    setFields(dd.fields||{});                                   // ← NUEVO
+    setFields(dd.fields||{}); setSecciones(seccionesDe(dd));    // ← NUEVO
     setFilesOpen(false);                                        // ← NUEVO: se re-bloquea al abrir otro
     setVinculos({});                                            // ← NUEVO: limpia el anterior
     setFaseSel(null);                                           // ← NUEVO
     setExpTab("expediente");                                    // ← NUEVO: siempre se entra por la primera
+    setDocTab("documento");                                     // ← NUEVO: igual para el documento
     setUnlocked(!estaProtegido(dd)); setEdit(false); setDirty(false);
     setUrlDoc(id); setScreen("doc");
     verificarVinculos(dd);                                      // ← NUEVO: sin await, no bloquea
@@ -1859,6 +1899,9 @@ export default function ChainDoc(){
     bioBusy, bioCreds, bioOk, cancelarSolicitud, closeCreate, confirmarConversion,
     content, convOculto, copyLink, creando, createDoc, createExpediente, createStep, d, delDoc, doLogin,
     expTab, setExpTab, tplInfo, setTplInfo, desbloqueando,
+    // ← NUEVO (21 oct): secciones apagables y cambio de rol en sitio.
+    secciones, setSecciones, cambiarRol, rolBusy,
+    docTab, setDocTab,
     abrirEnlace, cerrarEnlace, guardarEnlace, entregarEnlaceReq,
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
     doLogout, doReset, doShare, doSignCode, doSignup, doVerify, docs, dragOver, drop,

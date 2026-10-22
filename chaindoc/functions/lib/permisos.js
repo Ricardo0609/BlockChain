@@ -25,6 +25,7 @@ export const ACCIONES = new Set([
 export const CAMPOS_EDITABLES = new Set([
   "title", "content", "fields", "folder", "tplId",
   "kind", "requisitos", "fases", "solicitudes", "imagenes",
+  "secciones",
   "fechaLimite", "montoTotal", "moneda", "partes", "resumen", "analisis",
   "convertidoDe", "source", "sourceFile",
 ]);

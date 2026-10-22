@@ -1424,4 +1424,47 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   .btn-secondary.on{background:var(--negro);color:#fff}
   .create-btn:active{background:var(--negro);color:#fff;border-color:var(--negro)}
 }
+
+/* ── NUEVO (21 oct): pestañas del documento, accesos y secciones ──
+   Las pestañas reutilizan .exp-tabs/.exp-tab de los expedientes a
+   propósito: son la misma cosa y tienen que verse igual. Lo único
+   propio es el aire, porque aquí van entre el título y el papel. */
+.doc-tabs{margin:0 auto 14px;max-width:var(--papel-w,820px)}
+.doc-acc{max-width:var(--papel-w,820px);margin:0 auto 24px;
+  display:flex;flex-direction:column;gap:12px}
+.doc-acc .share-list{display:flex;flex-direction:column;gap:8px}
+.doc-acc-pie{display:flex;justify-content:flex-start}
+
+/* El selector de papel dentro de la fila. Tiene que leerse como un
+   control, no como una etiqueta: quien lo ve debe saber que se toca. */
+.rol-sel{flex:0 0 auto;font-family:var(--f-p);font-size:13px;font-weight:600;
+  color:var(--negro);background:var(--bg-soft);border:1px solid var(--bordes);
+  border-radius:7px;padding:5px 8px;cursor:pointer;max-width:150px}
+.rol-sel:hover{border-color:var(--gris-300)}
+.rol-sel:focus-visible{outline:2px solid var(--negro);outline-offset:1px}
+.rol-sel:disabled{opacity:.5;cursor:default}
+
+/* Quitar una sección. Discreto: es una salida, no una acción
+   principal, y sólo existe mientras estás editando. */
+.sec-x{display:inline-flex;align-items:center;gap:5px;margin-left:auto;
+  background:none;border:1px solid var(--bordes);border-radius:7px;
+  font-family:var(--f-p);font-size:12.5px;font-weight:500;color:var(--gris-300);
+  padding:4px 9px;cursor:pointer;transition:color .15s,border-color .15s}
+.sec-x:hover:not(:disabled){color:var(--negro);border-color:var(--gris-300)}
+.sec-x:disabled{opacity:.45;cursor:not-allowed}
+.sec-x .msym{font-size:15px}
+
+/* El motivo, cuando la seccion NO se puede quitar. Va escrito y no en
+   un title: en un telefono no hay raton que pasar por encima. */
+.sec-no{margin-left:auto;text-align:right;font-size:12.5px;line-height:1.45;
+  color:var(--gris-300);max-width:300px}
+
+/* La cabecera de las firmas. Solo existe en edicion: es de donde
+   cuelga el boton de quitar, y fuera de edicion el documento tiene
+   que verse como siempre. */
+.sec-cab{max-width:var(--papel-w,820px);margin:26px auto 0;
+  display:flex;align-items:center;gap:9px}
+
+.sec-add{max-width:var(--papel-w,820px);margin:18px auto 0;
+  display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
 `;
