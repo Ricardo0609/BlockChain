@@ -1259,6 +1259,13 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   }
   .nav-actions::-webkit-scrollbar{display:none}
   .nav-actions .btn{flex-shrink:0}
+  /* ← NUEVO (22 oct): la campana, primera de la fila.
+     En movil esta fila es un carrusel que se desliza, y la campana
+     caia en x=493 con pantallas de 390: habia que deslizar hasta el
+     final para encontrar la unica cosa de la barra que avisa de algo.
+     Se mueve con order, sin tocar el orden del HTML, que en
+     escritorio esta bien como esta. */
+  .camp-btn{order:-1;margin-right:2px}
   .btn-secondary{padding:8px 14px;font-size:14px;border-width:2px;border-radius:10px}
   .btn-primary,.btn-warning{padding:10px 18px;font-size:14px}
   .hamburger{width:38px;height:38px;flex-shrink:0;gap:5px}
@@ -1467,4 +1474,52 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 
 .sec-add{max-width:var(--papel-w,820px);margin:18px auto 0;
   display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+
+/* ── NUEVO (22 oct): la campana ───────────────────────────────────
+   El panel reusa .menu-ov/.menu: es el mismo gesto —sale por la
+   derecha— y no hay razon para que se abra de otro lado. Solo cambia
+   el relleno, porque aqui dentro hay una lista y no una columna
+   centrada de botones. */
+.camp{padding:0;align-items:stretch;gap:0;overflow-y:auto}
+.camp-h{position:sticky;top:0;z-index:1;background:#fff;
+  display:flex;align-items:center;gap:10px;padding:18px 20px 14px;
+  border-bottom:1px solid var(--bordes)}
+.camp-t{flex:1;font-family:var(--f-t);font-size:19px;font-weight:600;color:var(--negro)}
+.camp-grupo{display:flex;flex-direction:column;padding:10px 12px 4px}
+.camp-g{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--gris-300);padding:6px 8px 8px}
+
+.noti{display:flex;gap:11px;text-align:left;width:100%;
+  background:none;border:1px solid transparent;border-radius:10px;
+  padding:11px 10px;cursor:pointer;transition:background .14s,border-color .14s}
+.noti:hover{background:var(--bg-soft);border-color:var(--bordes)}
+.noti:focus-visible{outline:2px solid var(--negro);outline-offset:-2px}
+.noti-i{flex:0 0 auto;width:34px;height:34px;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--bg-soft);color:var(--gris-400)}
+.noti.grave .noti-i{background:var(--rojo-soft);color:var(--rojo)}
+.noti-b{display:flex;flex-direction:column;gap:3px;min-width:0}
+.noti-t{font-size:14px;line-height:1.45;color:var(--negro);overflow-wrap:anywhere}
+.noti-f{font-size:12px;color:var(--gris-300)}
+
+.camp-vacio{display:flex;flex-direction:column;align-items:center;gap:9px;
+  text-align:center;padding:60px 34px;color:var(--gris-300)}
+.camp-vacio strong{font-family:var(--f-t);font-size:17px;color:var(--negro)}
+.camp-vacio span{font-size:13.5px;line-height:1.55}
+.camp-pie{margin-top:auto;padding:16px 20px 22px;font-size:12px;line-height:1.5;
+  color:var(--gris-300);border-top:1px solid var(--bordes)}
+
+/* El boton de la barra. El globito sale rojo solo cuando hay algo que
+   alguien espera de ti; lo demas es para enterarse y no urge. */
+.camp-btn{position:relative;background:none;border:none;cursor:pointer;
+  color:var(--gris-400);padding:8px;display:inline-flex;align-items:center;
+  border-radius:10px;flex-shrink:0;transition:color .15s,background .15s}
+.camp-btn:hover{color:var(--negro);background:var(--bg-soft)}
+.camp-btn.con{color:var(--negro)}
+.camp-btn:focus-visible{outline:2px solid var(--negro);outline-offset:1px}
+.camp-n{position:absolute;top:1px;right:1px;min-width:18px;height:18px;padding:0 4px;
+  border-radius:10px;background:var(--gris-400);color:#fff;
+  font-family:var(--f-p);font-size:11px;font-weight:700;line-height:18px;
+  text-align:center;border:2px solid #fff;box-sizing:content-box}
+.camp-n.urge{background:var(--rojo)}
 `;

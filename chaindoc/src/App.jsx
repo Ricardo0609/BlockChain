@@ -54,6 +54,7 @@ import {
 } from "./nucleo/carpetas";
 import { bloquea, decideAhora, esperaFirmaDe, estadoAcuerdo } from "./nucleo/acuerdo";
 import { limpiarSecciones, seccionesDe } from "./nucleo/secciones";
+import { notificacionesDe } from "./nucleo/notificaciones";
 import { llamar, errorBackend } from "./nucleo/backend";
 import { leerAvisos } from "./nucleo/avisos";
 import {
@@ -197,6 +198,9 @@ export default function ChainDoc(){
   // ← NUEVO (21 oct): qué pestaña del documento está abierta. Igual que
   // `expTab` en los expedientes, y se vuelve a la primera al abrir otro.
   const [docTab,setDocTab] = useState("documento");
+  // ← NUEVO (22 oct): el panel de notificaciones. No guarda nada: lo
+  // que enseña se deriva de los documentos ya cargados.
+  const [campanaOpen,setCampana] = useState(false);
   const [filterF,setFilterF] = useState(null);
   const [openSec,setOpenSec] = useState({carp:true,docs:true,comp:true});
   const [imp,setImp]         = useState(null);   // {stage,message,percent}
@@ -1893,6 +1897,12 @@ export default function ChainDoc(){
     notify("Enlace copiado ✓");
   };
 
+  // ← NUEVO (22 oct): lo que otra gente hizo contigo, derivado de los
+  // documentos que ya están cargados. Una tabla de «leídos» habría que
+  // escribirla, limpiarla, y se desincroniza entre el teléfono y la
+  // computadora; esto no, porque no existe. Ver `nucleo/notificaciones.js`.
+  const notis = notificacionesDe(docs, { uid, email: acctEmail });
+
   // Todo lo que las pantallas y modales necesitan del estado y los manejadores.
   const ctx = {
     MAX_IMGS, moveTo, migrarDatos, migrando, migrarArchivosDatos, migrandoArch, acctEmail, addImage, attachEvidence, authBusy, authMode, authStep,
@@ -1902,6 +1912,8 @@ export default function ChainDoc(){
     // ← NUEVO (21 oct): secciones apagables y cambio de rol en sitio.
     secciones, setSecciones, cambiarRol, rolBusy,
     docTab, setDocTab,
+    // ← NUEVO (22 oct): la campana.
+    notis, campanaOpen, setCampana,
     abrirEnlace, cerrarEnlace, guardarEnlace, entregarEnlaceReq,
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
     doLogout, doReset, doShare, doSignCode, doSignup, doVerify, docs, dragOver, drop,

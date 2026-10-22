@@ -14,6 +14,7 @@ import { renderMenu } from "./MenuLateral";
 import { renderModales } from "../modales";
 import { ESTILOS } from "../ui/estilos";
 import { TEXTO_AVISO, ordenar, esGrave } from "../nucleo/avisos";
+import { botonCampana, renderCampana } from "./Campana";
 import { estaProtegido } from "../nucleo/datos";
 import { rolDe, ROL_TEXTO } from "../nucleo/accesos";
 import { TIPOS_DOC, esApaisado, tipoDeDocumento } from "../nucleo/catalogos";
@@ -22,6 +23,7 @@ export function renderInicio(ctx){
     acctEmail, copyLink, docs, drop, filterF, folders, irADuplicado, menuOpen, modal,
     notif, openCreate, openDoc, openSec, setDrop, setFilterF, setFolders, setMIn,
     setMIn2, setMenu, setModal, setOpenSec, setView, uid, user, view,
+    campanaOpen,
     verificado, verifBusy, reenviarVerificacion, comprobarVerificacion, avisos,
     legalPend, aceptarLegal, setLegalTab,
   } = ctx;
@@ -116,6 +118,11 @@ export function renderInicio(ctx){
         <button className={`btn btn-secondary ${view==="carpetas"?"on":""}`} onClick={()=>{setView("carpetas");setFilterF(null);}}>Mis carpetas</button>
         <button className={`btn btn-secondary ${view==="documentos"?"on":""}`} onClick={()=>{setView("documentos");setFilterF(null);}}>Mis documentos</button>
         <button className={`btn btn-secondary ${view==="compartidos"?"on":""}`} onClick={()=>{setView("compartidos");setFilterF(null);}}>Compartidos conmigo</button>
+        {/* ← NUEVO (22 oct): la campana, pegada al menú. Las dos son
+            paneles que salen por la derecha, y van juntas por eso.
+            Lo de dentro no se parece: el menú es tu cuenta, la campana
+            es lo que hizo alguien más. */}
+        {botonCampana(ctx)}
         <button className="hamburger" onClick={()=>setMenu(true)}><span/><span/><span/></button>
       </div>
     </nav>
@@ -399,6 +406,7 @@ export function renderInicio(ctx){
     </div>
 
     {menuOpen && renderMenu(ctx)}
+    {campanaOpen && renderCampana(ctx)}
     {modal && renderModales(ctx)}
   </>);
 }

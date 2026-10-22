@@ -9,6 +9,7 @@ import { deviceLabel } from "../biometric";
 import { fmtFull, fmtShort } from "../nucleo/formato";
 import { renderAccesos, conAccesoDe } from "./Accesos";
 import { renderExpediente } from "./Expediente";
+import { botonCampana, renderCampana } from "./Campana";
 import { renderMenu } from "./MenuLateral";
 import { renderModales } from "../modales";
 import { selloUrl } from "../nucleo/catalogos";
@@ -32,6 +33,7 @@ export function renderDocumento(ctx){
     // revokeShare) lo saca él de `ctx`; aquí sólo hace falta saber
     // CUÁNTOS hay, para decidir si la pestaña existe.
     accesos, docTab, setDocTab, secciones, setSecciones,
+    campanaOpen,
     // ← ACTUALIZADO (14 oct): sólo queda anclajesPorHash, que es lo que
     // la Línea de tiempo usa para marcar las fechas ya publicadas en
     // Bitcoin. resumenDeAnclaje, anclando y anclarYa se fueron con el
@@ -155,6 +157,7 @@ export function renderDocumento(ctx){
                          setShareModo("completo"); setShareTodo(true); setShareReqs([]);
                          setModal({t:"share"}); }}>Compartir</button>
         <button className="btn btn-secondary" onClick={()=>setHist(true)}>Ver historial</button>
+        {botonCampana(ctx)}
         <button className="hamburger" onClick={()=>setMenu(true)}><span/><span/><span/></button>
       </div>
     </nav>
@@ -578,6 +581,7 @@ export function renderDocumento(ctx){
     )}
 
     {menuOpen && renderMenu(ctx)}
+    {campanaOpen && renderCampana(ctx)}
     {modal && renderModales(ctx)}
   </>);
 }
