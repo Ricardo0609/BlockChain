@@ -1489,11 +1489,27 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .camp-g{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
   color:var(--gris-300);padding:6px 8px 8px}
 
-.noti{display:flex;gap:11px;text-align:left;width:100%;
-  background:none;border:1px solid transparent;border-radius:10px;
-  padding:11px 10px;cursor:pointer;transition:background .14s,border-color .14s}
+/* La fila es un contenedor con DOS botones: entrar y quitar. Un boton
+   dentro de otro boton no es HTML valido y el navegador lo deshace
+   por su cuenta, asi que la X vive fuera del grande. */
+.noti{display:flex;align-items:flex-start;width:100%;
+  border:1px solid transparent;border-radius:10px;
+  transition:background .14s,border-color .14s}
 .noti:hover{background:var(--bg-soft);border-color:var(--bordes)}
-.noti:focus-visible{outline:2px solid var(--negro);outline-offset:-2px}
+.noti-ir{flex:1;min-width:0;display:flex;gap:11px;text-align:left;
+  background:none;border:none;padding:11px 4px 11px 10px;cursor:pointer}
+.noti-ir:focus-visible{outline:2px solid var(--negro);outline-offset:-2px;border-radius:9px}
+
+/* La X se insinua al pasar por encima, pero en una pantalla tactil no
+   hay «pasar por encima»: ahi se queda visible siempre. */
+.noti-x{flex:0 0 auto;align-self:center;margin:0 8px 0 2px;
+  width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+  background:none;border:none;border-radius:7px;cursor:pointer;
+  color:var(--gris-300);opacity:0;transition:opacity .14s,color .14s,background .14s}
+.noti:hover .noti-x,.noti-x:focus-visible{opacity:1}
+.noti-x:hover{color:var(--negro);background:var(--gris-100)}
+.noti-x:focus-visible{outline:2px solid var(--negro);outline-offset:-2px}
+@media(hover:none){ .noti-x{opacity:1} }
 .noti-i{flex:0 0 auto;width:34px;height:34px;border-radius:9px;
   display:flex;align-items:center;justify-content:center;
   background:var(--bg-soft);color:var(--gris-400)}
@@ -1508,6 +1524,16 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .camp-vacio span{font-size:13.5px;line-height:1.55}
 .camp-pie{margin-top:auto;padding:16px 20px 22px;font-size:12px;line-height:1.5;
   color:var(--gris-300);border-top:1px solid var(--bordes)}
+
+/* Deshacer. Pegado abajo y por encima de la lista: quitar algo de un
+   vistazo es facilisimo de hacer sin querer. */
+.camp-undo{position:sticky;bottom:0;z-index:2;display:flex;align-items:center;gap:12px;
+  margin:0 12px 12px;padding:11px 14px;border-radius:10px;
+  background:var(--negro);color:#fff;font-size:13.5px;
+  box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.camp-undo span{flex:1}
+.camp-undo .lnk{color:#fff;font-weight:600;text-decoration:underline;
+  background:none;border:none;cursor:pointer;font-family:var(--f-p);font-size:13.5px}
 
 /* El boton de la barra. El globito sale rojo solo cuando hay algo que
    alguien espera de ti; lo demas es para enterarse y no urge. */

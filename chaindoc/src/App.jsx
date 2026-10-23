@@ -55,6 +55,7 @@ import {
 import { bloquea, decideAhora, esperaFirmaDe, estadoAcuerdo } from "./nucleo/acuerdo";
 import { limpiarSecciones, seccionesDe } from "./nucleo/secciones";
 import { notificacionesDe } from "./nucleo/notificaciones";
+import { descartar, leerDescartes, recuperar } from "./nucleo/descartes";
 import { llamar, errorBackend } from "./nucleo/backend";
 import { leerAvisos } from "./nucleo/avisos";
 import {
@@ -201,6 +202,10 @@ export default function ChainDoc(){
   // ← NUEVO (22 oct): el panel de notificaciones. No guarda nada: lo
   // que enseña se deriva de los documentos ya cargados.
   const [campanaOpen,setCampana] = useState(false);
+  // ← NUEVO (23 oct): lo único de la campana que NO se puede deducir
+  // —«ya lo vi aquí y no pienso abrirlo»— vive en el navegador.
+  const [descartes,setDescartes] = useState({});
+  const [ultimaQuitada,setUltimaQuitada] = useState(null);
   const [filterF,setFilterF] = useState(null);
   const [openSec,setOpenSec] = useState({carp:true,docs:true,comp:true});
   const [imp,setImp]         = useState(null);   // {stage,message,percent}
@@ -352,6 +357,10 @@ export default function ChainDoc(){
       // ← NUEVO (16 oct): las carpetas son de la cuenta, no del
       // navegador. Se cargan aquí, al saber quién entró.
       setFolders(leerCarpetas(account.uid));
+      // ← NUEVO (23 oct): los avisos que esta persona ya quitó de la
+      // campana. Van con la cuenta, igual que las carpetas, para que
+      // dos personas en el mismo navegador no se mezclen.
+      setDescartes(leerDescartes(account.uid));
       setUser(profile?.name || account.displayName || "");
       setAcctEmail(account.email || "");
       // ← NUEVO: quien se registro antes de que existieran estos textos,
@@ -1901,7 +1910,20 @@ export default function ChainDoc(){
   // documentos que ya están cargados. Una tabla de «leídos» habría que
   // escribirla, limpiarla, y se desincroniza entre el teléfono y la
   // computadora; esto no, porque no existe. Ver `nucleo/notificaciones.js`.
-  const notis = notificacionesDe(docs, { uid, email: acctEmail });
+  const notis = notificacionesDe(docs, { uid, email: acctEmail, descartes });
+
+  const quitarNoti = (n)=>{
+    setDescartes(descartar(uid, n));
+    setUltimaQuitada(n);
+  };
+  const deshacerNoti = ()=>{
+    if(!ultimaQuitada) return;
+    setDescartes(recuperar(uid, ultimaQuitada.clave));
+    setUltimaQuitada(null);
+  };
+  // Al volver a abrir la campana, el «deshacer» de la vez pasada ya no
+  // viene a cuento: se quito hace rato y se dio por bueno.
+  const olvidarUndo = ()=> setUltimaQuitada(null);
 
   // Todo lo que las pantallas y modales necesitan del estado y los manejadores.
   const ctx = {
@@ -1914,6 +1936,7 @@ export default function ChainDoc(){
     docTab, setDocTab,
     // ← NUEVO (22 oct): la campana.
     notis, campanaOpen, setCampana,
+    quitarNoti, deshacerNoti, ultimaQuitada, olvidarUndo,
     abrirEnlace, cerrarEnlace, guardarEnlace, entregarEnlaceReq,
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
     doLogout, doReset, doShare, doSignCode, doSignup, doVerify, docs, dragOver, drop,

@@ -29,6 +29,7 @@
 
 import { decideAhora, esDestinatario, estadoAcuerdo, firmaDe } from "./acuerdo";
 import { rolDe } from "./accesos";
+import { estaDescartada } from "./descartes";
 
 /**
  * Cuándo fue la última vez que esta persona abrió este documento.
@@ -79,7 +80,7 @@ const corto = (t, n = 48) =>
  * Devuelve lo más reciente primero. Cada una trae `docId` porque la
  * campana no es un museo: se entra desde ahí.
  */
-export function notificacionesDe(docs, { uid, email } = {}) {
+export function notificacionesDe(docs, { uid, email, descartes } = {}) {
   const mio = String(email || "").toLowerCase();
   if (!uid && !mio) return [];
   const fuera = [];
@@ -149,7 +150,13 @@ export function notificacionesDe(docs, { uid, email } = {}) {
   }
 
   // Lo más reciente arriba; lo que no trae fecha, al final.
-  return fuera.sort((a, b) => String(b.fecha || "").localeCompare(String(a.fecha || "")));
+  return fuera
+    // ← NUEVO (23 oct): lo que quitaste con la X. Se filtra al final y
+    // no antes para que el filtro no tenga que repetirse en cada
+    // rama. Ver `nucleo/descartes.js`: compara por fecha, así que un
+    // hecho NUEVO con la misma clave vuelve a aparecer.
+    .filter((n) => !estaDescartada(descartes, n))
+    .sort((a, b) => String(b.fecha || "").localeCompare(String(a.fecha || "")));
 }
 
 /** Cuántas hay. Es el número del globito. */

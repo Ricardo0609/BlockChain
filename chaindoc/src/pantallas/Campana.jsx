@@ -20,20 +20,29 @@ import { ICONO } from "../nucleo/notificaciones";
 import { fmtShort } from "../nucleo/formato";
 
 export function renderCampana(ctx){
-  const { notis, setCampana, openDoc } = ctx;
+  const { notis, setCampana, openDoc, quitarNoti, deshacerNoti, ultimaQuitada } = ctx;
   const lista = notis || [];
   const pendientes = lista.filter(n=>n.pendiente);
   const avisos = lista.filter(n=>!n.pendiente);
 
+  // ← ACTUALIZADO (23 oct): la fila deja de ser un botón y pasa a ser
+  // un div con dos botones dentro. Un botón dentro de otro botón no es
+  // HTML válido y los navegadores lo deshacen por su cuenta, así que
+  // la X tenía que salir del botón grande.
   const Fila = (n)=>(
-    <button key={n.clave} className={`noti ${n.grave?"grave":""}`}
-      onClick={()=>{ setCampana(false); openDoc(n.docId); }}>
-      <span className="noti-i"><Icon n={ICONO[n.tipo]||"info"} size={19}/></span>
-      <span className="noti-b">
-        <span className="noti-t">{n.texto}</span>
-        {n.fecha && <span className="noti-f">{fmtShort(n.fecha)}</span>}
-      </span>
-    </button>
+    <div key={n.clave} className={`noti ${n.grave?"grave":""}`}>
+      <button className="noti-ir" onClick={()=>{ setCampana(false); openDoc(n.docId); }}>
+        <span className="noti-i"><Icon n={ICONO[n.tipo]||"info"} size={19}/></span>
+        <span className="noti-b">
+          <span className="noti-t">{n.texto}</span>
+          {n.fecha && <span className="noti-f">{fmtShort(n.fecha)}</span>}
+        </span>
+      </button>
+      <button className="noti-x" onClick={()=>quitarNoti(n)}
+        title="Quitar este aviso" aria-label={`Quitar: ${n.texto}`}>
+        <Icon n="close" size={17}/>
+      </button>
+    </div>
   );
 
   return (
@@ -76,9 +85,19 @@ export function renderCampana(ctx){
           )}
           <div className="camp-pie">
             Los avisos se quitan solos al abrir el documento. Lo que te toca
-            hacer se queda hasta que lo hagas.
+            hacer se queda hasta que lo hagas, o hasta que lo quites con la ×.
           </div>
         </>)}
+
+        {/* Deshacer. Quitar algo de un vistazo es facilísimo de hacer
+            sin querer, y sin esto la única salida sería abrir el
+            documento para que el aviso se regenerara. */}
+        {ultimaQuitada && (
+          <div className="camp-undo">
+            <span>Aviso quitado</span>
+            <button className="lnk" onClick={deshacerNoti}>Deshacer</button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -86,11 +105,12 @@ export function renderCampana(ctx){
 
 /** El botón de la barra de arriba, con su globito. */
 export function botonCampana(ctx){
-  const { notis, setCampana } = ctx;
+  const { notis, setCampana, olvidarUndo } = ctx;
   const n = (notis||[]).length;
   const urge = (notis||[]).some(x=>x.pendiente);
   return (
-    <button className={`camp-btn ${n?"con":""}`} onClick={()=>setCampana(true)}
+    <button className={`camp-btn ${n?"con":""}`}
+      onClick={()=>{ olvidarUndo?.(); setCampana(true); }}
       title={n ? `${n} notificación${n===1?"":"es"}` : "Notificaciones"}
       aria-label={n ? `Notificaciones: ${n} sin ver` : "Notificaciones"}>
       <Icon n={n ? "notifications_active" : "notifications"} size={26}/>
