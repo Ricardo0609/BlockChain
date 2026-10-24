@@ -378,14 +378,35 @@ describe("el cliente y el servidor dicen lo mismo", () => {
 // no estan en la tabla de estados, asi que sin esto quedarian
 // prohibidos en todos los estados a la vez.
 describe("que acciones gobierna el estado", () => {
-  it("manda sobre editar, subir y retirar", () => {
-    expect(GOBERNADAS).toEqual(["editar", "subir", "retirar"]);
+  // ← ACTUALIZADO (23 oct): entra «vincular». Adjuntar un documento
+  // como evidencia es ENTREGAR, igual que subir un archivo, y se
+  // escapaba del estado: a un contrato sin firmar no se le podia subir
+  // un PDF, pero si colgarle un documento.
+  it("manda sobre editar, subir, vincular y retirar", () => {
+    expect(GOBERNADAS).toEqual(["editar", "subir", "vincular", "retirar"]);
   });
 
   it("no se mete con lo que decide solo el rol", () => {
-    for (const a of ["firmar", "compartir", "pedir", "proteger", "vincular", "aprobar"]) {
+    for (const a of ["firmar", "compartir", "pedir", "proteger", "aprobar"]) {
       for (const e of ESTADOS) expect(estadoBloquea(e, a)).toBe(false);
     }
+  });
+
+  it("vincular va exactamente a la par de subir", () => {
+    for (const e of ESTADOS) {
+      expect(estadoBloquea(e, "vincular"), e).toBe(estadoBloquea(e, "subir"));
+    }
+  });
+
+  it("a un contrato que nadie firmo no se le cuelga un documento", () => {
+    expect(estadoBloquea("en_firma", "vincular")).toBe(true);
+    expect(estadoBloquea("borrador", "vincular")).toBe(true);
+    expect(estadoBloquea("rechazado", "vincular")).toBe(true);
+  });
+
+  it("y una vez vigente, si", () => {
+    expect(estadoBloquea("vigente", "vincular")).toBe(false);
+    expect(estadoBloquea("entregado", "vincular")).toBe(false);
   });
 
   it("bloquea editar en firma y vigente, no en borrador", () => {

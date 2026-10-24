@@ -102,17 +102,36 @@ const avisar = (que, e, extra = "") => {
 };
 
 export const store = {
-  async get(id){
+  /**
+   * Lee un documento. `null` si no se pudo.
+   *
+   * ← ACTUALIZADO (23 oct): con `conMotivo` dice además POR QUÉ no se
+   * pudo, porque no es lo mismo y al usuario se le estaba mintiendo.
+   * Un documento al que te retiraron el acceso sigue existiendo: las
+   * reglas de Firestore niegan la lectura, el error se tragaba aquí,
+   * y la pantalla decía «No encontrado». Quien lo lee entiende que su
+   * documento desapareció, que es la peor conclusión posible en algo
+   * que vende que nada se pierde.
+   *
+   * Sin `conMotivo` se comporta igual que siempre, así que los sitios
+   * que sólo quieren el documento no cambian.
+   */
+  async get(id, { conMotivo = false } = {}){
+    const salida = (doc, motivo = null) => conMotivo ? { doc, motivo } : doc;
     try{
       const s = await getDoc(doc(db, COL, id));
-      if(!s.exists()) return null;
+      if(!s.exists()) return salida(null, "no-existe");
       try{
-        return await conCadena(id, s.data());
+        return salida(await conCadena(id, s.data()));
       }catch(e){
         avisar("no se pudo leer la cadena del documento", e, id);
-        return { ...s.data(), chain: s.data().chain || [] };
+        return salida({ ...s.data(), chain: s.data().chain || [] });
       }
-    }catch(e){ avisar("no se pudo abrir el documento", e, id); return null; }
+    }catch(e){
+      avisar("no se pudo abrir el documento", e, id);
+      const codigo = String(e?.code || e?.message || e);
+      return salida(null, codigo.includes("permission") ? "sin-acceso" : "fallo");
+    }
   },
 
   /** Sólo lo tuyo y lo que te compartieron: las reglas rechazan pedir la colección entera. */

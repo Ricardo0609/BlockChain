@@ -247,8 +247,8 @@ function esPosterior(a, b) {
 export const ACCIONES_POR_ESTADO = {
   borrador:      ["editar", "poner-en-firme", "borrar"],
   en_firma:      ["aceptar", "rechazar", "retirar-envio"],
-  vigente:       ["subir", "retirar", "pedir-conformidad", "cerrar"],
-  entregado:     ["subir", "retirar", "dar-conformidad", "reportar-faltante"],
+  vigente:       ["subir", "vincular", "retirar", "pedir-conformidad", "cerrar"],
+  entregado:     ["subir", "vincular", "retirar", "dar-conformidad", "reportar-faltante"],
   cerrado:       [],
   rechazado:     ["editar", "poner-en-firme", "borrar"],
   sin_firmar:    ["editar", "poner-en-firme", "borrar"],
@@ -307,7 +307,12 @@ export const PERMISO_DE_ACCION = {
  * de las dos, pero sin un archivar que lo sustituya, prohibirlo deja
  * a la gente sin salida.
  */
-export const GOBERNADAS = ["editar", "subir", "retirar"];
+// ← ACTUALIZADO (23 oct): entra «vincular». Adjuntar un documento
+// como evidencia es ENTREGAR, igual que subir un archivo, y se
+// escapaba del estado: a un contrato que nadie habia firmado todavia
+// no se le podia subir un PDF, pero si colgarle un documento. Dos
+// puertas al mismo cuarto otra vez, y una sin cerradura.
+export const GOBERNADAS = ["editar", "subir", "vincular", "retirar"];
 
 /** Si el estado impide esta acción, al margen del rol. */
 export const estadoBloquea = (estado, accion) =>

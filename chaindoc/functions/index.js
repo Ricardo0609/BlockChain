@@ -30,7 +30,7 @@ import {
 } from "./lib/acuerdo.js";
 import {
   limpiarCambios, validarEvento, revisarCambioDeAcceso,
-  rolDe, puede, permisoDeEvento, puedeSubirA, sanearRoles,
+  rolDe, puede, permisoDeEvento, puedeSubirA, sanearRoles, PERMISOS_QUE_CAMBIAN,
   ROLES, ROL_TEXTO, esDueno, debeRegistrarConsulta, LIMITES,
 } from "./lib/permisos.js";
 import {
@@ -140,7 +140,8 @@ async function asentar({ opId, evento, cambios, uid, email, autor, tocarFecha = 
   // CAMPOS_EDITABLES a propósito: si lo estuviera, cualquiera con
   // acceso podría escribirse una firma ajena por la vía de guardar
   // campos, y toda esta función sobraría.
-  const campos = { ...limpiarCambios(cambios), ...(camposServidor || {}) };
+  const delCliente = limpiarCambios(cambios);
+  const campos = { ...delCliente, ...(camposServidor || {}) };
 
   const refOp = db.doc(`${OPS}/${opId}`);
 
@@ -151,7 +152,18 @@ async function asentar({ opId, evento, cambios, uid, email, autor, tocarFecha = 
 
     // El permiso que exige el bloque sale del propio evento: una FIRMA
     // pide «firmar», una EVIDENCIA de baja pide «retirar», etc.
-    if(exigirAcceso) exigir(op, uid, email, permiso || permisoDeEvento(ev));
+    const pide = permiso || permisoDeEvento(ev);
+    if(exigirAcceso) exigir(op, uid, email, pide);
+
+    // ← NUEVO (23 oct): un evento de los de mirar no puede traer
+    // cambios. Sin esto, quitar la puerta de «editar» de arriba
+    // dejaría colar campos dentro de un bloque de CONSULTA, que sólo
+    // pide «ver». Los campos que pone el servidor (`camposServidor`)
+    // no pasan por aquí: no vienen de fuera.
+    if(Object.keys(delCliente).length && !PERMISOS_QUE_CAMBIAN.has(pide)){
+      throw new HttpsError("permission-denied",
+        "Un bloque de este tipo no puede cambiar el documento.");
+    }
     revisarCambioDeAcceso(op, campos);
 
     const n = op.bloques || 0;
@@ -303,12 +315,16 @@ export const agregarBloque = onCall(OPCIONES, async (req) => {
   const { opId, evento, cambios, tocarFecha } = req.data || {};
   if(!opId) throw new HttpsError("invalid-argument", "Falta el identificador de la operación.");
 
-  const campos = limpiarCambios(cambios || {});
-  if(Object.keys(campos).length){
-    const op = (await db.doc(`${OPS}/${opId}`).get()).data();
-    if(!op) throw new HttpsError("not-found", "La operación no existe.");
-    exigir(op, uid, email, "editar");
-  }
+  // ← ARREGLADO (23 oct): aquí se pedía «editar» siempre que la
+  // llamada trajera campos, fuera cual fuera el evento. Subir un
+  // comprobante cambia `requisitos`, o sea que lleva campos, o sea que
+  // pedía editar — y quien tiene que entregar es justo quien NO puede
+  // editar. De ahí el 403.
+  //
+  // El permiso correcto lo sabe `asentar`, que lo saca del evento y lo
+  // comprueba DENTRO de la transacción, que además es donde toca: esta
+  // comprobación leía el documento por fuera y podía quedarse vieja.
+  // Una sola puerta, y la buena.
 
   const autor = await nombreDe(uid, email);
   const { doc } = await asentar({ opId, evento, cambios, uid, email, autor, tocarFecha });

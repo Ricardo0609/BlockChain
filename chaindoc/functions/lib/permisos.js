@@ -155,6 +155,25 @@ export function rolDe(op, uid, email){
 
 export const puede = (rol, accion) => Boolean(rol && PERMISOS[rol]?.includes(accion));
 
+/**
+ * Permisos con los que un bloque puede traer cambios en los campos.
+ *
+ * ← NUEVO (23 oct). Antes, cualquier llamada que trajera campos pedía
+ * «editar» a secas, fuera cual fuera el evento. Eso dejaba fuera a
+ * quien tiene que entregar y NO puede editar: subir un comprobante
+ * cambia `requisitos`, así que llevaba campos, así que pedía editar,
+ * así que 403.
+ *
+ * Pero quitar esa puerta sin más abriría otra: un bloque de CONSULTA
+ * sólo pide «ver», y con eso un lector podría colar cambios de campos
+ * disfrazados de visita. Así que la regla no es «cuánto puedes» sino
+ * «qué clase de acto es»: los que de verdad modifican el documento
+ * pueden traer campos; mirar y exportar, no.
+ */
+export const PERMISOS_QUE_CAMBIAN = new Set([
+  "editar", "subir", "retirar", "vincular", "firmar", "aprobar", "pedir", "proteger", "borrar",
+]);
+
 /** Traduce el evento que se quiere asentar al permiso que exige. */
 export function permisoDeEvento(evento = {}){
   const tipo = evento.meta?.tipo;

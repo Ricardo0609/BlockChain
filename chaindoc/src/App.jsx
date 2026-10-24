@@ -1671,7 +1671,35 @@ export default function ChainDoc(){
 
   // ← ACTUALIZADO: `foco` marca el comprobante duplicado que hay que resaltar
   const openDoc = async(id, foco=null)=>{
-    const dd = await store.get(id); if(!dd){ notify("No encontrado","err"); return; }
+    const { doc: dd, motivo } = await store.get(id, { conMotivo:true });
+    // ← ACTUALIZADO (23 oct): decía «No encontrado» y dejaba la tarjeta
+    // ahí, así que volvías a darle y volvía a no pasar nada.
+    //
+    // Pasa cuando el documento ya no existe: la regla de Firestore
+    // pregunta por los datos del documento, y si no hay documento no
+    // hay datos, así que contesta «permiso denegado» en vez de «no
+    // existe». Desde fuera parece un problema de permisos y es una
+    // tarjeta fantasma.
+    //
+    // Refrescar la lista la quita de en medio, que es lo que uno
+    // esperaría que pasara solo.
+    //
+    // ← AFINADO: «permiso denegado» tampoco distingue entre BORRADO y
+    // ACCESO RETIRADO —en los dos casos la regla no tiene datos que
+    // mirar—, así que el aviso no puede afirmar ninguno de los dos.
+    // Decir «ya no está» de un documento al que simplemente te
+    // retiraron el acceso es la misma mentira con otro traje: el
+    // documento existe y su dueño lo ve. Lo que sí se puede separar es
+    // un tropiezo de red, y ése no merece ni refresco ni alarma.
+    if(!dd){
+      if(motivo === "fallo"){
+        notify("No se pudo abrir ahora mismo. Revisa tu conexión e inténtalo de nuevo.","err");
+        return;
+      }
+      notify("Ya no puedes abrir ese documento: o lo borraron, o te retiraron el acceso.","err");
+      await refresh();
+      return;
+    }
     setFocoDup(foco);
     setD(dd); setTitle(dd.title); setContent(dd.content||"");
     setFields(dd.fields||{}); setSecciones(seccionesDe(dd));    // ← NUEVO
