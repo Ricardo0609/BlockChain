@@ -8,6 +8,9 @@ import { aiConfigured, dondeEstaAdjunto, hayQueRevisarRFCs } from "../smartContr
 import { deviceLabel } from "../biometric";
 import { fmtFull, fmtShort } from "../nucleo/formato";
 import { renderAccesos, conAccesoDe } from "./Accesos";
+import { renderBarraEstilos } from "../ui/BarraEstilos";
+import { renderCuerpo } from "../ui/Cuerpo";
+import { estaVacio, normalizar, ID_PAPEL } from "../nucleo/texto";
 import { renderExpediente } from "./Expediente";
 import { botonCampana, renderCampana } from "./Campana";
 import { renderMenu } from "./MenuLateral";
@@ -21,10 +24,10 @@ import { SECCIONES, motivoOcupada } from "../nucleo/secciones";
 import { ESTILOS } from "../ui/estilos";
 export function renderDocumento(ctx){
   const {
-    MAX_IMGS, abrirProtegido, addImage, bioBusy, bioCreds, bioOk, content, convOculto, d, doVerify,
+    MAX_IMGS, abrirProtegido, addImage, bioBusy, bioCreds, bioOk, convOculto, d, doVerify,
     docs, editMode, exportarPaquete, fields, getFile, goHome, histOpen, histTab, ocupado,
     iniciarConversion, lockInput, menuOpen, modal, notif, openDoc, openExpedientes,
-    ocultarConvertir, puedeConvertir, removeImage, save, saving, setContent, setDirty, setEdit, setFields,
+    ocultarConvertir, puedeConvertir, removeImage, save, saving, setDirty, setEdit, setFields,
     setHist, setHistTab, setLinkErr, setLinkExp, setLock, setLockInput, setMIn, setMenu,
     setModal, setPass, setShowHashes, setTitle, showHashes, smartBusy, title, uid,
     setEnlaceNuevo, setShareModo, setShareTodo, setShareReqs,
@@ -240,6 +243,12 @@ export function renderDocumento(ctx){
           mientras el botón vivía al final de la página: había que
           comprobar, subir a leer, y volver a bajar. */}
 
+      {/* ── LA BARRA DE ESTILOS (24 oct) ──────────────────────
+          Debajo de las pestañas y encima del papel, que es donde la
+          busca la mano. Sólo mientras editas: fuera de edición no hay
+          nada que aplicar y sería ruido encima del documento. */}
+      {editMode && d.kind!=="expediente" && !d.tplId && renderBarraEstilos(ctx)}
+
       <div className="paper">
         {/* ← NUEVO: los expedientes se ven como lista de comprobantes, no como papel */}
         {d.kind==="expediente" ? renderExpediente(ctx)
@@ -247,9 +256,28 @@ export function renderDocumento(ctx){
           <FormDoc formKey={d.tplId} fields={fields} editable={editMode}
             onChange={f=>{setFields(f);setDirty(true);}} />
         ) : editMode
-          ? <textarea className="paper-ta" value={content} placeholder="Comienza a escribir…"
-              onChange={e=>{setContent(e.target.value);setDirty(true);}} />
-          : <div className={`paper-ro ${!d.content?"empty-txt":""}`}>{d.content||"Este documento aún no tiene contenido. Presiona «Editar» para comenzar."}</div>}
+          ? (
+            /* ← ACTUALIZADO (24 oct): era un <textarea>, que no sabe de
+               negritas ni de títulos. Ahora es un contentEditable.
+
+               `dangerouslySetInnerHTML` aquí NO pinta lo que mandó
+               nadie: pinta el HTML canónico que sale de `normalizar`,
+               que sólo contiene p/h1-h3/ul/ol/li/strong/em. Y se pone
+               una sola vez —de `d.content`, no del estado— porque si
+               React lo re-pintara en cada tecla, el cursor saltaría al
+               principio en cada letra. Mientras editas manda el DOM; al
+               guardar se lee de ahí. */
+            <div className="paper-ta" contentEditable suppressContentEditableWarning
+              id={ID_PAPEL}
+              data-vacio="Comienza a escribir…"
+              onInput={()=>setDirty(true)}
+              dangerouslySetInnerHTML={{ __html: normalizar(d.content||"") }} />
+          )
+          : <div className={`paper-ro ${estaVacio(d.content)?"empty-txt":""}`}>
+              {estaVacio(d.content)
+                ? "Este documento aún no tiene contenido. Presiona «Editar» para comenzar."
+                : renderCuerpo(d.content)}
+            </div>}
       </div>
 
       {/* ← NUEVO: dónde está adjunto este documento. Si comprueba gastos

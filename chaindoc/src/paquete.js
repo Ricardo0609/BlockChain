@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { firmaDe } from "./nucleo/bloques";
+import { aTextoPlano } from "./nucleo/texto";
 import { archivosDe, expedienteStatus, calcularMontos, resumenConsultas, estadoFases } from "./smartContract";
 
 export const FORMATO = "chaindoc-evidencia/3";
@@ -33,7 +34,9 @@ export function armarManifiesto(exp, anclaje = null) {
       moneda: exp.moneda || "MXN",
       montoTotal: exp.montoTotal ?? null,
       partes: exp.partes || [],
-      contrato: exp.content || "",
+      // ← ACTUALIZADO (24 oct): en prosa. Quien abre el paquete lo
+      // lee o se lo da a un perito; no tiene por que ver etiquetas.
+      contrato: aTextoPlano(exp.content),
       analisis: exp.analisis || null,
       compartidoCon: exp.sharedWith || [],
     },

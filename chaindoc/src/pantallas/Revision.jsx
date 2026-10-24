@@ -21,6 +21,8 @@
 
 import { IcoBack, Icon } from "../ui/iconos";
 import { renderModales } from "../modales";
+import { renderCuerpo } from "../ui/Cuerpo";
+import { estaVacio } from "../nucleo/texto";
 import { archivosDe, fmtMonto } from "../smartContract";
 import { fmtFull } from "../nucleo/formato";
 
@@ -115,7 +117,7 @@ export function renderRevision(ctx){
       <div className="rev-sec">
         <div className="rev-sec-t">El contrato</div>
         <div className="paper-ro rev-texto">
-          {d.content || "Este contrato no tiene texto escrito."}
+          {estaVacio(d.content) ? "Este contrato no tiene texto escrito." : renderCuerpo(d.content)}
         </div>
       </div>
 

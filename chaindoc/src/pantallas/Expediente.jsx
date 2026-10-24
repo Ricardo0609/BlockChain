@@ -4,6 +4,8 @@ import { Icon, IcoEye } from "../ui/iconos";
 import { LIMITE_MB, isPreviewable } from "../storage";
 import { Timeline } from "../ui/Timeline";
 import { renderAccesos, conAccesoDe } from "./Accesos";
+import { renderCuerpo } from "../ui/Cuerpo";
+import { estaVacio } from "../nucleo/texto";
 import {
   aidDe,
   archivosDe,
@@ -707,7 +709,9 @@ export function renderExpediente(ctx){
 
     {tab==="contrato" && (
     <div role="tabpanel" id="panel-contrato" aria-labelledby="tab-contrato">
-      <div className="paper-ro">{d.content || "Este expediente no tiene texto de contrato."}</div>
+      <div className="paper-ro">{estaVacio(d.content)
+        ? "Este expediente no tiene texto de contrato."
+        : renderCuerpo(d.content)}</div>
     </div>
     )}
 

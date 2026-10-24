@@ -1548,4 +1548,66 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   font-family:var(--f-p);font-size:11px;font-weight:700;line-height:18px;
   text-align:center;border:2px solid #fff;box-sizing:content-box}
 .camp-n.urge{background:var(--rojo)}
+
+/* ── NUEVO (24 oct): la barra de estilos y el papel con formato ──
+   La barra va entre las pestañas y el papel, alineada con el papel
+   para que se lea como suya y no como otra fila de navegacion. */
+/* El contenedor se ajusta a lo que lleva dentro y se centra: con el
+   ancho del papel quedaba un marco medio vacio que pesaba mas que los
+   botones. El fit-content lo encoge a su contenido; el max-width del
+   100% es para que en una pantalla estrecha se reparta en dos filas
+   en vez de salirse. */
+.be{width:fit-content;max-width:100%;margin:0 auto 10px;
+  display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px;
+  padding:6px;border:1px solid var(--bordes);border-radius:11px;background:#fff}
+.be-grupo{display:flex;align-items:center;gap:2px}
+.be-sep{width:1px;height:22px;background:var(--gris-100);margin:0 4px;flex:0 0 auto}
+.be-btn{min-width:32px;height:32px;padding:0 7px;display:inline-flex;
+  align-items:center;justify-content:center;background:none;border:none;
+  border-radius:8px;cursor:pointer;color:var(--gris-400);
+  font-family:var(--f-p);font-size:14px;line-height:1;
+  transition:background .14s,color .14s}
+.be-btn:hover{background:var(--bg-soft);color:var(--negro)}
+.be-btn:active{background:var(--gris-100)}
+.be-btn:focus-visible{outline:2px solid var(--negro);outline-offset:-2px}
+.be-txt{font-weight:600}
+.be-h{font-family:var(--f-t)}
+.be-btn b{font-weight:800}
+.be-btn i{font-family:var(--f-t);font-style:italic;font-size:16px}
+
+/* El papel editable. Hereda del de lectura para que escribir y leer se
+   vean igual: si cambiara de aspecto al guardar, cada guardado seria
+   una sorpresa. */
+.paper-ta{min-height:420px;outline:none;white-space:pre-wrap;overflow-wrap:anywhere}
+.paper-ta:empty::before{content:attr(data-vacio);color:var(--gris-200)}
+
+/* Titulos, listas y alineacion, iguales leyendo y escribiendo. */
+.paper-ro h1,.paper-ta h1{font-family:var(--f-t);font-size:30px;font-weight:600;
+  line-height:1.25;margin:22px 0 10px}
+.paper-ro h2,.paper-ta h2{font-family:var(--f-t);font-size:23px;font-weight:600;
+  line-height:1.3;margin:20px 0 8px}
+.paper-ro h3,.paper-ta h3{font-family:var(--f-t);font-size:19px;font-weight:600;
+  line-height:1.35;margin:16px 0 6px}
+.paper-ro h1:first-child,.paper-ta h1:first-child,
+.paper-ro h2:first-child,.paper-ta h2:first-child,
+.paper-ro h3:first-child,.paper-ta h3:first-child{margin-top:0}
+.paper-ro p,.paper-ta p{margin:0 0 10px}
+.paper-ro p:last-child,.paper-ta p:last-child{margin-bottom:0}
+.paper-ro ul,.paper-ta ul,.paper-ro ol,.paper-ta ol{margin:0 0 12px;padding-left:26px}
+.paper-ro li,.paper-ta li{margin:0 0 5px}
+.paper-ro strong,.paper-ta strong{font-weight:700}
+.paper-ro em,.paper-ta em{font-style:italic}
+
+.al-centro{text-align:center}
+.al-derecha{text-align:right}
+.al-justificado{text-align:justify}
+
+@media(max-width:768px){
+  .be{gap:2px;padding:5px;border-radius:10px}
+  .be-sep{margin:0 2px}
+  .be-btn{min-width:30px;height:30px;padding:0 5px;font-size:13px}
+  .paper-ro h1,.paper-ta h1{font-size:25px}
+  .paper-ro h2,.paper-ta h2{font-size:21px}
+  .paper-ro h3,.paper-ta h3{font-size:18px}
+}
 `;

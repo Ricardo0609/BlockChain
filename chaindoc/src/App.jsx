@@ -54,6 +54,7 @@ import {
 } from "./nucleo/carpetas";
 import { bloquea, decideAhora, esperaFirmaDe, estadoAcuerdo } from "./nucleo/acuerdo";
 import { limpiarSecciones, seccionesDe } from "./nucleo/secciones";
+import { aTextoPlano, normalizar, ID_PAPEL } from "./nucleo/texto";
 import { notificacionesDe } from "./nucleo/notificaciones";
 import { descartar, leerDescartes, recuperar } from "./nucleo/descartes";
 import { llamar, errorBackend } from "./nucleo/backend";
@@ -199,6 +200,28 @@ export default function ChainDoc(){
   // ← NUEVO (21 oct): qué pestaña del documento está abierta. Igual que
   // `expTab` en los expedientes, y se vuelve a la primera al abrir otro.
   const [docTab,setDocTab] = useState("documento");
+  // ← NUEVO (24 oct): el papel con formato es un contentEditable, y
+  // React no puede re-pintarlo mientras escribes sin tirar el cursor.
+  // Así que el DOM manda ahí dentro y lo leemos al guardar.
+  //
+  // Se busca por id y no con un ref a propósito: un ref tendría que
+  // viajar dentro de `ctx` hasta la pantalla, y leerlo desde ahí es
+  // justo lo que prohíbe la regla `react-hooks/refs`. El papel es uno
+  // solo en pantalla, así que buscarlo por su id es más simple y dice
+  // lo mismo.
+  const elEditor = ()=> document.getElementById(ID_PAPEL);
+
+  const aplicarEstilo = (cmd, valor=null)=>{
+    const caja = elEditor();
+    if(!caja) return;
+    caja.focus();
+    try{
+      // `formatBlock` quiere la etiqueta entre ángulos en casi todos
+      // los navegadores; los demás comandos no llevan valor.
+      document.execCommand(cmd, false, cmd==="formatBlock" ? `<${valor}>` : valor);
+    }catch(e){ console.error("[chaindoc] no se pudo aplicar el estilo", cmd, e); }
+    setDirty(true);
+  };
   // ← NUEVO (22 oct): el panel de notificaciones. No guarda nada: lo
   // que enseña se deriva de los documentos ya cargados.
   const [campanaOpen,setCampana] = useState(false);
@@ -751,9 +774,15 @@ export default function ChainDoc(){
     setSaving(true);
     // ← ACTUALIZADO: si el documento usa plantilla visual, los campos
     // se serializan a texto para que la cadena siga hasheando contenido legible.
-    const body = d.tplId ? serializeForm(d.tplId, fields) : content;
+    // ← ACTUALIZADO (24 oct): el cuerpo sale del editor, no del
+    // estado, porque mientras escribes el DOM es el que va al día. Y
+    // pasa por `normalizar`: lo que se sella no es lo que escribió el
+    // navegador, es lo que cabe en el modelo. Ver `nucleo/texto.js`.
+    const body = d.tplId
+      ? serializeForm(d.tplId, fields)
+      : normalizar(elEditor()?.innerHTML ?? content);
     const up = await aplicar(d,
-      { accion:"EDICIÓN", contenido:body.slice(0,200) },
+      { accion:"EDICIÓN", contenido:aTextoPlano(body).slice(0,200) },
       { title, content:body, fields: d.tplId ? fields : null,
         secciones: limpiarSecciones(secciones) },
       { autor:user, autorUid:uid });
@@ -868,7 +897,10 @@ export default function ChainDoc(){
     if(!smartRes?.requisitos?.length) return;
     setSaving(true);
     try{
-      const texto = content;
+      // ← ACTUALIZADO (24 oct): a Gemini se le manda prosa. Mandarle
+      // «<p>» y «</strong>» es gastar tokens en ruido y empeorar lo
+      // que extrae.
+      const texto = aTextoPlano(content);
       let base = d;
 
       // Si había cambios sin guardar en el editor, primero se sellan.
@@ -1961,6 +1993,7 @@ export default function ChainDoc(){
     expTab, setExpTab, tplInfo, setTplInfo, desbloqueando,
     // ← NUEVO (21 oct): secciones apagables y cambio de rol en sitio.
     secciones, setSecciones, cambiarRol, rolBusy,
+    aplicarEstilo,
     docTab, setDocTab,
     // ← NUEVO (22 oct): la campana.
     notis, campanaOpen, setCampana,

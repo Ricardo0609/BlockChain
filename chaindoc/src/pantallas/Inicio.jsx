@@ -14,6 +14,7 @@ import { renderMenu } from "./MenuLateral";
 import { renderModales } from "../modales";
 import { ESTILOS } from "../ui/estilos";
 import { TEXTO_AVISO, ordenar, esGrave } from "../nucleo/avisos";
+import { resumenDe } from "../nucleo/texto";
 import { botonCampana, renderCampana } from "./Campana";
 import { estaProtegido } from "../nucleo/datos";
 import { rolDe, ROL_TEXTO } from "../nucleo/accesos";
@@ -66,7 +67,7 @@ export function renderInicio(ctx){
             onClick={e=>{e.stopPropagation();setDrop(drop===x.id?null:x.id);}}><IcoDots/></button>
         </div>
         <span className="chip chip-tipo">{TIPOS_DOC[tipo].nombre}</span>
-        <div className="card-prev">{x.content||"Sin contenido aún…"}</div>
+        <div className="card-prev">{resumenDe(x.content) || "Sin contenido aún…"}</div>
         <div className="card-meta">Última edición: {fmtShort(x.lastModified)}</div>
         <div className="chips">
           {(()=>{ const r = rolEnTarjeta(x); return r && (
