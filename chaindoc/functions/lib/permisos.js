@@ -82,7 +82,13 @@ export const PERMISOS = {
   // equivoca de archivo tiene que poder quitarlo él, sin pedirle
   // permiso a nadie. No lleva «editar»: el contrato que aceptó no lo
   // puede cambiar, y ésa es justo la garantía que firma.
-  involucrado: ["ver", "subir", "retirar", "firmar", "aprobar", "exportar"],
+  // ← ARREGLADO (23 oct): le faltaba «vincular», y sin eso la otra
+  // parte podía subir un archivo suelto pero NO adjuntar uno de sus
+  // propios documentos de chaindoc. Es la misma entrega con el mejor
+  // artefacto de los dos: el documento vinculado trae su propia
+  // cadena, su historial y sus firmas. Dejar pasar el PDF suelto y
+  // bloquear el documento era premiar la versión con menos pruebas.
+  involucrado: ["ver", "subir", "retirar", "firmar", "aprobar", "vincular", "exportar"],
   editor:      ["ver", "editar", "subir", "retirar", "firmar", "pedir", "exportar", "proteger", "vincular"],
   aportador:   ["ver", "subir"],
   aprobador:   ["ver", "aprobar", "firmar", "exportar"],

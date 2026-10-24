@@ -187,6 +187,62 @@ describe("servidor y navegador dicen lo mismo", () => {
     expect(lista.find((a) => a.correo === "vieja@x.com").rol).toBe("editor");
   });
 });
+
+// ── EL RECORRIDO COMPLETO DE LA OTRA PARTE ───────────────────────
+//
+// Esto nacio de un 403 en la cara de Ricardo: con el rol Involucrado
+// podia subir un archivo suelto pero NO adjuntar uno de sus propios
+// documentos de chaindoc. Faltaba «vincular».
+//
+// La prueba no mira la tabla de permisos: arma los EVENTOS que de
+// verdad escribe la pantalla y pregunta por cada uno, que es lo mismo
+// que hace el servidor. Asi un evento nuevo que nadie mapeo sale aqui
+// y no en produccion.
+describe("la otra parte puede entregar, de principio a fin", () => {
+  const PUEDE = [
+    ["subir un archivo",           { accion: "EVIDENCIA", meta: { tipo: "alta" } }],
+    ["adjuntar un enlace",         { accion: "EVIDENCIA", meta: { tipo: "alta", enlace: "https://x" } }],
+    ["subir una foto",             { accion: "EVIDENCIA", meta: { tipo: "imagen" } }],
+    ["quitar lo que subio",        { accion: "EVIDENCIA", meta: { tipo: "baja" } }],
+    ["quitar una foto suya",       { accion: "EVIDENCIA", meta: { tipo: "imagen-baja" } }],
+    ["adjuntar un documento suyo", { accion: "EVIDENCIA", meta: { tipo: "vinculo" } }],
+    ["y dejarlo vinculado",        { accion: "VINCULADO" }],
+    ["aceptar o rechazar",         { accion: "ACUERDO" }],
+    ["firmar",                     { accion: "FIRMA" }],
+    ["que quede su consulta",      { accion: "CONSULTA" }],
+    ["pedir la revision del SAT",  { accion: "VALIDACIÓN" }],
+    ["exportar la evidencia",      { accion: "EXPORTACIÓN" }],
+  ];
+
+  for (const [que, evento] of PUEDE) {
+    it(que, () => {
+      expect(puede("involucrado", permisoDeEvento(evento)), permisoDeEvento(evento)).toBe(true);
+    });
+  }
+
+  // Lo que NO puede, que es el otro lado de la misma moneda: el
+  // contrato que firmo no lo puede cambiar, y esa es la garantia.
+  const NO_PUEDE = [
+    ["cambiar el contrato",   { accion: "EDICIÓN" }],
+    ["convertirlo",           { accion: "CONVERSIÓN" }],
+    ["repartir accesos",      { accion: "COMPARTIDO" }],
+    ["pedirle algo a otro",   { accion: "SOLICITUD" }],
+  ];
+
+  for (const [que, evento] of NO_PUEDE) {
+    it(`no puede ${que}`, () => {
+      expect(puede("involucrado", permisoDeEvento(evento))).toBe(false);
+    });
+  }
+
+  it("y el servidor opina lo mismo que el navegador", () => {
+    for (const [, evento] of [...PUEDE, ...NO_PUEDE]) {
+      const p = permisoDeEvento(evento);
+      expect(cliente.puede("involucrado", p), p).toBe(puede("involucrado", p));
+    }
+  });
+});
+
 // ── EL MAPA DE ROLES PARTIDO POR LOS PUNTOS ──────────────────────
 //
 // Los roles se guardaban con `{ ["roles." + correo]: rol }`, y para
