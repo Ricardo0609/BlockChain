@@ -11,6 +11,7 @@ import { renderAccesos, conAccesoDe } from "./Accesos";
 import { renderBarraEstilos } from "../ui/BarraEstilos";
 import { renderCuerpo } from "../ui/Cuerpo";
 import { estaVacio, normalizar, ID_PAPEL } from "../nucleo/texto";
+import { esBorradorContrato } from "../nucleo/catalogos";
 import { renderExpediente } from "./Expediente";
 import { botonCampana, renderCampana } from "./Campana";
 import { renderMenu } from "./MenuLateral";
@@ -50,6 +51,9 @@ export function renderDocumento(ctx){
   // «Editar» ni «Firmar»; la decisión real la toma el servidor.
   const puede = (accion)=> !puedo || puedo(accion);
   const sigs = d.chain.filter(b=>b.action==="FIRMA");
+
+  // ← NUEVO (25 oct): un contrato que todavía se está redactando.
+  const esBorrador = esBorradorContrato(d);
 
   // ← NUEVO (21 oct): quién más ve este documento, para las pestañas.
   const conAcceso = conAccesoDe(accesos);
@@ -135,13 +139,37 @@ export function renderDocumento(ctx){
         )}
       </div>
       <div className="nav-actions">
+        {/* ── UN BORRADOR SOLO TIENE DOS SALIDAS (25 oct) ────────
+            Mientras lo redactas no hay nada que compartir, ni que
+            adjuntar, ni que proteger con candado: todavía no es un
+            contrato. Enseñar seis botones de los que cinco no vienen
+            a cuento es obligar a leerlos para descartarlos. */}
+        {esBorrador ? (<>
+          <button className="btn btn-secondary" onClick={save} disabled={saving}>
+            {saving ? "Guardando…" : "Guardar como borrador"}
+          </button>
+          <button className="btn btn-primary" disabled={saving||smartBusy||!aiConfigured()}
+            title={!aiConfigured() ? "Falta configurar la llave de Gemini" : undefined}
+            onClick={iniciarConversion}>
+            {smartBusy ? "Leyendo el contrato…" : "Continuar y analizar"}
+          </button>
+          {botonCampana(ctx)}
+          <button className="hamburger" onClick={()=>setMenu(true)}><span/><span/><span/></button>
+        </>) : (<>
         {editMode && (
           <div className="toggle-wrap" onClick={()=>{ if(estaProtegido(d)) setLock(null); else {setPass("");setModal({t:"lock"});} }}>
             <span className="toggle-lbl">candado de seguridad</span>
             <div className={`toggle ${estaProtegido(d)?"on":""}`}/>
           </div>
         )}
-        {!editMode && puede("editar") && <button className="btn btn-secondary" onClick={()=>setEdit(true)}>Editar</button>}
+        {/* ← ACTUALIZADO (25 oct): en un contrato inteligente no hay
+            «Editar». El cuerpo no se escribe como un documento: lo que
+            se ve es el expediente, con sus requisitos y sus
+            comprobantes. Un botón que promete editar y lleva a una
+            pantalla donde no se puede escribir es peor que no estar.
+            Para cambiar lo pactado se manda una versión nueva, que es
+            de lo que va la doble firma. */}
+        {!editMode && d.kind!=="expediente" && puede("editar") && <button className="btn btn-secondary" onClick={()=>setEdit(true)}>Editar</button>}
         {editMode && <button className="btn btn-primary" onClick={save} disabled={saving}>{saving?"Guardando…":"Guardar"}</button>}
         {/* ← NUEVO: vincula este documento a un expediente como comprobante.
             No aparece en los expedientes: uno no se adjunta a sí mismo. */}
@@ -162,6 +190,7 @@ export function renderDocumento(ctx){
         <button className="btn btn-secondary" onClick={()=>setHist(true)}>Ver historial</button>
         {botonCampana(ctx)}
         <button className="hamburger" onClick={()=>setMenu(true)}><span/><span/><span/></button>
+        </>)}
       </div>
     </nav>
 
@@ -209,7 +238,7 @@ export function renderDocumento(ctx){
       {dtab==="documento" && (<>
 
       {/* ← NUEVO: en edición, un documento de texto puede volverse contrato inteligente */}
-      {editMode && puedeConvertir(d) && !(convOculto||[]).includes(d.id) && (
+      {editMode && !esBorrador && puedeConvertir(d) && !(convOculto||[]).includes(d.id) && (
         <div className="convertir">
           <div className="convertir-b">
             <Icon n="rule" size={22}/>
@@ -275,7 +304,12 @@ export function renderDocumento(ctx){
           )
           : <div className={`paper-ro ${estaVacio(d.content)?"empty-txt":""}`}>
               {estaVacio(d.content)
-                ? "Este documento aún no tiene contenido. Presiona «Editar» para comenzar."
+                /* Sin el botón «Editar» —que en un expediente ya no
+                   está— mandar a presionarlo seria mandar a ningun
+                   lado. */
+                ? (d.kind==="expediente"
+                    ? "Este expediente no guardó texto del contrato."
+                    : "Este documento aún no tiene contenido. Presiona «Editar» para comenzar.")
                 : renderCuerpo(d.content)}
             </div>}
       </div>
@@ -314,7 +348,12 @@ export function renderDocumento(ctx){
 
       {/* ← NUEVO: evidencia visual del documento (no aplica a expedientes,
           que ya tienen su propia lista de comprobantes por requisito) */}
-      {d.kind!=="expediente" && verSec("evidencia") && (()=>{
+      {/* ← ACTUALIZADO (25 oct): mientras redactas el contrato no hay
+          evidencia que adjuntar ni nada que firmar. Lo que se va a
+          comprobar lo decide el análisis, que todavía no ha pasado, y
+          firmar un borrador no significaría nada. Las dos secciones
+          vuelven en cuanto el contrato existe de verdad. */}
+      {d.kind!=="expediente" && !esBorrador && verSec("evidencia") && (()=>{
         const imgs = d.imagenes||[];
         return (
           <div className="galeria">
@@ -363,7 +402,7 @@ export function renderDocumento(ctx){
         );
       })()}
 
-      {verSec("firmas") && (<>
+      {!esBorrador && verSec("firmas") && (<>
       {/* La cabecera sólo existe mientras editas: es el percherode
           donde cuelga «Quitar sección». Fuera de edición el documento
           se ve exactamente como siempre, con sus sellos y ya. */}
@@ -411,7 +450,7 @@ export function renderDocumento(ctx){
           Sólo en edición y sólo lo que falta: dos botones fijos que
           dijeran siempre lo mismo serían dos botones que casi siempre
           sobran. Quien no quitó nada no ve ninguno. */}
-      {editMode && d.kind!=="expediente" && puede("editar") &&
+      {editMode && d.kind!=="expediente" && !esBorrador && puede("editar") &&
        SECCIONES.some(s=>!verSec(s.id)) && (
         <div className="sec-add">
           {SECCIONES.filter(s=>!verSec(s.id)).map(s=>(

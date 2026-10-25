@@ -1,3 +1,13 @@
+// @vitest-environment jsdom
+//
+// Con DOM de verdad A PROPOSITO. `parsear` usa el DOMParser del
+// navegador, y sin el cae a un camino de respaldo que no es el que
+// corre en produccion. Dos fallos se colaron justo por ahi: uno
+// dejaba visible el texto de dentro de un <script>, y otro perdia el
+// formato entero de cualquier documento cuya primera linea no
+// empezara por una etiqueta. Los dos aparecieron conduciendo el
+// editor en un navegador, no aqui.
+
 // El contenido con formato.
 //
 // `content` es lo que la cadena sella, asi que aqui se protegen tres
@@ -16,6 +26,52 @@ import {
   ALINEACIONES, BLOQUES, aTextoPlano, estaVacio, normalizar, parsear,
   resumenDe, serializar, tieneFormato,
 } from "../src/nucleo/texto.js";
+import { esBorradorContrato, tipoDeDocumento } from "../src/nucleo/catalogos.js";
+
+// ── EL BORRADOR DE CONTRATO ──────────────────────────────────────
+//
+// Un contrato desde cero nace como documento de texto con una nota de
+// hacia donde va, porque eso es lo que es mientras lo escribes. Pasa a
+// ser expediente al analizarse, en su sitio.
+describe("un contrato que todavia se redacta", () => {
+  it("es un borrador mientras no sea expediente", () => {
+    expect(esBorradorContrato({ kind: "documento", destino: "expediente" })).toBe(true);
+  });
+
+  it("al analizarse deja de serlo", () => {
+    expect(esBorradorContrato({ kind: "expediente", destino: "expediente" })).toBe(false);
+    expect(esBorradorContrato({ kind: "expediente" })).toBe(false);
+  });
+
+  it("un documento normal no es un borrador de nada", () => {
+    expect(esBorradorContrato({ kind: "documento" })).toBe(false);
+    expect(esBorradorContrato({ kind: "documento", destino: null })).toBe(false);
+    expect(esBorradorContrato(null)).toBe(false);
+    expect(esBorradorContrato(undefined)).toBe(false);
+  });
+
+  it("y un destino raro tampoco", () => {
+    expect(esBorradorContrato({ kind: "documento", destino: "otracosa" })).toBe(false);
+  });
+
+  it("en la tarjeta se ve como contrato, no como texto", () => {
+    // Es lo que su dueño cree que esta haciendo; lo que le falta lo
+    // dice la etiqueta de «Borrador», no el color de la tarjeta.
+    expect(tipoDeDocumento({ kind: "documento", destino: "expediente" })).toBe("smart");
+    expect(tipoDeDocumento({ kind: "expediente" })).toBe("smart");
+    expect(tipoDeDocumento({ kind: "documento" })).toBe("texto");
+    expect(tipoDeDocumento({ kind: "documento", tplId: "factura" })).toBe("factura");
+  });
+
+  it("una factura con el campo puesto sigue siendo factura", () => {
+    // Nadie crea una asi, pero una plantilla NO puede convertirse en
+    // expediente, asi que tampoco puede estar de camino: prometeria en
+    // la tarjeta un contrato que nunca se va a poder analizar.
+    const f = { kind: "documento", tplId: "factura", destino: "expediente" };
+    expect(esBorradorContrato(f)).toBe(false);
+    expect(tipoDeDocumento(f)).toBe("factura");
+  });
+});
 
 describe("los documentos de antes, sin migrar nada", () => {
   it("un texto plano se lee como parrafos", () => {
@@ -102,6 +158,62 @@ describe("solo sobrevive lo que cabe en el modelo", () => {
   it("una alineacion inventada no escribe ninguna clase", () => {
     expect(serializar([{ tipo: "p", alineacion: "diagonal", trozos: [{ texto: "x" }] }]))
       .toBe("<p>x</p>");
+  });
+});
+
+// ── LO QUE ESCRIBE DE VERDAD EL EDITOR ───────────────────────────
+//
+// Esto salio de conducir el editor en un navegador, no de pensarlo:
+// al escribir la PRIMERA linea sobre un papel vacio, el navegador la
+// deja como texto suelto, sin envolverla en ningun <p>, y mete las
+// etiquetas a partir de ahi. O sea que el contenido real casi nunca
+// empieza por una etiqueta de bloque.
+//
+// Con la deteccion vieja —que solo miraba el principio— un contrato
+// con negritas se guardaba como texto plano CON LAS ETIQUETAS
+// ESCAPADAS: salia «&lt;b&gt;» escrito en medio. Y con el recorrido
+// viejo —que solo miraba elementos— esa primera linea desaparecia
+// entera. Las dos cosas perdian trabajo en silencio.
+describe("texto suelto fuera de todo bloque", () => {
+  const comoElEditor = "Primera linea suelta<b> en negrita</b><p>Y un parrafo de verdad</p>";
+
+  it("se reconoce como contenido con formato", () => {
+    expect(tieneFormato(comoElEditor)).toBe(true);
+    expect(tieneFormato("texto<strong>fuerte</strong>")).toBe(true);
+    expect(tieneFormato("<br>")).toBe(true);
+  });
+
+  it("y un texto plano de verdad sigue sin serlo", () => {
+    expect(tieneFormato("2 < 3 y 4 > 1")).toBe(false);
+    expect(tieneFormato("un correo: a<b")).toBe(false);
+    expect(tieneFormato("")).toBe(false);
+  });
+
+  it("no se escapa: se guarda como etiquetas de verdad", () => {
+    const html = normalizar(comoElEditor);
+    expect(html).not.toContain("&lt;");
+    expect(html).toContain("<strong>");
+  });
+
+  it("y la linea suelta NO desaparece", () => {
+    expect(aTextoPlano(normalizar(comoElEditor))).toContain("Primera linea suelta");
+  });
+
+  it("lo suelto se junta en su propio parrafo, antes del bloque", () => {
+    const b = parsear(comoElEditor);
+    expect(b.map((x) => x.tipo)).toEqual(["p", "p"]);
+    expect(b[0].trozos.map((x) => x.texto).join("")).toBe("Primera linea suelta en negrita");
+    expect(b[0].trozos[1].negrita).toBe(true);
+    expect(b[1].trozos[0].texto).toBe("Y un parrafo de verdad");
+  });
+
+  it("lo suelto que va DESPUES de un bloque tampoco se pierde", () => {
+    const b = parsear("<p>Uno</p>Dos sueltos");
+    expect(b.map((x) => x.trozos.map((y) => y.texto).join(""))).toEqual(["Uno", "Dos sueltos"]);
+  });
+
+  it("y el espacio en blanco suelto no inventa parrafos", () => {
+    expect(parsear("<p>Uno</p>   <p>Dos</p>")).toHaveLength(2);
   });
 });
 

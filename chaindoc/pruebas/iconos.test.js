@@ -14,12 +14,27 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const RAIZ = new URL("..", import.meta.url).pathname;
+// `fileURLToPath` y no `.pathname`. En Windows, `.pathname` devuelve
+// «/C:/Users/Maria%20Elena/...»: con una barra de mas delante de la
+// unidad y los espacios escapados como %20. Esa ruta no existe, asi
+// que readFileSync falla y la prueba se cae en maquinas donde el
+// usuario tiene un espacio en su nombre. En Linux no se nota, que es
+// justo por lo que se me colo.
+const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 
 /** Los nombres que de verdad se descargan. */
 function enLaFuente() {
-  const html = readFileSync(join(RAIZ, "index.html"), "utf8");
+  const ruta = join(RAIZ, "index.html");
+  let html;
+  try {
+    html = readFileSync(ruta, "utf8");
+  } catch (e) {
+    // Si algun dia vuelve a romperse por la ruta, que lo diga en vez
+    // de soltar un ENOENT pelado.
+    throw new Error(`no se pudo leer el index.html en «${ruta}»`, { cause: e });
+  }
   const m = html.match(/icon_names=([^&"]+)/);
   if (!m) throw new Error("el index.html ya no trae icon_names");
   return new Set(m[1].split(",").map((s) => s.trim()).filter(Boolean));

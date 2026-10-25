@@ -47,8 +47,22 @@ const DE_CLASE = { "al-centro": "centro", "al-derecha": "derecha", "al-justifica
 const esc = (s) => String(s)
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-/** Si esto ya viene con formato o es de los de antes. */
-export const tieneFormato = (s) => /^\s*<(p|h[1-3]|ul|ol)[\s>]/i.test(String(s || ""));
+/**
+ * Si esto ya viene con formato o es de los de antes.
+ *
+ * ← ARREGLADO (25 oct): antes sólo miraba si EMPEZABA por una
+ * etiqueta de bloque. Y resulta que el editor casi nunca empieza por
+ * una: al escribir la primera línea sobre el papel vacío, el
+ * navegador la deja como texto suelto y mete las etiquetas a partir
+ * de ahí. Así que un documento con negritas y títulos se guardaba
+ * como si fuera texto plano, con sus etiquetas ESCAPADAS: salía
+ * «&lt;b&gt;» escrito en medio del contrato. El trabajo de maquetarlo
+ * se perdía entero y en silencio.
+ *
+ * Ahora busca una etiqueta de las nuestras en cualquier sitio.
+ */
+export const tieneFormato = (s) =>
+  /<(p|div|h[1-3]|ul|ol|li|br|strong|em|b|i)(\s[^>]*)?\/?>/i.test(String(s || ""));
 
 // ── DE TEXTO A MODELO ─────────────────────────────────────────
 
@@ -71,8 +85,13 @@ const MUDAS = new Set(["script", "style", "noscript", "template", "head", "title
 
 /** Los trozos de texto de un elemento, con su negrita y su cursiva. */
 function trozosDe(nodo, negrita = false, cursiva = false) {
+  return trozosDeNodos(nodo.childNodes, negrita, cursiva);
+}
+
+/** Lo mismo, pero sobre una lista de nodos sueltos. */
+function trozosDeNodos(nodos, negrita = false, cursiva = false) {
   const fuera = [];
-  for (const hijo of nodo.childNodes) {
+  for (const hijo of nodos) {
     if (hijo.nodeType === 3) {
       const t = hijo.nodeValue.replace(/\s+/g, " ");
       if (t) fuera.push({ texto: t, ...(negrita && { negrita: true }), ...(cursiva && { cursiva: true }) });
@@ -129,9 +148,43 @@ export function parsear(contenido) {
     fuera.push({ tipo, alineacion: alineacion || alineacionDe(el), trozos });
   };
 
+  /**
+   * ← ARREGLADO (25 oct): se recorren los NODOS, no sólo los
+   * elementos.
+   *
+   * Antes esto iba por `padre.children`, que deja fuera el texto
+   * suelto. Y el editor produce texto suelto constantemente: la
+   * primera línea que escribes sobre el papel vacío no va dentro de
+   * ningún `<p>`, el navegador la deja al aire. Con el recorrido
+   * viejo, esa línea —y cualquier negrita que llevara— sencillamente
+   * no existía al guardar.
+   *
+   * Lo que va suelto se junta y se mete en un párrafo, que es lo que
+   * de hecho es, y se suelta en cuanto aparece un bloque de verdad.
+   */
+  const BLOQUE = new Set(["p", "div", "h1", "h2", "h3", "ul", "ol", "blockquote", "pre", "section", "article"]);
+
   const recorrer = (padre) => {
-    for (const el of padre.children) {
-      const et = el.tagName.toLowerCase();
+    let sueltos = [];
+    const soltar = () => {
+      if (!sueltos.length) return;
+      const trozos = fundir(trozosDeNodos(sueltos));
+      // Sólo espacios no es un párrafo: es el sangrado del HTML. Un
+      // renglón en blanco puesto a propósito viene como `<p></p>`,
+      // que es un bloque y no pasa por aquí.
+      if (trozos.some((x) => x.texto.trim())) {
+        fuera.push({ tipo: "p", alineacion: "izquierda", trozos });
+      }
+      sueltos = [];
+    };
+
+    for (const nodo of padre.childNodes) {
+      const el = nodo.nodeType === 1 ? nodo : null;
+      const et = el ? el.tagName.toLowerCase() : null;
+
+      if (!el || !BLOQUE.has(et)) { sueltos.push(nodo); continue; }
+
+      soltar();
       if (et === "p" || et === "div") mete("p", el);
       else if (et === "h1" || et === "h2" || et === "h3") mete(et, el);
       else if (et === "ul" || et === "ol") {
@@ -139,6 +192,7 @@ export function parsear(contenido) {
         for (const li of el.children) if (li.tagName.toLowerCase() === "li") mete(tipo, li, alineacionDe(el));
       } else recorrer(el);
     }
+    soltar();
   };
   recorrer(raiz);
 

@@ -73,6 +73,20 @@ async function modelosCandidatos() {
 
 // ← ACTUALIZADO (Etapa 3): en modo servidor la llave vive allá y el
 // navegador no necesita ninguna, así que la IA siempre está lista.
+/**
+ * Lo mínimo que tiene que decir un contrato para poder leerlo.
+ *
+ * No es un capricho del formulario: por debajo de esto no hay partes,
+ * ni plazo, ni monto, ni nada que comprobar, y la IA acabaría
+ * inventándolos.
+ *
+ * ← MOVIDO AQUÍ (25 oct): vivía dentro del modal de crear. Desde que
+ * un contrato también se puede redactar en el papel entero, el número
+ * lo necesitan dos sitios, y un mínimo que dice 80 en un lado y otra
+ * cosa en el otro es peor que no tener mínimo.
+ */
+export const MIN_CONTRATO = 80;
+
 export const aiConfigured = () => enServidor() || Boolean(API_KEY);
 
 // ── Esquema de salida ─────────────────────────────────────────

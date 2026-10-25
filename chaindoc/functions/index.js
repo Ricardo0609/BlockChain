@@ -33,6 +33,7 @@ import {
   rolDe, puede, permisoDeEvento, puedeSubirA, sanearRoles, PERMISOS_QUE_CAMBIAN,
   ROLES, ROL_TEXTO, esDueno, debeRegistrarConsulta, LIMITES,
 } from "./lib/permisos.js";
+import { decidirBorrado } from "./lib/borrado.js";
 import {
   sellarSecreto, comprobarSecreto, estadoIntentos, trasIntento,
   verificarAsercion, nuevoReto, retoValido,
@@ -372,17 +373,39 @@ export const registrarConsulta = onCall(OPCIONES, async (req) => {
 
 // ── Borrar ────────────────────────────────────────────────────
 export const borrarOperacion = onCall(OPCIONES, async (req) => {
-  const { uid } = quien(req);
+  const { uid, email } = quien(req);
   const { opId } = req.data || {};
   if(!opId) throw new HttpsError("invalid-argument", "Falta el identificador de la operación.");
 
   const ref = db.doc(`${OPS}/${opId}`);
-  const snap = await ref.get();
-  if(!snap.exists) return { borrado: true };
-  if(!esDueno(snap.data(), uid)) throw new HttpsError("permission-denied", "Sólo el dueño puede eliminarlo.");
+  const op = await leerOperacion(opId);
+  if(!op) return { borrado: true };
+  if(!esDueno(op, uid)) throw new HttpsError("permission-denied", "Sólo el dueño puede eliminarlo.");
 
-  await db.recursiveDelete(ref);
-  return { borrado: true };
+  // ← ARREGLADO (25 oct): se borra de verdad lo que sólo es tuyo. Lo
+  // que ya es de dos —porque el otro lo firmó, o porque está adjunto
+  // como evidencia en un contrato— se te quita de la vista y sigue
+  // existiendo. Antes esto era un `recursiveDelete` a secas: el dueño
+  // podía borrar un contrato firmado por las dos partes y la otra se
+  // quedaba sin nada. Ver `functions/lib/borrado.js`.
+  const { modo, motivos } = decidirBorrado(op);
+
+  if(modo === "borrar"){
+    await db.recursiveDelete(ref);
+    return { borrado: true, modo };
+  }
+
+  const autor = await nombreDe(uid, email);
+  const { doc } = await asentar({
+    opId, uid, email, autor, permiso: "borrar", tocarFecha: false,
+    evento: {
+      accion: "COMPARTIDO",
+      contenido: `${autor} quitó este documento de su lista`,
+      meta: { tipo: "oculto", motivos },
+    },
+    camposServidor: { ocultoPara: FieldValue.arrayUnion(uid) },
+  });
+  return { borrado: false, modo, motivos, doc };
 });
 
 // ── Verificar la cadena en el servidor ────────────────────────
@@ -931,6 +954,36 @@ export const quitarArchivoDeRequisito = onCall(OPCIONES, async (req) => {
     },
     cambios: { requisitos },
   });
+
+  // ← NUEVO (25 oct): el documento fuente también asienta que dejó de
+  // estar adjunto.
+  //
+  // Al adjuntarlo sí se le escribía un bloque VINCULADO, pero al
+  // retirarlo no se le escribía nada, así que su cadena decía para
+  // siempre que seguía siendo evidencia de algo que ya no lo era. Eso
+  // ahora importa: de esos bloques sale si el documento se puede
+  // borrar. Sin la baja, retirarlo de un contrato no bastaría para
+  // poder eliminarlo nunca más.
+  //
+  // `exigirAcceso: false` porque quien retira el comprobante manda en
+  // ESTE expediente, no necesariamente en el documento de origen, que
+  // puede ser de otra persona. Lo escribe el servidor como un hecho.
+  if(quitado.origen === "interno" && quitado.docId){
+    try{
+      await asentar({
+        opId: quitado.docId, uid, email, autor, exigirAcceso: false, tocarFecha: false,
+        evento: {
+          accion: "VINCULADO",
+          contenido: `Retirado del expediente «${actual.title || opId}»`,
+          meta: { tipo: "baja", expId: opId, requisito: reqId },
+        },
+      });
+    }catch(e){
+      // Que el documento de origen ya no exista no puede tumbar el
+      // retiro del comprobante, que es lo que se pidió.
+      console.error("[chaindoc] no se pudo asentar la baja del vínculo", quitado.docId, e);
+    }
+  }
 
   return { doc };
 });

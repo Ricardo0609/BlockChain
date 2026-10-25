@@ -69,7 +69,11 @@ img,svg{max-width:100%}
 .loading p{font-size:14px;color:var(--gris-200)}
 
 /* ── NOTIF ── */
-.notif{position:fixed;top:20px;right:20px;z-index:9999;padding:13px 22px;border-radius:8px;font-size:14px;font-weight:600;box-shadow:var(--sh);animation:nIn .2s ease;background:#fff}
+/* NUEVO (25 oct): pointer-events none. El aviso vive arriba a la
+   derecha, encima de los botones del nav, y mientras durara se los
+   comia: pulsar «Guardar» justo despues de otra accion no hacia nada
+   y no se veia por que. No hay nada que clicar en un aviso. */
+.notif{pointer-events:none;position:fixed;top:20px;right:20px;z-index:9999;padding:13px 22px;border-radius:8px;font-size:14px;font-weight:600;box-shadow:var(--sh);animation:nIn .2s ease;background:#fff}
 .notif.ok{border:1.5px solid var(--verde);color:var(--verde)}
 .notif.err{border:1.5px solid var(--rojo);color:var(--rojo)}
 @keyframes nIn{from{transform:translateY(-8px);opacity:0}to{transform:none;opacity:1}}
@@ -1610,4 +1614,32 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   .paper-ro h2,.paper-ta h2{font-size:21px}
   .paper-ro h3,.paper-ta h3{font-size:18px}
 }
+
+/* ── NUEVO (25 oct): crear una carpeta sin salir del formulario ── */
+.sel-carp{display:flex;flex-direction:column;gap:10px}
+.pill-nueva{border-style:dashed;color:var(--gris-300);
+  display:inline-flex;align-items:center;gap:5px}
+.pill-nueva:hover{color:var(--negro);border-color:var(--gris-300);border-style:solid}
+.pill-nueva .msym{font-size:17px}
+.carp-nueva{display:flex;flex-direction:column;gap:8px;
+  padding:12px;border:1px solid var(--bordes);border-radius:10px;background:var(--bg-soft)}
+.carp-nueva .inp{margin:0}
+.carp-nueva-acts{display:flex;gap:8px;flex-wrap:wrap}
+.carp-nueva-acts .btn{padding:8px 16px;font-size:14px}
+
+/* NUEVO (25 oct): por que un documento no se borra del todo. */
+.del-motivos{margin:0 0 14px;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.del-motivos li{font-size:14.5px;line-height:1.5;color:var(--gris-400)}
+
+/* NUEVO (25 oct): el contrato que todavia se esta redactando. */
+.chip-borrador{background:var(--gris-100);color:var(--gris-400);
+  border:1px dashed var(--bordes);font-weight:600;
+  /* La tarjeta es una columna: sin esto la pastilla se estira de lado
+     a lado y se lee como una banda, no como una etiqueta. */
+  align-self:flex-start;margin-top:-4px}
+.borr-aviso{display:flex;gap:11px;align-items:flex-start;margin:14px 0 16px;
+  padding:13px 15px;border:1px solid var(--bordes);border-radius:11px;background:var(--bg-soft)}
+.borr-aviso strong{display:block;font-size:15px;margin-bottom:3px}
+.borr-aviso span{display:block;font-size:13.5px;line-height:1.5;color:var(--gris-300)}
+.borr-aviso .msym{color:var(--gris-300);flex:0 0 auto;margin-top:2px}
 `;

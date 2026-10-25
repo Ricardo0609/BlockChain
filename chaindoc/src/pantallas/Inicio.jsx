@@ -15,6 +15,8 @@ import { renderModales } from "../modales";
 import { ESTILOS } from "../ui/estilos";
 import { TEXTO_AVISO, ordenar, esGrave } from "../nucleo/avisos";
 import { resumenDe } from "../nucleo/texto";
+import { decidirBorrado } from "../nucleo/borrado";
+import { esBorradorContrato } from "../nucleo/catalogos";
 import { botonCampana, renderCampana } from "./Campana";
 import { estaProtegido } from "../nucleo/datos";
 import { rolDe, ROL_TEXTO } from "../nucleo/accesos";
@@ -67,6 +69,11 @@ export function renderInicio(ctx){
             onClick={e=>{e.stopPropagation();setDrop(drop===x.id?null:x.id);}}><IcoDots/></button>
         </div>
         <span className="chip chip-tipo">{TIPOS_DOC[tipo].nombre}</span>
+        {/* ← NUEVO (25 oct): un contrato que todavia se esta
+            redactando. Se enseña como contrato porque es lo que su
+            dueño cree que esta haciendo; lo que le falta lo dice esto
+            y no el color de la tarjeta. */}
+        {esBorradorContrato(x) && <span className="chip chip-borrador">Borrador</span>}
         <div className="card-prev">{resumenDe(x.content) || "Sin contenido aún…"}</div>
         <div className="card-meta">Última edición: {fmtShort(x.lastModified)}</div>
         <div className="chips">
@@ -101,7 +108,14 @@ export function renderInicio(ctx){
                 cargando, y se llevaba un rechazo. Un botón que no va a
                 funcionar no debería estar. */}
             {x.ownerUid===uid && (
-              <button className="danger" onClick={()=>{setModal({t:"del",id:x.id,name:x.title});setDrop(null);}}>Eliminar</button>
+              <button className={decidirBorrado(x).modo==="ocultar" ? "" : "danger"}
+                onClick={()=>{setModal({t:"del",id:x.id,name:x.title});setDrop(null);}}>
+                {/* ← ACTUALIZADO (25 oct): si el documento ya es de dos,
+                    esto no borra nada: lo quita de tu lista. Decirlo
+                    aqui y no solo en el modal evita el susto de pulsar
+                    «Eliminar» en algo que otro firmo. */}
+                {decidirBorrado(x).modo==="ocultar" ? "Quitar de mi lista" : "Eliminar"}
+              </button>
             )}
           </div>
         )}

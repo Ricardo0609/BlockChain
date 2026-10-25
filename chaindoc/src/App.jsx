@@ -15,7 +15,7 @@ import {
   refrescarVerificacion,
 } from "./auth";
 import { bioAvailable, bioRegister, bioAssert, bioError, b64uToBytes } from "./biometric";
-import {
+import { MIN_CONTRATO,
   analyzeContract,
   montoDeDocumento,
   archivosDe,
@@ -34,7 +34,7 @@ import { anclajesDe, anclarAhora, paraElPaquete, porHash, resumenAnclaje } from 
 import { aceptoVigente, selloDeAceptacion, VERSION as LEGAL_VERSION } from "./nucleo/legal";
 import { descargarPaquete } from "./paquete";
 import { FORMS, serializeForm } from "./ui/formularios";
-import { TEMPLATES } from "./nucleo/catalogos";
+import { TEMPLATES, esBorradorContrato } from "./nucleo/catalogos";
 import { getUrlDoc, setUrlDoc } from "./nucleo/formato";
 import { folioTexto, genId, sha256, siguienteFolio, verifyChain } from "./nucleo/cadena";
 import { normalizarEnlace, nombreDeEnlace, textoFirmado } from "./nucleo/enlaces";
@@ -51,6 +51,7 @@ import {
 } from "./nucleo/datos";
 import {
   claveCarpetas, leerCarpetas, tieneCarpetasPropias, carpetasEnUso,
+  conCarpeta, revisarCarpeta,
 } from "./nucleo/carpetas";
 import { bloquea, decideAhora, esperaFirmaDe, estadoAcuerdo } from "./nucleo/acuerdo";
 import { limpiarSecciones, seccionesDe } from "./nucleo/secciones";
@@ -91,6 +92,11 @@ export default function ChainDoc(){
   // seguían saliendo Contratos, Facturas y Recibos aunque el valor de
   // arranque ya fuera una lista vacía. Ahora cada cuenta tiene la suya.
   const [folders,setFolders] = useState([]);
+  // ← NUEVO (25 oct): la carpeta nueva se crea sin salir de donde
+  // estés. `null` es que el campo ni siquiera está abierto; "" es
+  // abierto y vacío.
+  const [carpNueva,setCarpNueva] = useState(null);
+  const [carpErr,setCarpErr]     = useState("");
   const [view,setView]       = useState("inicio");
   const [d,setD]             = useState(null);
   const [editMode,setEdit]   = useState(false);
@@ -210,6 +216,11 @@ export default function ChainDoc(){
   // solo en pantalla, así que buscarlo por su id es más simple y dice
   // lo mismo.
   const elEditor = ()=> document.getElementById(ID_PAPEL);
+
+  // Lo que hay escrito ahora mismo, normalizado. Mientras editas el
+  // DOM va por delante del estado, así que se lee de ahí; si el editor
+  // no está en pantalla, vale lo último que se guardó.
+  const cuerpoDelEditor = ()=> normalizar(elEditor()?.innerHTML ?? content);
 
   const aplicarEstilo = (cmd, valor=null)=>{
     const caja = elEditor();
@@ -757,6 +768,34 @@ export default function ChainDoc(){
     }finally{ setCreando(false); }
   };
 
+  // ← NUEVO (25 oct): un contrato desde cero se abre como borrador.
+  //
+  // Nace siendo un documento de texto con una nota de hacia dónde va,
+  // porque eso es exactamente lo que es mientras lo escribes. Se
+  // redacta con el papel entero y su barra de estilos, y pasa a ser
+  // expediente al analizarse, en su sitio: mismo identificador, misma
+  // cadena, mismas firmas.
+  const crearBorrador = async()=>{
+    if(creando) return;
+    setCreando(true);
+    try{
+      const name = mIn.trim();
+      if(!name){ notify("Ponle un nombre al contrato","err"); return; }
+      const nd = await crear({
+        id: genId(), ...folioNuevo(), title:name, content:"", folder:mIn2||null,
+        owner:user, ownerUid:uid, ownerEmail:acctEmail,
+        tplId:null, fields:null, destino:"expediente",
+        source:"nuevo", sourceFile:null, password:null, sharedWith:[],
+      }, { accion:"CREACIÓN", contenido:`Borrador de contrato: ${name}` });
+      if(!nd){ notify("Error al crear","err"); return; }
+      closeCreate();
+      setD(nd); setTitle(name); setContent(""); setFields({});
+      setSecciones(seccionesDe(nd));
+      setUnlocked(true); setEdit(true); setDirty(false);
+      setUrlDoc(nd.id); setScreen("doc");
+    }finally{ setCreando(false); }
+  };
+
   // ← NUEVO: abre y cierra el asistente de creación en un solo lugar
   const openCreate = ()=>{
     setMIn(""); setMIn2(""); setTpl("contrato");
@@ -780,7 +819,7 @@ export default function ChainDoc(){
     // navegador, es lo que cabe en el modelo. Ver `nucleo/texto.js`.
     const body = d.tplId
       ? serializeForm(d.tplId, fields)
-      : normalizar(elEditor()?.innerHTML ?? content);
+      : cuerpoDelEditor();
     const up = await aplicar(d,
       { accion:"EDICIÓN", contenido:aTextoPlano(body).slice(0,200) },
       { title, content:body, fields: d.tplId ? fields : null,
@@ -881,11 +920,24 @@ export default function ChainDoc(){
       notify(`Está adjunto como comprobante en «${sitios[0].expTitulo}». Retíralo de ahí antes de convertirlo.`,"err");
       return;
     }
+    // ← ARREGLADO (25 oct): el texto sale del EDITOR, no del estado.
+    //
+    // Desde que el papel es un contentEditable, `content` se queda con
+    // lo último que se guardó: mientras escribes, el que va al día es
+    // el DOM. Analizar `content` habría mandado a la IA el documento
+    // de antes de los cambios, y en un borrador recién empezado eso es
+    // el documento vacío.
+    const cuerpo = cuerpoDelEditor();
+    const texto = aTextoPlano(cuerpo);
+    if(texto.trim().length < MIN_CONTRATO){
+      notify(`Para analizarlo hace falta algo más de texto: llevas ${texto.trim().length} de ${MIN_CONTRATO} caracteres.`,"err");
+      return;
+    }
     setSmartRes(null); setSmartErr(""); setModal({t:"convertir"});
     setSmartBusy(true);
     try{
       setSmartMsg("");
-      const res = await analyzeContract(content, setSmartMsg);   // el texto tal como está en el editor
+      const res = await analyzeContract(texto, setSmartMsg);
       setSmartRes(res);
     }catch(err){ setSmartErr(err.message); }
     finally{ setSmartBusy(false); setSmartMsg(""); }
@@ -897,17 +949,24 @@ export default function ChainDoc(){
     if(!smartRes?.requisitos?.length) return;
     setSaving(true);
     try{
-      // ← ACTUALIZADO (24 oct): a Gemini se le manda prosa. Mandarle
-      // «<p>» y «</strong>» es gastar tokens en ruido y empeorar lo
-      // que extrae.
-      const texto = aTextoPlano(content);
+      // ← ARREGLADO (25 oct): a Gemini se le manda PROSA, pero lo que
+      // se GUARDA sigue siendo el documento con su formato.
+      //
+      // Ayer, al pasar el contenido a tener formato, esto se quedó a
+      // medias: mandaba prosa a la IA —bien— y luego guardaba esa
+      // misma prosa como contenido del expediente. O sea que convertir
+      // un contrato bien maquetado, con sus títulos y sus cláusulas en
+      // lista, lo dejaba en un bloque de texto plano. Se perdía el
+      // trabajo justo en el paso que lo hace importante.
+      const cuerpo = cuerpoDelEditor();
+      const texto = aTextoPlano(cuerpo);
       let base = d;
 
       // Si había cambios sin guardar en el editor, primero se sellan.
-      if(texto !== (d.content||"")){
+      if(cuerpo !== (d.content||"")){
         const previo = await aplicar(base,
           { accion:"EDICIÓN", contenido:texto.slice(0,200) },
-          { content:texto }, { autor:user, autorUid:uid });
+          { content:cuerpo }, { autor:user, autorUid:uid });
         if(!previo){ notify("No se pudo convertir","err"); return; }
         base = previo;
       }
@@ -919,8 +978,8 @@ export default function ChainDoc(){
                fases:(smartRes.fases||[]).length, modelo:smartRes.modelo },
       }, {
         title: title.trim() || d.title,
-        content: texto,
-        kind: "expediente", tplId: null, fields: null,
+        content: cuerpo,
+        kind: "expediente", tplId: null, fields: null, destino: null,
         requisitos: smartRes.requisitos,
         fases: smartRes.fases || [],   // ← NUEVO
         fechaLimite: smartRes.fechaLimite,
@@ -933,7 +992,7 @@ export default function ChainDoc(){
       }, { autor:user, autorUid:uid });
 
       if(up){
-        setD(up); setTitle(up.title); setContent(texto);
+        setD(up); setTitle(up.title); setContent(cuerpo);
         setEdit(false); setDirty(false); setModal(null); setSmartRes(null);
         refresh();
         notify(`Contrato inteligente con ${up.requisitos.length} requisitos ✓`);
@@ -1645,10 +1704,15 @@ export default function ChainDoc(){
 
   const delDoc = (id)=> conEspera("eliminando", async()=>{
     try{
-      await store.del(id);
+      // ← ACTUALIZADO (25 oct): el servidor decide si esto se borra
+      // de verdad o sólo se quita de tu lista, y lo dice de vuelta.
+      // El aviso tiene que contar lo que pasó, no lo que se pidió.
+      const r = await store.del(id);
       await refresh();
       setModal(null);
-      notify("Documento eliminado");
+      notify(r?.borrado === false
+        ? "Quitado de tu lista. El documento sigue existiendo."
+        : "Documento eliminado");
     }catch(e){
       console.error(e);
       // ← ACTUALIZADO (11 oct): el motivo en un modal, no en un aviso
@@ -1740,7 +1804,10 @@ export default function ChainDoc(){
     setFaseSel(null);                                           // ← NUEVO
     setExpTab("expediente");                                    // ← NUEVO: siempre se entra por la primera
     setDocTab("documento");                                     // ← NUEVO: igual para el documento
-    setUnlocked(!estaProtegido(dd)); setEdit(false); setDirty(false);
+    // ← NUEVO (25 oct): un borrador se abre editando. Es a lo que se
+    // entra: no hay nada que leer todavía, y pedir un clic más en
+    // «Editar» para seguir escribiendo lo que dejaste a medias sobra.
+    setUnlocked(!estaProtegido(dd)); setEdit(esBorradorContrato(dd)); setDirty(false);
     setUrlDoc(id); setScreen("doc");
     verificarVinculos(dd);                                      // ← NUEVO: sin await, no bloquea
     registrarConsulta(dd);                                      // ← NUEVO: en segundo plano
@@ -1956,6 +2023,21 @@ export default function ChainDoc(){
     }catch(e){ console.error(e); notify(errorBackend(e),"err"); }
   };
 
+  // ← NUEVO (25 oct): crear una carpeta y dejarla seleccionada.
+  //
+  // Si ya existía no es un error: lo que quiere quien la escribió es
+  // guardar ahí, así que se selecciona la que ya había y a correr.
+  // Regañar por pedir algo que ya está hecho es de las cosas que más
+  // molestan de un formulario.
+  const crearCarpeta = (nombre)=>{
+    const r = revisarCarpeta(nombre, folders);
+    if(!r.ok){ setCarpErr(r.error); return; }
+    if(!r.yaEsta) setFolders(conCarpeta(folders, r.nombre));
+    setMIn2(r.nombre);
+    setCarpNueva(null); setCarpErr("");
+    notify(r.yaEsta ? `Ya tenías «${r.nombre}». La dejo seleccionada.` : `Carpeta «${r.nombre}» creada ✓`);
+  };
+
   const copiarEnlace = (url)=>{
     navigator.clipboard.writeText(url);
     notify("Enlace copiado ✓");
@@ -1989,10 +2071,11 @@ export default function ChainDoc(){
   const ctx = {
     MAX_IMGS, moveTo, migrarDatos, migrando, migrarArchivosDatos, migrandoArch, acctEmail, addImage, attachEvidence, authBusy, authMode, authStep,
     bioBusy, bioCreds, bioOk, cancelarSolicitud, closeCreate, confirmarConversion,
-    content, convOculto, copyLink, creando, createDoc, createExpediente, createStep, d, delDoc, doLogin,
+    content, convOculto, copyLink, creando, crearBorrador, createDoc, createExpediente, createStep, d, delDoc, doLogin,
     expTab, setExpTab, tplInfo, setTplInfo, desbloqueando,
     // ← NUEVO (21 oct): secciones apagables y cambio de rol en sitio.
     secciones, setSecciones, cambiarRol, rolBusy,
+    carpNueva, setCarpNueva, carpErr, setCarpErr, crearCarpeta,
     aplicarEstilo,
     docTab, setDocTab,
     // ← NUEVO (22 oct): la campana.

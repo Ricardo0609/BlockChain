@@ -24,6 +24,7 @@ import {
 import { db } from "../firebase";
 import { armarBloqueV2 } from "./bloques";
 import { decideAhora } from "./acuerdo";
+import { ocultoPara } from "./borrado";
 import { llamar } from "./backend";
 
 const ENV = (typeof import.meta !== "undefined" && import.meta.env) || {};
@@ -65,6 +66,7 @@ export const CAMPOS_EDITABLES = [
   "title", "content", "fields", "folder", "password", "tplId",
   "kind", "requisitos", "fases", "solicitudes", "imagenes", "sharedWith", "roles",
   "secciones",
+  "destino",
   "fechaLimite", "montoTotal", "moneda", "partes", "resumen", "analisis",
   "convertidoDe", "source", "sourceFile",
 ];
@@ -168,7 +170,11 @@ export const store = {
     // Ésa es tu constancia de que contestaste, y es lo último que
     // conviene borrar en una herramienta que vende pruebas.
     const lista = [...unicos.values()]
-      .filter((x) => decideAhora(x, correo) !== "rechazado");
+      .filter((x) => decideAhora(x, correo) !== "rechazado")
+      // ← NUEVO (25 oct): lo que quitaste de tu lista. El documento
+      // sigue existiendo —el otro lo firmó, o es evidencia de algún
+      // contrato—, pero deja de salirte a ti. Ver `nucleo/borrado.js`.
+      .filter((x) => !ocultoPara(x, uid));
     if(!enServidor()) return lista;
 
     // La lista del inicio necesita la cadena para contar bloques y firmas.
@@ -195,10 +201,15 @@ export const store = {
    * dueño puede eliminarlo»— se quedaba en la consola, donde nadie
    * lo ve. El que llama decide cómo contarlo; aquí sólo se avisa.
    */
+  /**
+   * Eliminar. Devuelve lo que el servidor dice que PASO, no lo que se
+   * pidio: `{borrado:false, modo:"ocultar"}` cuando el documento ya es
+   * de dos y solo se quita de tu lista. Ver `nucleo/borrado.js`.
+   */
   async del(id){
-    if(enServidor()){ await llamar("borrarOperacion", { opId:id }); return true; }
+    if(enServidor()) return await llamar("borrarOperacion", { opId:id });
     await deleteDoc(doc(db, COL, id));
-    return true;
+    return { borrado: true, modo: "borrar" };
   },
 };
 

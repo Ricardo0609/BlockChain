@@ -3,14 +3,15 @@
 import { ACCEPTED_DOCS, ACCEPTED_IMAGES } from "../fileImport";
 import { Icon } from "../ui/iconos";
 import { METHODS, TEMPLATES } from "../nucleo/catalogos";
-import { aiConfigured, listModels } from "../smartContract";
+import { MIN_CONTRATO, aiConfigured, listModels } from "../smartContract";
 import { fmtFecha } from "../nucleo/formato";
+import { renderSelectorCarpeta } from "../ui/SelectorCarpeta";
 
 export function modalCrear(ctx){
   const {
     closeCreate, creando, createDoc, createExpediente, createStep, dragOver, dropFase, dropReq,
-    folders, handleFile, imp, impErr, impMeta, impText, mIn, mIn2, method, modal,
-    onDrop, resetImport, runAnalysis, setCreateStep, setDragOver, setMIn, setMIn2,
+    crearBorrador, handleFile, imp, impErr, impMeta, impText, mIn, method, modal,
+    onDrop, resetImport, runAnalysis, setCreateStep, setDragOver, setMIn,
     setMethod, setSmartErr, setSmartRes, setSmartText, setTpl, smartBusy, smartErr,
     smartMsg, smartRes, smartText, tpl, tplInfo, setTplInfo,
   } = ctx;
@@ -88,15 +89,52 @@ export function modalCrear(ctx){
 
       {/* ── CONTRATO INTELIGENTE ── */}
       {/* ← NUEVO: el contrato se escribe o importa, y de ahí sale el expediente */}
-      {isSmart && method && (method==="cero" || impText) && (<>
+      {/* ← NUEVO (25 oct): desde cero se redacta en el papel entero.
+          Un contrato que hay que escribir no cabe en un campito dentro
+          de un modal: en cuanto quieres títulos, cláusulas en lista o
+          simplemente leer lo que llevas, ese cuadro estorba. Así que
+          desde cero sólo se pregunta el nombre y la carpeta, y se abre
+          el documento. El cuadro sigue siendo lo correcto para pegar
+          un contrato que ya traías escrito de fuera. */}
+      {isSmart && method==="cero" && (<>
+        <div className="borr-aviso">
+          <Icon n="draft" size={20}/>
+          <div>
+            <strong>Vas a redactarlo tú</strong>
+            <span>
+              Se abre como borrador, con el papel entero y la barra de estilos.
+              Puedes dejarlo a medias y seguir cuando quieras: hasta que lo
+              analices no es un contrato todavía.
+            </span>
+          </div>
+        </div>
+        <input className="inp" placeholder="Nombre del contrato" value={mIn} autoFocus
+          onChange={e=>setMIn(e.target.value)}
+          onKeyDown={e=>{ if(e.key==="Enter" && !creando && mIn.trim()) crearBorrador(); }} />
+        <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Guardar en carpeta (opcional):</p>
+        {renderSelectorCarpeta(ctx)}
+      </>)}
+
+      {isSmart && method && impText && (<>
         {!smartRes && (<>
           <textarea className="inp smart-ta"
             placeholder={"Pega o escribe aquí el contrato.\n\nEjemplo: «Se contrata el diseño de un póster para la campaña X, con fecha límite del 14 de septiembre de 2026, por $12,000 MXN. El diseñador contratará a un fotógrafo por $4,000 MXN y deberá comprobar ese gasto.»"}
             value={smartText} onChange={e=>{setSmartText(e.target.value);setSmartErr("");}} />
           <div className="smart-meta">
-            <span>{smartText.trim().length} caracteres</span>
+            <span>
+              {smartText.trim().length} caracteres
+              {smartText.trim().length < MIN_CONTRATO &&
+                ` · faltan ${MIN_CONTRATO - smartText.trim().length} para poder analizarlo`}
+            </span>
             {!aiConfigured() && <span className="smart-warn">Falta configurar la llave de Gemini</span>}
           </div>
+          {smartText.trim().length > 0 && smartText.trim().length < MIN_CONTRATO && (
+            <p className="imp-hint" style={{marginTop:0}}>
+              Para sacar un expediente hace falta algo más que la tarea: quién se lo
+              encarga a quién, para cuándo, por cuánto, y qué hay que entregar o
+              comprobar. Con menos, lo que salga va a ser inventado.
+            </p>
+          )}
           {smartErr && (
             <div className="imp-error">
               {smartErr}
@@ -115,7 +153,7 @@ export function modalCrear(ctx){
             </div>
           )}
           <button className="btn btn-primary" style={{width:"100%"}}
-            disabled={smartBusy || smartText.trim().length<80}
+            disabled={smartBusy || smartText.trim().length<MIN_CONTRATO}
             onClick={runAnalysis}>
             {smartBusy ? (smartMsg || "Leyendo el contrato…") : "Analizar contrato"}
           </button>
@@ -187,10 +225,7 @@ export function modalCrear(ctx){
           <input className="inp" style={{marginTop:18}} placeholder="Nombre del expediente"
             value={mIn} onChange={e=>setMIn(e.target.value)} />
           <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Guardar en carpeta (opcional):</p>
-          <div className="pills">
-            <button className={`pill ${mIn2===""?"sel":""}`} onClick={()=>setMIn2("")}>Sin carpeta</button>
-            {folders.map(f=><button key={f} className={`pill ${mIn2===f?"sel":""}`} onClick={()=>setMIn2(f)}>{f}</button>)}
-          </div>
+          {renderSelectorCarpeta(ctx)}
         </>)}
       </>)}
 
@@ -288,10 +323,7 @@ export function modalCrear(ctx){
         <input className="inp" style={{marginTop:20}} placeholder="Nombre del documento"
           value={mIn} onChange={e=>setMIn(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter" && !creando) createDoc(); }} />
         <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Guardar en carpeta (opcional):</p>
-        <div className="pills">
-          <button className={`pill ${mIn2===""?"sel":""}`} onClick={()=>setMIn2("")}>Sin carpeta</button>
-          {folders.map(f=><button key={f} className={`pill ${mIn2===f?"sel":""}`} onClick={()=>setMIn2(f)}>{f}</button>)}
-        </div>
+        {renderSelectorCarpeta(ctx)}
       </>)}
 
       <div className="modal-row">
@@ -299,7 +331,12 @@ export function modalCrear(ctx){
           onClick={()=>{ setCreateStep(0); setMethod(null); resetImport();
                          setSmartText(""); setSmartRes(null); setSmartErr(""); }}>Atrás</button>
         {/* ← ACTUALIZADO: el expediente se crea con su propia función */}
-        {isSmart ? (
+        {isSmart && method==="cero" ? (
+          <button className="btn btn-primary" onClick={crearBorrador}
+            disabled={creando || !mIn.trim()}>
+            {creando ? "Abriendo…" : "Crear y redactar"}
+          </button>
+        ) : isSmart ? (
           <button className="btn btn-primary" onClick={createExpediente}
             disabled={!smartRes || smartBusy || creando || !smartRes.requisitos.length}>
             {creando ? "Abriendo…" : "Abrir expediente"}

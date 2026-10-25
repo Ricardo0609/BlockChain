@@ -122,9 +122,37 @@ export const TIPOS_DOC = {
   smart:   { nombre: "Contrato inteligente", color: "amarillo" },
 };
 
+/**
+ * Un contrato que todavía se está redactando.
+ *
+ * ← NUEVO (25 oct). Un contrato desde cero nace como documento de
+ * texto —porque eso es lo que es mientras lo escribes— con una nota
+ * de hacia dónde va. Así se redacta con el papel entero y su barra de
+ * estilos, en vez de en un campito dentro de un modal, y no hace
+ * falta un tipo nuevo con sus reglas a medio hacer: todo lo que ya
+ * sabe hacer un documento de texto funciona igual.
+ *
+ * Pasa a ser expediente de verdad al analizarse, en su sitio: mismo
+ * identificador, misma cadena, mismas firmas.
+ */
+export const esBorradorContrato = (doc) =>
+  Boolean(doc)
+  && doc.kind !== "expediente"
+  && doc.destino === "expediente"
+  // Una factura o un recibo no pueden llegar a ser un expediente
+  // —`puedeConvertir` los deja fuera—, asi que tampoco pueden estar de
+  // camino. Sin esta linea, una plantilla con el campo puesto
+  // prometeria en su tarjeta un contrato que nunca va a poder
+  // analizarse.
+  && !doc.tplId;
+
 /** De qué tipo es un documento ya guardado. */
 export function tipoDeDocumento(doc){
   if(doc?.kind === "expediente") return "smart";
+  // Un borrador ya se enseña como contrato: es lo que va a ser, y lo
+  // que su dueño cree que esta haciendo. Lo que falta lo dice la
+  // etiqueta de «Borrador», no el color de la tarjeta.
+  if(esBorradorContrato(doc))    return "smart";
   if(doc?.tplId === "factura")   return "factura";
   if(doc?.tplId === "recibo")    return "recibo";
   return "texto";

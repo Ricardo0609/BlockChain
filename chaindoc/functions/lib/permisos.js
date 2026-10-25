@@ -26,6 +26,7 @@ export const CAMPOS_EDITABLES = new Set([
   "title", "content", "fields", "folder", "tplId",
   "kind", "requisitos", "fases", "solicitudes", "imagenes",
   "secciones",
+  "destino",
   "fechaLimite", "montoTotal", "moneda", "partes", "resumen", "analisis",
   "convertidoDe", "source", "sourceFile",
 ]);
