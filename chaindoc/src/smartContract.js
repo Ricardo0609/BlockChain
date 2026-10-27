@@ -13,6 +13,7 @@
 import { enServidor } from "./nucleo/datos";
 import { llamar, errorBackend } from "./nucleo/backend";
 import { esEnlace } from "./nucleo/enlaces";
+import { firmaronLasDos, todoEntregado } from "./nucleo/acuerdo";
 
 const ENV = (typeof import.meta !== "undefined" && import.meta.env) || {};
 const API_KEY = ENV.VITE_GEMINI_API_KEY || "";
@@ -637,9 +638,26 @@ export function expedienteStatus(exp) {
   const cumplidos = obligatorios.filter((r) => archivosDe(r).length > 0).length;
   const total = obligatorios.length;
 
+  // ← NUEVO (27 oct): firmar es el último paso, y cuenta como paso.
+  //
+  // Si el contrato tiene seis puntos, la barra va a siete: los seis
+  // que hay que entregar y la firma de conformidad de las dos partes.
+  // Entregarlo todo deja la barra en 6 de 7, no en «completo», porque
+  // un contrato entregado y sin firmar no está terminado — está
+  // esperando el visto bueno.
+  //
+  // El paso sólo existe cuando hay acuerdo (`pedidoEn`): un contrato
+  // que todavía nadie mandó no tiene dos partes que puedan firmarlo,
+  // y enseñarle un paso inalcanzable sería un callejón sin salida.
+  const conFirma = Boolean(exp?.acuerdo?.pedidoEn);
+  const firmado = conFirma && firmaronLasDos(exp, "conformidad");
+  const entregadoTodo = todoEntregado(exp);
+
   const hoy = new Date().toISOString().slice(0, 10);
   const vencido = exp?.fechaLimite ? hoy > exp.fechaLimite : false;
-  const completo = total > 0 && cumplidos === total;
+  const completo = conFirma
+    ? entregadoTodo && firmado
+    : total > 0 && cumplidos === total;
 
   // Diferencia en días de calendario: evita el desfase por hora del día.
   let dias = null;
@@ -649,13 +667,24 @@ export function expedienteStatus(exp) {
     dias = Math.round((limD - hoyD) / 86400000);
   }
 
+  // Con la firma, un paso más en el total y uno más cumplido al firmar.
+  const pasos = total + (conFirma ? 1 : 0);
+  const dados = cumplidos + (firmado ? 1 : 0);
+
   return {
-    cumplidos,
-    total,
-    porcentaje: total ? Math.round((cumplidos / total) * 100) : 0,
+    cumplidos: dados,
+    total: pasos,
+    porcentaje: pasos ? Math.round((dados / pasos) * 100) : 0,
     completo,
     vencido,
     dias,
+    // Los requisitos solos, sin contar la firma: es lo que mira la
+    // pantalla para saber si ya toca enseñar el botón de firmar.
+    entregados: cumplidos,
+    requisitos: total,
+    entregadoTodo,
+    firmado,
+    firmaPendiente: conFirma && entregadoTodo && !firmado,
     estado: completo ? "completo" : vencido ? "vencido" : "abierto",
   };
 }

@@ -13,7 +13,7 @@ import { fmtShort } from "../nucleo/formato";
 import { renderMenu } from "./MenuLateral";
 import { renderModales } from "../modales";
 import { ESTILOS } from "../ui/estilos";
-import { TEXTO_AVISO, ordenar, esGrave } from "../nucleo/avisos";
+import { TEXTO_AVISO, ordenar, esGrave, avisosVigentes } from "../nucleo/avisos";
 import { resumenDe } from "../nucleo/texto";
 import { decidirBorrado } from "../nucleo/borrado";
 import { esBorradorContrato } from "../nucleo/catalogos";
@@ -180,26 +180,34 @@ export function renderInicio(ctx){
           anoche. Va arriba porque una factura cancelada convierte un
           expediente completo en uno falso, y eso no puede esperar a
           que alguien entre a mirar requisito por requisito. */}
-      {avisos?.avisos?.length > 0 && (
+      {/* ← ACTUALIZADO (27 oct): la lista de anoche, cruzada con los
+          documentos de ahora. Un aviso de algo que ya cumpliste —o de
+          un documento que ya no está— desaparece solo, sin esperar a
+          la revisión de la madrugada siguiente. Ver `nucleo/avisos.js`. */}
+      {(()=>{
+        const av = avisosVigentes(avisos, docs);
+        if(!av?.avisos?.length) return null;
+        return (
         <div className="avisos">
           <div className="avisos-h">
             <Icon n="notifications_active" size={18}/>
             <span>
-              {avisos.total === 1 ? "1 cosa que revisar" : `${avisos.total} cosas que revisar`}
+              {av.total === 1 ? "1 cosa que revisar" : `${av.total} cosas que revisar`}
             </span>
           </div>
-          {ordenar(avisos.avisos).slice(0,8).map((a,i)=>(
+          {ordenar(av.avisos).slice(0,8).map((a,i)=>(
             <button key={i} className={`aviso ${esGrave(a)?"grave":""}`}
               onClick={()=>a.opId && openDoc(a.opId)}>
               <Icon n={esGrave(a)?"error":"schedule"} size={15}/>
               <span>{TEXTO_AVISO(a)}</span>
             </button>
           ))}
-          {avisos.total > 8 && (
-            <div className="avisos-mas">y {avisos.total - 8} más</div>
+          {av.total > 8 && (
+            <div className="avisos-mas">y {av.total - 8} más</div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {view==="inicio" && (<>
         {/* ← NUEVO: lo que otras personas te pidieron. Va primero

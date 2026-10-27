@@ -20,6 +20,7 @@ import { tiempoRestante } from "../nucleo/invitaciones";
 import { fmtFull } from "../nucleo/formato";
 import { fmtMonto } from "../smartContract";
 import { ROLES_OFRECIDOS } from "../nucleo/accesos";
+import { renderBotonBio } from "../ui/BotonBio";
 
 /**
  * Los roles que se ofrecen en un documento normal.
@@ -42,7 +43,7 @@ export function modalCompartir(ctx){
     invDias, setInvDias, crearEnlace, enlaceNuevo, setEnlaceNuevo, copiarEnlace,
     enlaces, verEnlaces, revocarEnlace, copyLink,
     ROL_TEXTO, ROL_AYUDA, accesos, puedo, verificado, reenviarVerificacion, verifBusy,
-    enFirmeConf, setEnFirmeConf, enFirmeErr, firmaBusy, mandarAFirmar, pass, setPass,
+    enFirmeErr, firmaBusy, mandarAFirmar, pass, setPass, bioOk, bioCreds,
   } = ctx;
   if(modal.t !== "share") return null;
 
@@ -251,15 +252,19 @@ export function modalCompartir(ctx){
 
           {/* ── Tu firma, si es la otra parte ── */}
           {modo==="completo" && mandaAFirmar && (<>
-            <label className="acu-check" htmlFor="sh-conf">
-              <input id="sh-conf" type="checkbox" checked={!!enFirmeConf}
-                onChange={e=>setEnFirmeConf(e.target.checked)} />
-              <span>
-                <strong>Pedir su conformidad al terminar</strong>
-                <em>Al final, los dos firman que quedó entregado. Para un trabajo
-                chico suele sobrar; para una obra, no.</em>
-              </span>
-            </label>
+            {/* ← QUITADO (27 oct): la casilla «pedir su conformidad al
+                terminar». Ya no se pregunta porque la respuesta es
+                siempre sí: firmar es el último paso de todo contrato.
+                Dejarla era ofrecer la opción de que el contrato no
+                terminara nunca. */}
+            <p className="acu-nota">
+              Al terminar de entregar todo, los dos firman la conformidad.
+              Ese es el último paso del contrato.
+            </p>
+
+            {renderBotonBio({ bioOk, bioCreds, ocupado: firmaBusy,
+              verbo: "Firmar y mandar",
+              onBio: ()=>mandarAFirmar(mIn, null, true) })}
 
             <label className="rec-lbl" htmlFor="sh-codigo">Tu código de firma</label>
             <input id="sh-codigo" className="inp" type="password" placeholder="••••"

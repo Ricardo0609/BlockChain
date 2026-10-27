@@ -4,7 +4,7 @@ import { FORMS } from "../ui/formularios";
 import { FormDoc } from "../ui/FormDoc";
 import { IcoBack, IcoEye, IcoFinger, Icon } from "../ui/iconos";
 import { Timeline } from "../ui/Timeline";
-import { aiConfigured, dondeEstaAdjunto, hayQueRevisarRFCs } from "../smartContract";
+import { aiConfigured, dondeEstaAdjunto, expedienteStatus, hayQueRevisarRFCs } from "../smartContract";
 import { deviceLabel } from "../biometric";
 import { fmtFull, fmtShort } from "../nucleo/formato";
 import { renderAccesos, conAccesoDe } from "./Accesos";
@@ -54,6 +54,17 @@ export function renderDocumento(ctx){
 
   // ← NUEVO (25 oct): un contrato que todavía se está redactando.
   const esBorrador = esBorradorContrato(d);
+
+  // ← NUEVO (27 oct): en un contrato inteligente, firmar es el ÚLTIMO
+  // paso. La sección de firmas no aparece mientras quede algo por
+  // entregar: enseñarla antes invita a firmar «conforme» sobre una
+  // entrega a medias, y deja al usuario decidiendo en qué orden hacer
+  // las cosas cuando el orden ya está decidido.
+  //
+  // En un documento de texto no hay pasos que cumplir, así que su
+  // sección de firmas se queda como siempre.
+  const stExp = d.kind === "expediente" ? expedienteStatus(d) : null;
+  const tocaFirmar = !stExp || stExp.entregadoTodo;
 
   // ← NUEVO (21 oct): quién más ve este documento, para las pestañas.
   const conAcceso = conAccesoDe(accesos);
@@ -402,7 +413,7 @@ export function renderDocumento(ctx){
         );
       })()}
 
-      {!esBorrador && verSec("firmas") && (<>
+      {!esBorrador && tocaFirmar && verSec("firmas") && (<>
       {/* La cabecera sólo existe mientras editas: es el percherode
           donde cuelga «Quitar sección». Fuera de edición el documento
           se ve exactamente como siempre, con sus sellos y ya. */}
@@ -411,6 +422,22 @@ export function renderDocumento(ctx){
           <span className="adj-t">Firmas</span>
           <span className="adj-n">{sigs.length}</span>
           {quitarSec("firmas")}
+        </div>
+      )}
+      {/* ← NUEVO (27 oct): en un contrato, esta firma es el último
+          paso y conviene que se lea como tal. Sólo aparece cuando ya
+          se entregó todo, así que no hay riesgo de que prometa algo
+          que todavía no toca. */}
+      {stExp && stExp.firmaPendiente && (
+        <div className="firma-final">
+          <Icon n="handshake" size={20}/>
+          <div>
+            <strong>Último paso: la conformidad</strong>
+            <div className="firma-final-s">
+              Ya se entregó todo. Cuando las dos partes firmen aquí, el
+              contrato queda terminado y el progreso llega al 100%.
+            </div>
+          </div>
         </div>
       )}
       <div className="sign-bar">

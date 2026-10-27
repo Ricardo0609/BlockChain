@@ -423,3 +423,89 @@ describe("el aviso de «sin importe anotado»", () => {
       [{ aid: "a3", nombre: "factura.pdf", monto: 1000 }])).sinImporte).toBe(0);
   });
 });
+
+// ── FIRMAR ES EL ULTIMO PASO (27 oct) ─────────────────────────
+//
+// Un contrato de cuatro puntos tiene cinco pasos: los cuatro que hay
+// que entregar y la firma de conformidad de las dos partes. Entregarlo
+// todo deja la barra en 4 de 5, no en «completo»: un contrato
+// entregado y sin firmar no esta terminado, esta esperando el visto
+// bueno.
+describe("la firma como ultimo paso", () => {
+  const conAcuerdo = (firmas = []) => contrato({
+    ownerEmail: "ricardo@chaindoc.mx",
+    acuerdo: {
+      pedidoEn: "2026-09-10T10:00:00Z", paraEmail: "ana@correo.com",
+      firmas: [
+        { parte: "emisor",   momento: "aceptacion", fuerza: "cuenta", fecha: "2026-09-10T10:00:00Z" },
+        { parte: "receptor", momento: "aceptacion", fuerza: "cuenta", fecha: "2026-09-11T10:00:00Z" },
+        ...firmas,
+      ],
+    },
+  });
+  const conforme = (parte) =>
+    ({ parte, momento: "conformidad", fuerza: "cuenta", fecha: "2026-09-21T10:00:00Z" });
+  const todoSubido = (c) => {
+    c.requisitos.forEach((r, i) => { r.archivos = [pdf(`a${i}`, `h${i}`, r.monto)]; });
+    return c;
+  };
+
+  it("cuatro puntos son cinco pasos", () => {
+    const st = expedienteStatus(conAcuerdo());
+    expect([st.cumplidos, st.total]).toEqual([0, 5]);
+  });
+
+  it("con cosas sin entregar NO toca firmar todavia", () => {
+    // De esto depende que la seccion de firmas aparezca o no. Si se
+    // enseña antes de tiempo, se invita a firmar «conforme» sobre una
+    // entrega a medias, que es justo lo que la firma viene a evitar.
+    expect(expedienteStatus(conAcuerdo()).firmaPendiente).toBe(false);
+
+    const medias = conAcuerdo();
+    medias.requisitos[0].archivos = [pdf("a0", "h0", 22000)];
+    expect(expedienteStatus(medias).firmaPendiente).toBe(false);
+    expect(expedienteStatus(medias).entregadoTodo).toBe(false);
+  });
+
+  it("entregarlo todo NO llega al 100%", () => {
+    const st = expedienteStatus(todoSubido(conAcuerdo()));
+    expect([st.cumplidos, st.total, st.porcentaje]).toEqual([4, 5, 80]);
+    expect(st.completo).toBe(false);
+    expect(st.entregadoTodo).toBe(true);
+    expect(st.firmaPendiente).toBe(true);
+  });
+
+  it("con una sola de las dos firmas, tampoco", () => {
+    const st = expedienteStatus(todoSubido(conAcuerdo([conforme("emisor")])));
+    expect(st.completo).toBe(false);
+    expect(st.porcentaje).toBe(80);
+    expect(st.firmaPendiente).toBe(true);
+  });
+
+  it("firmado por las dos: 5 de 5 y completo", () => {
+    const st = expedienteStatus(
+      todoSubido(conAcuerdo([conforme("emisor"), conforme("receptor")])));
+    expect([st.cumplidos, st.total, st.porcentaje]).toEqual([5, 5, 100]);
+    expect(st.completo).toBe(true);
+    expect(st.firmaPendiente).toBe(false);
+  });
+
+  it("firmar antes de entregar no completa el contrato", () => {
+    // El servidor no deja llegar aqui, pero si llegara, la barra no
+    // puede decir que esta terminado algo que no se entrego.
+    const st = expedienteStatus(conAcuerdo([conforme("emisor"), conforme("receptor")]));
+    expect(st.completo).toBe(false);
+    expect(st.entregadoTodo).toBe(false);
+    expect(st.firmaPendiente).toBe(false);
+  });
+
+  it("sin acuerdo no hay paso de firma: cuenta como siempre", () => {
+    // Un expediente que nadie mando a firmar no tiene dos partes que
+    // puedan firmarlo. Enseñarle un paso inalcanzable seria un
+    // callejon sin salida.
+    const st = expedienteStatus(todoSubido(contrato()));
+    expect([st.cumplidos, st.total, st.porcentaje]).toEqual([4, 4, 100]);
+    expect(st.completo).toBe(true);
+    expect(st.firmaPendiente).toBe(false);
+  });
+});

@@ -26,6 +26,7 @@ import { MIN_CONTRATO,
   debeRegistrarConsulta,
   cerrarSolicitudes,
   hashFile,
+  expedienteStatus,
 } from "./smartContract";
 import { subirArchivo, descartarSubida, abrirArchivo, storageError, makeThumb, LIMITE_MB } from "./storage";
 // ← NUEVO (Etapa 5 · Bloque A): sellado de tiempo en Bitcoin.
@@ -53,7 +54,7 @@ import {
   claveCarpetas, leerCarpetas, tieneCarpetasPropias, carpetasEnUso,
   conCarpeta, revisarCarpeta,
 } from "./nucleo/carpetas";
-import { bloquea, decideAhora, esperaFirmaDe, estadoAcuerdo } from "./nucleo/acuerdo";
+import { bloquea, decideAhora, esperaFirmaDe, estadoAcuerdo, firmaDe, parteDe } from "./nucleo/acuerdo";
 import { limpiarSecciones, seccionesDe } from "./nucleo/secciones";
 import { aTextoPlano, normalizar, ID_PAPEL } from "./nucleo/texto";
 import { notificacionesDe } from "./nucleo/notificaciones";
@@ -172,7 +173,6 @@ export default function ChainDoc(){
   const [firmaBusy,setFirmaBusy]     = useState(false);
   const [enFirmeCorreo,setEnFirmeCorreo] = useState("");
   const [enFirmeNombre,setEnFirmeNombre] = useState("");
-  const [enFirmeConf,setEnFirmeConf]     = useState(false);
   const [enFirmeErr,setEnFirmeErr]       = useState("");
   const [rechMotivo,setRechMotivo]   = useState("");
   const [rechDetalle,setRechDetalle] = useState("");
@@ -837,9 +837,27 @@ export default function ChainDoc(){
     if(!tieneCodigo){ notify("No tienes código de firma configurado","err"); return; }
     setSaving(true);
     try{
+      // Si esta firma era la conformidad final, antes de mandarla ya
+      // lo sabíamos: la pantalla no enseña el botón hasta entonces.
+      const eraLaFinal = expedienteStatus(d).firmaPendiente;
+
       const r = await llamar("firmarDocumento", { opId:d.id, codigo:pass.trim() });
       setD(r.doc); setModal(null); setPass("");
       notify(`✦ Firma de ${user} registrada`);
+
+      // ← NUEVO (27 oct): que no se pierda en silencio.
+      //
+      // Quien registra la conformidad es el servidor. Si las funciones
+      // desplegadas todavía no saben de ella, la firma se asienta como
+      // un sello más y la barra se queda en 3 de 4 sin decir por qué:
+      // el sello aparece, el progreso no avanza, y desde fuera parece
+      // que el último paso no sirve. Mejor una frase incómoda.
+      // Quien no es parte del acuerdo —un auditor, un lector— firma
+      // como sello y ya: ahí no hay conformidad que registrar.
+      const miParte = parteDe(r.doc, acctEmail);
+      if(eraLaFinal && miParte && !firmaDe(r.doc, miParte, "conformidad")){
+        notify("Se firmó, pero el servidor no registró la conformidad. Falta desplegar las funciones: firebase deploy --only functions","err");
+      }
     }catch(e){ console.error(e); notify(errorBackend(e),"err"); }
     finally{ setSaving(false); }
   };
@@ -868,6 +886,20 @@ export default function ChainDoc(){
       return false;
     }finally{ setBioBusy(false); }
   };
+
+  // ← NUEVO (27 oct): pedir el reto y que el dispositivo lo firme.
+  //
+  // El reto lo emite el servidor atado al par (motivo, opId), así que
+  // uno pedido para aceptar un contrato no sirve para firmar su
+  // conformidad. El navegador sólo hace de mensajero.
+  const pedirAsercion = async(motivo, opId)=>{
+    const { reto, credenciales } = await llamar("retoBiometrico", { motivo, opId });
+    return await bioAssert(credenciales, b64uToBytes(reto));
+  };
+
+  /** Un fallo de biometría no se lee como uno del servidor. */
+  const textoDeFallo = (err)=>
+    String(err?.code||"").startsWith("functions/") ? errorBackend(err) : bioError(err);
 
   // ← NUEVO: firma el documento validando la identidad con el enclave seguro.
   // El reto que firma el dispositivo es el hash del bloque, así que la
@@ -1491,39 +1523,53 @@ export default function ChainDoc(){
   // dentro de Compartir, que tiene su propio campo de correo
   // (`mIn`), y el modal viejo se queda como atajo. Los dos llaman
   // aquí; cambia nada más de dónde sale el correo.
-  const mandarAFirmar = async(correoDe=null, nombreDe=null)=>{
+  // ← ACTUALIZADO (27 oct): `conBio` manda la aserción del dispositivo
+  // en vez del código. Las dos vías valen lo mismo para el servidor;
+  // lo que cambia es cómo demuestras que eres tú.
+  const mandarAFirmar = async(correoDe=null, nombreDe=null, conBio=false)=>{
     if(!enServidor()){ notify("Esto necesita el servidor activo","err"); return; }
     const correo = String(correoDe ?? enFirmeCorreo).trim().toLowerCase();
     if(!correo.includes("@")){ setEnFirmeErr("Escribe el correo de la otra parte."); return; }
     if(correo === (acctEmail||"").toLowerCase()){
       setEnFirmeErr("Ese es tu propio correo."); return;
     }
-    if(pass.trim().length<4){ setEnFirmeErr("Escribe tu código de firma."); return; }
+    if(conBio && !bioCreds.length){ setEnFirmeErr("No tienes biometría activada."); return; }
+    if(!conBio && pass.trim().length<4){ setEnFirmeErr("Escribe tu código de firma."); return; }
     setFirmaBusy(true); setEnFirmeErr("");
     try{
+      // El reto se pide DENTRO del try: si el dispositivo no verifica,
+      // el fallo se lee igual que cualquier otro y no deja el botón
+      // girando.
+      const prueba = conBio
+        ? { asercion: await pedirAsercion("acuerdo", d.id) }
+        : { codigo: pass.trim() };
       const r = await llamar("ponerEnFirme", {
         opId: d.id, correo, nombre: String(nombreDe ?? enFirmeNombre).trim() || null,
-        requiereConformidad: enFirmeConf, codigo: pass.trim(),
+        ...prueba,
       });
       setD(r.doc); setModal(null); setPass("");
-      setEnFirmeCorreo(""); setEnFirmeNombre(""); setEnFirmeConf(false);
+      setEnFirmeCorreo(""); setEnFirmeNombre("");
       setMIn(""); setShareErr(""); setShareFound(null); setShareRol("involucrado");
       await refresh();
       notify(`Contrato mandado a firmar a ${correo} ✓`);
-    }catch(e){ console.error(e); setEnFirmeErr(errorBackend(e)); }
+    }catch(e){ console.error(e); setEnFirmeErr(textoDeFallo(e)); }
     finally{ setFirmaBusy(false); }
   };
 
-  const aceptarElContrato = async()=>{
+  const aceptarElContrato = async(conBio=false)=>{
     if(!enServidor()){ notify("Esto necesita el servidor activo","err"); return; }
-    if(pass.trim().length<4){ notify("Escribe tu código de firma","err"); return; }
+    if(conBio && !bioCreds.length){ notify("No tienes biometría activada","err"); return; }
+    if(!conBio && pass.trim().length<4){ notify("Escribe tu código de firma","err"); return; }
     setFirmaBusy(true);
     try{
-      const r = await llamar("aceptarContrato", { opId: d.id, codigo: pass.trim() });
+      const prueba = conBio
+        ? { asercion: await pedirAsercion("acuerdo", d.id) }
+        : { codigo: pass.trim() };
+      const r = await llamar("aceptarContrato", { opId: d.id, ...prueba });
       setD(r.doc); setModal(null); setPass("");
       await refresh();
       notify("Aceptaste el contrato ✓");
-    }catch(e){ console.error(e); notify(errorBackend(e),"err"); }
+    }catch(e){ console.error(e); notify(textoDeFallo(e),"err"); }
     finally{ setFirmaBusy(false); }
   };
 
@@ -2126,7 +2172,7 @@ export default function ChainDoc(){
     mandarAFirmar, aceptarElContrato, rechazarElContrato,
     firmaBusy, rechMotivo, setRechMotivo, rechDetalle, setRechDetalle,
     enFirmeCorreo, setEnFirmeCorreo, enFirmeNombre, setEnFirmeNombre,
-    enFirmeConf, setEnFirmeConf, enFirmeErr,
+    enFirmeErr,
     verificado, verifBusy, reenviarVerificacion, comprobarVerificacion,
     verificarFiscal, verificandoFiscal,
     revisarProveedores, revisando69B, hallazgos69B,

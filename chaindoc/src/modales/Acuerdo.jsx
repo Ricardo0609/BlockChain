@@ -7,6 +7,7 @@
 // documento que al rato es otro.
 
 import { fmtMonto } from "../smartContract";
+import { renderBotonBio } from "../ui/BotonBio";
 
 /** Los motivos de un rechazo. El último abre el campo libre. */
 const MOTIVOS = [
@@ -18,10 +19,11 @@ const MOTIVOS = [
 
 export function modalAcuerdo(ctx){
   const {
-    acu, d, enFirmeConf, enFirmeCorreo, enFirmeErr, enFirmeNombre, firmaBusy,
+    acu, d, enFirmeCorreo, enFirmeErr, enFirmeNombre, firmaBusy,
     mandarAFirmar, aceptarElContrato, rechazarElContrato, modal, pass,
-    rechDetalle, rechMotivo, setEnFirmeConf, setEnFirmeCorreo, setEnFirmeNombre,
+    rechDetalle, rechMotivo, setEnFirmeCorreo, setEnFirmeNombre,
     setModal, setPass, setRechDetalle, setRechMotivo, user,
+    bioOk, bioCreds,
   } = ctx;
 
   // ── Mandar a firmar ────────────────────────────────────────
@@ -56,15 +58,15 @@ export function modalAcuerdo(ctx){
         <input id="acu-nombre" className="inp" type="text" placeholder="Ana Solís"
           value={enFirmeNombre} onChange={e=>setEnFirmeNombre(e.target.value)} />
 
-        <label className="acu-check" htmlFor="acu-conf">
-          <input id="acu-conf" type="checkbox" checked={enFirmeConf}
-            onChange={e=>setEnFirmeConf(e.target.checked)} />
-          <span>
-            <strong>Pedir su conformidad al terminar</strong>
-            <em>Al final, las dos partes firman que quedó entregado. Para un
-            trabajo chico suele sobrar; para una obra, no.</em>
-          </span>
-        </label>
+        {/* ← QUITADO (27 oct): ver la nota en Compartir.jsx. */}
+        <p className="acu-nota">
+          Al terminar de entregar todo, las dos partes firman la conformidad.
+          Ese es el último paso del contrato.
+        </p>
+
+        {renderBotonBio({ bioOk, bioCreds, ocupado: firmaBusy,
+          verbo: "Firmar y mandar",
+          onBio: ()=>mandarAFirmar(null, null, true) })}
 
         <label className="rec-lbl" htmlFor="acu-codigo">Tu código de firma</label>
         <input id="acu-codigo" className="inp" type="password" placeholder="••••"
@@ -100,6 +102,10 @@ export function modalAcuerdo(ctx){
           He leído el contrato completo y <strong>acepto sus términos</strong>:
           el alcance, el importe y la fecha límite.
         </div>
+
+        {renderBotonBio({ bioOk, bioCreds, ocupado: firmaBusy,
+          verbo: "Aceptar",
+          onBio: ()=>aceptarElContrato(true) })}
 
         <label className="rec-lbl" htmlFor="acu-cod2">Tu código de firma</label>
         <input id="acu-cod2" className="inp" type="password" placeholder="••••"

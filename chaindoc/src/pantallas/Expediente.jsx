@@ -200,6 +200,9 @@ export function renderExpediente(ctx){
       </div>
       <div className="exp-state">
         {st.completo ? "Expediente completo"
+         /* ← NUEVO (27 oct): entregado no es terminado. Sin esta
+            línea, la barra se quedaba en 6 de 7 sin decir por qué. */
+         : st.firmaPendiente ? "Todo entregado · falta la firma final"
          : st.vencido ? "Fecha límite vencida"
          : st.dias!=null ? `Faltan ${st.dias} día${st.dias===1?"":"s"}`
          : "En curso"}

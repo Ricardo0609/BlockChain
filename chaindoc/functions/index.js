@@ -27,6 +27,7 @@ import { normalizarEnlace, nombreDeEnlace, textoFirmado } from "./lib/enlaces.js
 import { claveDeSello, semillaDeOrden, VERSION_SELLO } from "./lib/sello.js";
 import {
   bloquea, esDestinatario, estadoAcuerdo, motivoBloqueo, permiteEstado, PLAZOS,
+  firmaDe, parteDe, todoEntregado,
 } from "./lib/acuerdo.js";
 import {
   limpiarCambios, validarEvento, revisarCambioDeAcceso,
@@ -1258,15 +1259,73 @@ export const verificarCodigoFirma = onCall(OPCIONES, async (req) => {
 // ══════════════════════════════════════════════════════════════
 
 /** Una firma del acuerdo, con la fuerza que de verdad tiene. */
-function marcaDeAcuerdo({ parte, momento, uid, email, nombre, fuerza }){
+function marcaDeAcuerdo({ parte, momento, uid, email, nombre, fuerza, metodo }){
   return {
     parte, momento,
     uid: uid || null,
     email: (email || "").toLowerCase() || null,
     nombre: nombre || null,
     fuerza,
+    // ← NUEVO (27 oct): código o biometría. La fuerza de las dos es
+    // «cuenta»; esto dice cuál de las dos fue.
+    metodo: metodo || null,
     fecha: new Date().toISOString(),
   };
+}
+
+/**
+ * Si esta firma es, además, la conformidad final del contrato.
+ *
+ * ← NUEVO (27 oct): firmar es el último paso de un contrato
+ * inteligente. En vez de inventar un botón aparte para la conformidad
+ * —dos puertas al mismo cuarto, que ya nos pasó con mandar a firmar—
+ * el botón de siempre hace las dos cosas: sella el bloque de firma y,
+ * si toca, registra la conformidad de esta parte en el acuerdo.
+ *
+ * Devuelve el acuerdo que hay que guardar, o null si esta firma no es
+ * una conformidad: porque el documento no es un contrato, porque
+ * quien firma no es parte del acuerdo, porque ya había firmado, o
+ * porque todavía falta algo por entregar.
+ *
+ * Que devuelva null NO impide firmar: deja un sello en el documento y
+ * ya. Lo que sí impide firmar es la puerta de abajo.
+ */
+function conformidadAlFirmar(op, { uid, email, autor, fuerza = "cuenta" }){
+  if(op?.kind !== "expediente" || !op?.acuerdo?.pedidoEn) return null;
+
+  const parte = parteDe(op, email);
+  if(!parte) return null;
+  if(firmaDe(op, parte, "conformidad")) return null;
+  if(!todoEntregado(op)) return null;
+
+  const { estado } = estadoAcuerdo(op);
+  if(!permiteEstado(estado, "dar-conformidad")) return null;
+
+  const a = op.acuerdo || {};
+  return {
+    ...a,
+    // La primera de las dos firmas abre el turno de la otra: es la
+    // que arranca el reloj de los recordatorios.
+    conformidadPedidaEn: a.conformidadPedidaEn || new Date().toISOString(),
+    firmas: [...(a.firmas || []), marcaDeAcuerdo({
+      parte, momento: "conformidad", uid, email, nombre: autor, fuerza,
+    })],
+  };
+}
+
+/**
+ * La puerta de la firma final: no se firma una entrega a medias.
+ *
+ * Sin esto, el orden de los pasos lo guardaría sólo la pantalla, y la
+ * pantalla no es una puerta: bastaría con llamar a la función desde
+ * fuera para firmar «conforme» sobre un contrato al que le faltan
+ * tres comprobantes.
+ */
+function exigirTodoEntregado(op){
+  if(op?.kind !== "expediente" || !op?.acuerdo?.pedidoEn) return;
+  if(todoEntregado(op)) return;
+  throw new HttpsError("failed-precondition",
+    "Falta entregar algo del contrato. Firmar es el último paso.");
 }
 
 /**
@@ -1302,7 +1361,7 @@ export const ponerEnFirme = onCall(OPCIONES, async (req) => {
   const { uid, email } = quien(req);
   exigirCorreoVerificado(req);
 
-  const { opId, codigo, requiereConformidad } = req.data || {};
+  const { opId, codigo } = req.data || {};
   if(!opId) throw new HttpsError("invalid-argument", "Falta el identificador de la operación.");
   const correo = correoValido(req.data?.correo);
   if(correo === String(email || "").toLowerCase()){
@@ -1318,7 +1377,9 @@ export const ponerEnFirme = onCall(OPCIONES, async (req) => {
     throw new HttpsError("failed-precondition", "El contrato no tiene ningún punto que cumplir.");
   }
 
-  await revisarCodigo(uid, codigo);
+  const ident = await comprobarIdentidad(uid, {
+    codigo, asercion: req.data?.asercion, motivo: "acuerdo", opId,
+  });
   const autor = await nombreDe(uid, email);
 
   // El destinatario necesita acceso para poder leerlo y firmarlo.
@@ -1337,11 +1398,15 @@ export const ponerEnFirme = onCall(OPCIONES, async (req) => {
     pedidoEn: new Date().toISOString(),
     paraEmail: correo,
     paraNombre: req.data?.nombre ? String(req.data.nombre).slice(0, 120) : null,
-    requiereConformidad: Boolean(requiereConformidad),
+    // ← ACTUALIZADO (27 oct): siempre. Era una casilla al mandar el
+    // contrato y ya no se pregunta: firmar es el último paso de todo
+    // contrato. Se sigue escribiendo para que el acuerdo diga por sí
+    // solo bajo qué regla nació, pero nadie lo consulta ya.
+    requiereConformidad: true,
     plazos,
     firmas: [marcaDeAcuerdo({
       parte: "emisor", momento: "aceptacion",
-      uid, email, nombre: autor, fuerza: "cuenta",
+      uid, email, nombre: autor, fuerza: "cuenta", metodo: ident.metodo,
     })],
   };
 
@@ -1350,7 +1415,8 @@ export const ponerEnFirme = onCall(OPCIONES, async (req) => {
     evento: {
       accion: "ACUERDO",
       contenido: `Contrato puesto en firme y mandado a firmar a ${correo}`,
-      meta: { tipo: "puesto-en-firme", correo, requiereConformidad: acuerdo.requiereConformidad },
+      meta: { tipo: "puesto-en-firme", correo, requiereConformidad: true,
+              metodo: ident.metodo },
     },
     camposServidor: { acuerdo },
   });
@@ -1387,14 +1453,16 @@ export const aceptarContrato = onCall(OPCIONES, async (req) => {
     throw new HttpsError("failed-precondition", motivoBloqueo(estado, "aceptar"));
   }
 
-  await revisarCodigo(uid, codigo);
+  const ident = await comprobarIdentidad(uid, {
+    codigo, asercion: req.data?.asercion, motivo: "acuerdo", opId,
+  });
   const autor = await nombreDe(uid, email);
 
   const acuerdo = {
     ...op.acuerdo,
     firmas: [...(op.acuerdo.firmas || []), marcaDeAcuerdo({
       parte: "receptor", momento: "aceptacion",
-      uid, email, nombre: autor, fuerza: "cuenta",
+      uid, email, nombre: autor, fuerza: "cuenta", metodo: ident.metodo,
     })],
   };
 
@@ -1403,7 +1471,7 @@ export const aceptarContrato = onCall(OPCIONES, async (req) => {
     evento: {
       accion: "ACUERDO",
       contenido: `${autor} aceptó el contrato`,
-      meta: { tipo: "aceptado", fuerza: "cuenta" },
+      meta: { tipo: "aceptado", fuerza: "cuenta", metodo: ident.metodo },
     },
     camposServidor: { acuerdo },
   });
@@ -1465,11 +1533,17 @@ export const firmarDocumento = onCall(OPCIONES, async (req) => {
 
   await revisarCodigo(uid, codigo);
 
+  const op = (await db.doc(`${OPS}/${opId}`).get()).data();
+  if(!op) throw new HttpsError("not-found", "La operación no existe.");
+  exigirTodoEntregado(op);
+
   const autor = await nombreDe(uid, email);
+  const acuerdo = conformidadAlFirmar(op, { uid, email, autor, fuerza: "cuenta" });
   const { doc } = await asentar({
     opId, uid, email, autor,
     evento: { accion: "FIRMA", contenido: "Firma",
               meta: { ...(await marcaDeFirma(uid, autor)), metodo: "codigo" } },
+    ...(acuerdo ? { camposServidor: { acuerdo } } : {}),
   });
   return { doc };
 });
@@ -1499,7 +1573,17 @@ export const retoBiometrico = onCall(OPCIONES, async (req) => {
   const { uid } = quien(req);
   const motivo = String(req.data?.motivo || "");
   const opId = req.data?.opId || null;
-  if(!["firma", "desbloqueo"].includes(motivo)) throw new HttpsError("invalid-argument", "Motivo no válido.");
+  // ← ACTUALIZADO (27 oct): entra «acuerdo», que es firmar el contrato
+  // al mandarlo o al aceptarlo.
+  //
+  // Motivo aparte y no «firma» a propósito: el reto queda atado al par
+  // (motivo, opId), así que uno pedido para aceptar un contrato no
+  // sirve para firmar su conformidad final, ni al revés. Son dos actos
+  // distintos sobre el mismo documento y una verificación no puede
+  // valer por el otro.
+  if(!["firma", "desbloqueo", "acuerdo"].includes(motivo)){
+    throw new HttpsError("invalid-argument", "Motivo no válido.");
+  }
 
   const s = await secretosDe(uid);
   const credenciales = s.bioCreds || [];
@@ -1511,6 +1595,33 @@ export const retoBiometrico = onCall(OPCIONES, async (req) => {
 
   return { reto: reto.reto, credenciales: credenciales.map((c) => c.credId) };
 });
+
+/**
+ * Quién firma: por código o por biometría, una de las dos.
+ *
+ * ← NUEVO (27 oct): hasta ahora, firmar el documento se podía hacer
+ * con Face ID pero aceptar el contrato no, y eran la misma persona
+ * demostrando lo mismo en la misma app. La diferencia no tenía razón
+ * de ser: era que la biometría se construyó para `firmarDocumento` y
+ * la aceptación nació después por otra puerta.
+ *
+ * Las dos vías valen lo mismo —`fuerza: "cuenta"`— porque las dos
+ * prueban que es el dueño de la cuenta. La e.firma sigue siendo otra
+ * cosa y tiene su propia fuerza. Lo que sí queda asentado es CÓMO se
+ * identificó, que es lo que hace falta si algún día hay que
+ * explicarlo.
+ */
+async function comprobarIdentidad(uid, { codigo, asercion, motivo, opId }){
+  if(asercion){
+    const c = await revisarBiometria(uid, { asercion, motivo, opId });
+    return {
+      metodo: "biometria",
+      credId: c.credId, device: c.device || null, alg: c.alg ?? null,
+    };
+  }
+  await revisarCodigo(uid, codigo);
+  return { metodo: "codigo" };
+}
 
 /** Comprueba la aserción contra el reto emitido y la llave registrada. */
 async function revisarBiometria(uid, { asercion, motivo, opId }){
@@ -1557,9 +1668,15 @@ export const firmarConBiometria = onCall(OPCIONES, async (req) => {
 
   const credencial = await revisarBiometria(uid, { asercion, motivo: "firma", opId });
 
+  const op = (await db.doc(`${OPS}/${opId}`).get()).data();
+  if(!op) throw new HttpsError("not-found", "La operación no existe.");
+  exigirTodoEntregado(op);
+
   const autor = await nombreDe(uid, email);
+  const acuerdo = conformidadAlFirmar(op, { uid, email, autor, fuerza: "cuenta" });
   const { doc } = await asentar({
     opId, uid, email, autor,
+    ...(acuerdo ? { camposServidor: { acuerdo } } : {}),
     evento: {
       accion: "FIRMA",
       contenido: `Firma biométrica desde ${credencial.device || "dispositivo"}`,
@@ -2737,9 +2854,14 @@ export const firmarConEfirma = onCall(
     });
     if(!r.valida) throw new HttpsError("permission-denied", motivoEfirma(r.motivo));
 
+    const op = snap.data();
+    exigirTodoEntregado(op);
+
     const autor = await nombreDe(uid, email);
+    const acuerdo = conformidadAlFirmar(op, { uid, email, autor, fuerza: "efirma" });
     const { doc } = await asentar({
       opId, uid, email, autor,
+      ...(acuerdo ? { camposServidor: { acuerdo } } : {}),
       evento: {
         accion: "FIRMA",
         contenido: `Firma con e.firma del SAT · ${r.rfc}`,

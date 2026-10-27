@@ -687,6 +687,15 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   color:#0e7490;border-radius:10px;padding:10px 13px;margin-bottom:16px;
   font-size:13px;line-height:1.45}
 
+/* ← NUEVO (27 oct): el aviso del ultimo paso, encima de las firmas.
+   Verde como «completo» y no azul como las notas: no informa de algo
+   que paso, invita a cerrar el contrato. */
+.firma-final{display:flex;align-items:flex-start;gap:10px;
+  background:rgba(20,130,90,.08);color:#14825a;border-radius:12px;
+  padding:13px 15px;margin:0 0 16px;font-size:13px;line-height:1.5}
+.firma-final strong{display:block;font-size:14.5px;font-weight:600;margin-bottom:2px}
+.firma-final-s{color:var(--gris-300)}
+
 /* ← NUEVO: contador de montos del expediente */
 .mnt{border:1px solid var(--bordes);border-radius:14px;padding:16px 18px;margin-bottom:18px}
 .mnt.excedido{border-color:rgba(194,65,12,.45);background:rgba(194,65,12,.04)}

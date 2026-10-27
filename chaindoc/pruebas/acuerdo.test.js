@@ -12,7 +12,7 @@ import {
   ACCIONES_POR_ESTADO, ESTADOS, ETIQUETA, FUERZAS, GOBERNADAS, PLAZOS, TONO,
   TRANSICIONES, diasEntre, esperaRespuesta, estadoAcuerdo, firmaDe,
   bloquea, decideAhora, esDestinatario, esperaFirmaDe, estadoBloquea, firmaronLasDos, firmasDe, motivoBloqueo, permiteEstado, plazosDe,
-  puedeAhora, tieneAcuerdo, transicionValida,
+  puedeAhora, tieneAcuerdo, transicionValida, todoEntregado, parteDe,
 } from "../src/nucleo/acuerdo";
 
 const HOY = new Date("2026-10-18T12:00:00Z");
@@ -589,5 +589,90 @@ describe("a quien le toca decidir, y en que punto", () => {
     c.acuerdo.pedidoEn = dias(1);
     c.acuerdo.firmas = [firma("emisor", "aceptacion", { fecha: dias(1) })];
     expect(decideAhora(c, "ana@correo.com", HOY)).toBe("pendiente");
+  });
+});
+
+// ── LA FIRMA FINAL ES EL ULTIMO PASO (27 oct) ─────────────────
+//
+// Antes habia una casilla al mandar el contrato —«pedir su
+// conformidad al terminar»— y sin marcarla el contrato no terminaba
+// nunca: cumplias los seis puntos y se quedaba «vigente» para
+// siempre, porque no habia un ultimo paso que dar. Ahora firmar es
+// siempre el ultimo paso.
+//
+// Nada de esto estaba cubierto: quite la rama que leia la casilla y
+// las 827 pruebas siguieron pasando. Esto lo amarra.
+describe("la conformidad ya no es opcional", () => {
+  it("un contrato viejo sin la casilla tambien se cierra al firmar", () => {
+    const c = aceptado({ requiereConformidad: false });
+    expect(estadoAcuerdo(c, { hoy: HOY }).estado).toBe("vigente");
+
+    c.acuerdo.firmas = [...c.acuerdo.firmas,
+      firma("emisor", "conformidad"), firma("receptor", "conformidad")];
+    expect(estadoAcuerdo(c, { hoy: HOY }).estado).toBe("cerrado");
+  });
+
+  it("la primera firma abre el turno de la otra parte", () => {
+    // Estando vigente se puede dar la conformidad: la primera de las
+    // dos firmas es la que dice «ya entregue todo».
+    expect(permiteEstado("vigente", "dar-conformidad")).toBe(true);
+    expect(permiteEstado("entregado", "dar-conformidad")).toBe(true);
+  });
+
+  it("un contrato cerrado ya no admite otra conformidad", () => {
+    expect(permiteEstado("cerrado", "dar-conformidad")).toBe(false);
+  });
+});
+
+describe("todo entregado", () => {
+  const req = (obligatorio, archivos = []) => ({ obligatorio, archivos });
+
+  it("con algo obligatorio sin comprobante, no", () => {
+    expect(todoEntregado({ requisitos: [req(true, [{ aid: "a" }]), req(true)] })).toBe(false);
+  });
+
+  it("con todo lo obligatorio comprobado, si", () => {
+    expect(todoEntregado({ requisitos: [req(true, [{ aid: "a" }])] })).toBe(true);
+  });
+
+  it("lo opcional no detiene a nadie", () => {
+    expect(todoEntregado({ requisitos: [req(true, [{ aid: "a" }]), req(false)] })).toBe(true);
+  });
+
+  it("acepta el formato viejo de un solo archivo", () => {
+    expect(todoEntregado({ requisitos: [{ obligatorio: true, archivo: { nombre: "x" } }] })).toBe(true);
+  });
+
+  it("sin requisitos obligatorios no hay nada pendiente", () => {
+    expect(todoEntregado({ requisitos: [] })).toBe(true);
+    expect(todoEntregado(null)).toBe(true);
+  });
+});
+
+describe("quien es parte del acuerdo", () => {
+  const c = () => {
+    const x = enFirma();
+    x.ownerEmail = "Ricardo@Chaindoc.MX";
+    return x;
+  };
+
+  it("el destinatario es el receptor", () => {
+    expect(parteDe(c(), "ana@correo.com")).toBe("receptor");
+  });
+
+  it("el dueno es el emisor, sin importar mayusculas ni espacios", () => {
+    expect(parteDe(c(), "  RICARDO@chaindoc.mx ")).toBe("emisor");
+  });
+
+  it("un tercero con acceso no firma la conformidad", () => {
+    // Un auditor o un lector entran al contrato, pero no son parte de
+    // el: su firma no cierra nada.
+    expect(parteDe(c(), "contador@despacho.mx")).toBe(null);
+  });
+
+  it("sin acuerdo no hay partes", () => {
+    expect(parteDe({ ownerEmail: "ricardo@chaindoc.mx" }, "ricardo@chaindoc.mx")).toBe(null);
+    expect(parteDe(null, "ana@correo.com")).toBe(null);
+    expect(parteDe(c(), "")).toBe(null);
   });
 });

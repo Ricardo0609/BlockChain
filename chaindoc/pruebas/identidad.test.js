@@ -178,4 +178,19 @@ describe("retos", () => {
   it("dos retos nunca son iguales", () => {
     expect(nuevoReto("firma").reto).not.toBe(nuevoReto("firma").reto);
   });
+
+  // ← NUEVO (27 oct): aceptar el contrato y firmar su conformidad
+  // final son dos actos distintos sobre el MISMO documento, y los dos
+  // se pueden hacer con Face ID. Por eso la aceptacion lleva su propio
+  // motivo: sin esto, el Face ID que das para aceptar el contrato
+  // valdria para firmar que estas conforme con lo entregado, que es
+  // una cosa que no has visto todavia.
+  it("aceptar y firmar no comparten reto, aunque sea el mismo documento", () => {
+    const acuerdo = nuevoReto("acuerdo", "op1");
+    expect(retoValido(acuerdo, { motivo: "acuerdo", opId: "op1" })).toBe(true);
+    expect(retoValido(acuerdo, { motivo: "firma", opId: "op1" })).toBe(false);
+
+    const firma = nuevoReto("firma", "op1");
+    expect(retoValido(firma, { motivo: "acuerdo", opId: "op1" })).toBe(false);
+  });
 });

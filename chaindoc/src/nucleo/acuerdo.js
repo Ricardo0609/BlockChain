@@ -106,6 +106,44 @@ export const firmaDe = (exp, parte, momento) =>
 export const firmaronLasDos = (exp, momento) =>
   PARTES.every((p) => Boolean(firmaDe(exp, p, momento)));
 
+/** Los comprobantes de un requisito; los expedientes viejos traían uno. */
+const ARCHIVOS_DE = (r) =>
+  Array.isArray(r?.archivos) ? r.archivos : (r?.archivo ? [r.archivo] : []);
+
+/**
+ * Si ya se entregó todo lo que el contrato obliga a entregar.
+ *
+ * ← NUEVO (27 oct): la puerta de la firma final. Firmar es el último
+ * paso, y un último paso que se puede dar antes que los anteriores no
+ * es un último paso: sería firmar «conforme» sobre una entrega a
+ * medias.
+ *
+ * Mira sólo los requisitos OBLIGATORIOS, que son los mismos que
+ * cuenta la barra de progreso. Los opcionales no detienen a nadie.
+ */
+export function todoEntregado(exp) {
+  return (exp?.requisitos || [])
+    .filter((r) => r?.obligatorio)
+    .every((r) => ARCHIVOS_DE(r).length > 0);
+}
+
+/**
+ * Qué parte del acuerdo es este correo: «emisor», «receptor» o null.
+ *
+ * El receptor es a quien se le mandó a firmar, que es lo que ya decide
+ * `esDestinatario`. El emisor es el dueño del contrato, que es quien
+ * lo puso en firme. Quien no es ninguno de los dos —un auditor, un
+ * lector— no firma la conformidad por mucho rol que tenga: no es su
+ * acuerdo.
+ */
+export function parteDe(exp, email) {
+  const mio = String(email || "").toLowerCase().trim();
+  if (!mio || !exp?.acuerdo?.pedidoEn) return null;
+  if (esDestinatario(exp, mio)) return "receptor";
+  const dueno = String(exp?.ownerEmail || "").toLowerCase().trim();
+  return dueno && dueno === mio ? "emisor" : null;
+}
+
 /**
  * Los plazos de este contrato, con los de arranque donde falten.
  *
@@ -189,10 +227,15 @@ export function estadoAcuerdo(exp, { hoy = new Date() } = {}) {
   // primera. Cierra quien lo mandó, cuando lo da por terminado.
   if (a.cerradoEn) return armar("cerrado", { exp, plazos, hoy });
 
-  if (!a.requiereConformidad) {
-    return armar("vigente", { exp, plazos, hoy });
-  }
-
+  // ← ACTUALIZADO (27 oct): la conformidad ya no es opcional.
+  //
+  // Antes había una casilla al mandar el contrato y, sin marcarla, el
+  // contrato se quedaba «vigente» para siempre: cumplías los seis
+  // puntos y no pasaba nada, porque no había un último paso que dar.
+  // Ahora firmar es SIEMPRE el último paso, y por eso desapareció
+  // tanto la casilla como la rama que la leía. Los contratos viejos
+  // que se mandaron sin ella entran por aquí igual: el campo deja de
+  // consultarse y lo que manda son las firmas.
   if (firmaronLasDos(exp, "conformidad")) {
     return armar("cerrado", { exp, plazos, hoy });
   }
@@ -258,7 +301,13 @@ function esPosterior(a, b) {
 export const ACCIONES_POR_ESTADO = {
   borrador:      ["editar", "poner-en-firme", "borrar"],
   en_firma:      ["aceptar", "rechazar", "retirar-envio"],
-  vigente:       ["subir", "vincular", "retirar", "pedir-conformidad", "cerrar"],
+  // ← ACTUALIZADO (27 oct): entra «dar-conformidad». La primera firma
+  // de las dos se da estando el contrato vigente —es la que dice «ya
+  // entregué todo»— y antes sólo cabía después de pedirla. Pedirla y
+  // darla eran dos puertas al mismo cuarto: ahora quien firma primero
+  // abre el turno de la otra parte.
+  vigente:       ["subir", "vincular", "retirar", "pedir-conformidad", "cerrar",
+                  "dar-conformidad"],
   entregado:     ["subir", "vincular", "retirar", "dar-conformidad", "reportar-faltante"],
   cerrado:       [],
   rechazado:     ["editar", "poner-en-firme", "borrar"],
