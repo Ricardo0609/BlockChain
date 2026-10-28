@@ -7,7 +7,7 @@ import { Timeline } from "../ui/Timeline";
 import { aiConfigured, dondeEstaAdjunto, expedienteStatus, hayQueRevisarRFCs } from "../smartContract";
 import { deviceLabel } from "../biometric";
 import { fmtFull, fmtShort } from "../nucleo/formato";
-import { renderAccesos, conAccesoDe } from "./Accesos";
+import { renderAccesos, cuantosAcceden } from "./Accesos";
 import { renderBarraEstilos } from "../ui/BarraEstilos";
 import { renderCuerpo } from "../ui/Cuerpo";
 import { estaVacio, normalizar, ID_PAPEL } from "../nucleo/texto";
@@ -67,12 +67,15 @@ export function renderDocumento(ctx){
   const tocaFirmar = !stExp || stExp.entregadoTodo;
 
   // ← NUEVO (21 oct): quién más ve este documento, para las pestañas.
-  const conAcceso = conAccesoDe(accesos);
+  // ← ACTUALIZADO (28 oct): cuenta personas Y enlaces vivos. Un
+  // enlace de entrega es acceso concedido aunque no haya cuenta
+  // detrás, y era lo único que no aparecía en esta pestaña.
+  const nAcceso = cuantosAcceden(accesos, d.chain);
   const DOC_TABS = [
     { id:"documento", txt:"Documento" },
-    { id:"accesos",   txt:"Con acceso", n:conAcceso.length },
+    { id:"accesos",   txt:"Con acceso", n:nAcceso },
   ];
-  const dtab = (d.kind!=="expediente" && conAcceso.length>0
+  const dtab = (d.kind!=="expediente" && nAcceso>0
     && DOC_TABS.some(x=>x.id===docTab)) ? docTab : "documento";
 
   // ← NUEVO (21 oct): las secciones de debajo del papel se pueden
@@ -222,7 +225,7 @@ export function renderDocumento(ctx){
           Van aquí, entre el título y el papel, como en los
           expedientes: lo primero es el documento, y quién más lo ve
           está a un clic sin tener que abrir el modal de compartir. */}
-      {d.kind!=="expediente" && conAcceso.length>0 && (
+      {d.kind!=="expediente" && nAcceso>0 && (
         <nav className="exp-tabs doc-tabs" role="tablist" aria-label="Secciones del documento">
           {DOC_TABS.map((x,i)=>(
             <button key={x.id} role="tab" id={`d${x.id}-tab`}

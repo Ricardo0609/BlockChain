@@ -28,12 +28,12 @@ import { MIN_CONTRATO,
   hashFile,
   expedienteStatus,
 } from "./smartContract";
-import { subirArchivo, descartarSubida, abrirArchivo, storageError, makeThumb, LIMITE_MB } from "./storage";
+import { subirArchivo, descartarSubida, abrirArchivo, traerArchivo, storageError, makeThumb, LIMITE_MB } from "./storage";
 // ← NUEVO (Etapa 5 · Bloque A): sellado de tiempo en Bitcoin.
 import { anclajesDe, anclarAhora, paraElPaquete, porHash, resumenAnclaje } from "./nucleo/anclaje";
 // ← NUEVO: aviso de privacidad y términos.
 import { aceptoVigente, selloDeAceptacion, VERSION as LEGAL_VERSION } from "./nucleo/legal";
-import { descargarPaquete } from "./paquete";
+import { descargarPaquete, recogerAdjuntos } from "./paquete";
 import { FORMS, serializeForm } from "./ui/formularios";
 import { TEMPLATES, esBorradorContrato } from "./nucleo/catalogos";
 import { getUrlDoc, setUrlDoc } from "./nucleo/formato";
@@ -1487,7 +1487,16 @@ export default function ChainDoc(){
         try{ pruebas = await anclajesDe(d.id, true); }
         catch(e){ console.warn("[chaindoc] el paquete va sin anclaje:", e?.message || e); }
       }
-      const nombre = descargarPaquete(d, pruebas ? paraElPaquete(pruebas) : null);
+      // ← NUEVO (28 oct): los originales viajan dentro del paquete.
+      // Si no se pueden bajar —sesión caída, red— cada uno cae a su
+      // miniatura por su cuenta y el paquete se genera igual: quedarse
+      // sin paquete por una foto sería peor.
+      let adjuntos = null;
+      if(enServidor()){
+        try{ adjuntos = await recogerAdjuntos(d, traerArchivo); }
+        catch(e){ console.warn("[chaindoc] el paquete va sin los originales:", e?.message || e); }
+      }
+      const nombre = descargarPaquete(d, pruebas ? paraElPaquete(pruebas) : null, adjuntos);
       const up = await aplicar(d, {
         accion:"EXPORTACIÓN",
         contenido:`Se generó el paquete de evidencia «${nombre}»`,

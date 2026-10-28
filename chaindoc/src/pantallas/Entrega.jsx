@@ -1,20 +1,34 @@
 // Pantalla pública de entrega por invitación.
 //
-// La ve alguien que no tiene cuenta y probablemente nunca la tendrá:
-// el proveedor al que le pediste sus facturas. Por eso no hay menú, ni
-// barra de navegación, ni nada que lo invite a registrarse. Una lista
+// La ve alguien que no tiene cuenta: el proveedor al que le pediste
+// sus facturas. Por eso no hay menú ni barra de navegación. Una lista
 // de lo que le toca entregar y un botón por cada cosa.
 //
 // Lo que NO está aquí importa tanto como lo que sí: no ve el contrato,
 // ni los montos pactados, ni las otras partes, ni los archivos que
 // subieron los demás. Esa limitación no es de esta pantalla — es del
 // servidor, que sólo le manda esto.
+//
+// ← ACTUALIZADO (28 oct): hasta hoy aquí no había NADA que invitara a
+// registrarse, a propósito. Ahora hay una invitación, pero al final de
+// todo y después de que ya entregó: primero cumple con quien se lo
+// pidió, y sólo entonces se le ofrece algo. Nada de lo que tiene que
+// hacer en esta página pasa por crear una cuenta, y el texto no
+// insinúa que sí.
 
 import { Icon } from "../ui/iconos";
 import { ESTILOS } from "../ui/estilos";
 import { tiempoRestante } from "../nucleo/invitaciones";
 import { fmtFull } from "../nucleo/formato";
 import { CampoEnlace } from "../ui/CampoEnlace";
+
+/**
+ * A dónde lleva «Conoce chaindoc».
+ *
+ * De momento, a la portada de la propia app. Cuando exista la landing
+ * que explica qué ofrecemos, se cambia AQUÍ y en ningún otro sitio.
+ */
+export const LANDING = "/";
 
 export function renderEntrega(ctx){
   const {
@@ -161,6 +175,27 @@ export function renderEntrega(ctx){
         {invitacion.expiraEn && <>, el {fmtFull(invitacion.expiraEn)}</>}.
         {" "}Sólo sirve para entregar estos comprobantes, y quien te lo envió puede retirarlo
         cuando quiera. Hasta {invitacion.archivosRestantes} archivos más.
+      </div>
+
+      {/* ← NUEVO (28 oct): la invitación a tener esto del lado propio.
+          Va la última y sin competir con los botones de entregar: quien
+          abre esta página viene a cumplirle a alguien, no a conocernos.
+          Y el texto no dice que le haga falta una cuenta, porque no le
+          hace falta: entregó sin crear nada y eso se mantiene. */}
+      <div className="entrega-cta">
+        <Icon n="shield" size={22}/>
+        <div className="entrega-cta-b">
+          <strong>¿Y si lo tuyo también quedara probado?</strong>
+          <p>
+            Acabas de entregar con huella y fecha, sin crear ninguna cuenta. Eso mismo
+            puede trabajar de tu lado: tus contratos, lo que entregas y la prueba de lo
+            que cumpliste, guardados de forma que nadie los pueda cambiar después.
+          </p>
+          <a className="entrega-cta-btn" href={LANDING}
+             target="_blank" rel="noopener noreferrer">
+            Conoce chaindoc
+          </a>
+        </div>
       </div>
     </Marco>
   );

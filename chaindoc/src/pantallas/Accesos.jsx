@@ -11,10 +11,22 @@
 // volver a escribir su correo. Aquí se cambia en sitio.
 
 import { ROLES_OFRECIDOS } from "../nucleo/accesos";
+import { enlacesCompartidos, enlacesVivos, ESTADO_ENLACE } from "../nucleo/enlacesCompartidos";
 
 /** Los que tienen acceso sin contar al dueño, que no se toca. */
 export const conAccesoDe = (accesos) =>
   (accesos || []).filter((a) => a.rol !== "propietario");
+
+/**
+ * Cuántos accesos hay de verdad: personas y enlaces todavía vivos.
+ *
+ * ← NUEVO (28 oct): un enlace de entrega es acceso concedido aunque
+ * del otro lado no haya una cuenta, así que cuenta. Los vencidos y los
+ * retirados no: salen en la lista por su historia, no porque abran
+ * ninguna puerta.
+ */
+export const cuantosAcceden = (accesos, chain) =>
+  conAccesoDe(accesos).length + enlacesVivos(chain).length;
 
 // Los ids van explícitos porque cada pantalla nombra sus pestañas a su
 // manera —el expediente usa `tab-x`/`panel-x`, el documento `dx-tab`/
@@ -22,12 +34,13 @@ export const conAccesoDe = (accesos) =>
 // panel se apunten de verdad el uno al otro.
 export function renderAccesos(ctx, { panelId, tabId } = {}){
   const {
-    accesos, cambiarRol, revokeShare, rolBusy, ROL_TEXTO,
+    accesos, cambiarRol, revokeShare, rolBusy, ROL_TEXTO, d, revocarEnlace,
     setMIn, setModal, setEnlaceNuevo, setShareModo, setShareTodo, setShareReqs,
     puedo,
   } = ctx;
 
   const lista = conAccesoDe(accesos);
+  const enlaces = enlacesCompartidos(d?.chain);
   const puedeRepartir = !puedo || puedo("compartir");
 
   const abrirCompartir = ()=>{
@@ -42,6 +55,10 @@ export function renderAccesos(ctx, { panelId, tabId } = {}){
         {puedeRepartir
           ? "Cambia el papel de cada quien aquí mismo. El cambio queda asentado en el historial, con quién lo hizo y cuándo."
           : "Quien reparte los accesos es quien puede cambiarlos."}
+        {enlaces.length > 0 && (
+          <> Los enlaces de entrega también aparecen aquí: no tienen papel que cambiar,
+          pero sí quedan a nombre de quien los compartió.</>
+        )}
       </p>
 
       <div className="share-list">
@@ -67,6 +84,30 @@ export function renderAccesos(ctx, { panelId, tabId } = {}){
               <button className="smart-x" title="Retirar acceso"
                 disabled={rolBusy===a.correo}
                 onClick={()=>revokeShare(a.correo)}>×</button>
+            )}
+          </div>
+        ))}
+
+        {/* ← NUEVO (28 oct): los enlaces de entrega.
+            Del otro lado no hay una cuenta, así que no hay papel que
+            cambiar: en vez del desplegable va lo que pasó. Quien
+            aparece es QUIEN LO COMPARTIÓ, que es de quien hay que
+            poder seguir el rastro — el enlace en sí no tiene dueño.
+            Sale de la cadena, que es el registro que nadie reescribe. */}
+        {enlaces.map(x=>(
+          <div key={x.clave} className={`share-row enlace ${x.estado}`}>
+            <div className="avatar sm enl">↗</div>
+            <span className="share-row-m">
+              {x.creadoPor || "Alguien"}
+              <span className="enl-dest">
+                {x.correo ? ` → ${x.correo}` : " → enlace sin destinatario"}
+                {x.requisitos ? ` · ${x.requisitos} comprobante${x.requisitos===1?"":"s"}` : ""}
+              </span>
+            </span>
+            <span className="rol-tag enl-tag">{ESTADO_ENLACE[x.estado]}</span>
+            {puedeRepartir && x.estado==="vigente" && x.huella && (
+              <button className="smart-x" title="Retirar el enlace"
+                onClick={()=>revocarEnlace(x.huella)}>×</button>
             )}
           </div>
         ))}

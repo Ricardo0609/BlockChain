@@ -3,7 +3,7 @@
 import { Icon, IcoEye } from "../ui/iconos";
 import { LIMITE_MB, isPreviewable } from "../storage";
 import { Timeline } from "../ui/Timeline";
-import { renderAccesos, conAccesoDe } from "./Accesos";
+import { renderAccesos, cuantosAcceden } from "./Accesos";
 import { renderCuerpo } from "../ui/Cuerpo";
 import { estaVacio } from "../nucleo/texto";
 import {
@@ -89,13 +89,13 @@ export function renderExpediente(ctx){
   // pero cuando se consulta hay que poder CAMBIARLO ahí mismo, que es
   // lo que antes obligaba a abrir el modal de compartir y reescribir
   // el correo de alguien que ya estaba en la lista.
-  const conAcceso = conAccesoDe(accesos);
+  const nAcceso = cuantosAcceden(accesos, d.chain);
   const PESTANAS = [
     { id:"expediente", txt:"Expediente" },
     { id:"tiempo",     txt:"Línea de tiempo" },
     { id:"archivos",   txt:"Archivos", n:nArchivos, candado:!filesOpen && nArchivos>0 },
     { id:"contrato",   txt:"Contrato" },
-    ...(conAcceso.length ? [{ id:"accesos", txt:"Con acceso", n:conAcceso.length }] : []),
+    ...(nAcceso ? [{ id:"accesos", txt:"Con acceso", n:nAcceso }] : []),
   ];
   const tab = PESTANAS.some(x=>x.id===expTab) ? expTab : "expediente";
 

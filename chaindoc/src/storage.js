@@ -67,7 +67,15 @@ const urlFuncion = (nombre) => `${baseFunciones()}/${nombre}`;
  * Pide el archivo al servidor y lo abre o lo descarga.
  * `path` es el identificador que quedó guardado en el expediente.
  */
-export async function abrirArchivo(path, nombre, descargar) {
+/**
+ * Baja el archivo y devuelve sus bytes, sin abrir ni descargar nada.
+ *
+ * ← NUEVO (28 oct): lo necesita el paquete de evidencia, que ahora se
+ * lleva los originales dentro. Antes la única forma de traer un
+ * archivo era `abrirArchivo`, que además lo abría en una pestaña: para
+ * armar el paquete eso habría abierto una pestaña por comprobante.
+ */
+export async function traerArchivo(path) {
   if (!path) throw new Error("Este comprobante se registró antes del almacenamiento. Vuelve a adjuntarlo.");
   const usuario = auth.currentUser;
   if (!usuario) throw new Error("Tu sesión expiró. Vuelve a iniciar sesión.");
@@ -77,8 +85,11 @@ export async function abrirArchivo(path, nombre, descargar) {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!r.ok) throw new Error(await r.text() || "No se pudo abrir el archivo.");
+  return await r.blob();
+}
 
-  const blob = await r.blob();
+export async function abrirArchivo(path, nombre, descargar) {
+  const blob = await traerArchivo(path);
   const url = URL.createObjectURL(blob);
 
   if (descargar) {

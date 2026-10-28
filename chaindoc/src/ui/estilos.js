@@ -807,6 +807,24 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .share-row-m{flex:1;text-align:left;font-size:14px;color:var(--gris-400);overflow-wrap:anywhere}
 .avatar.sm{width:30px;height:30px;font-size:11px;flex:0 0 auto}
 
+/* ← NUEVO (28 oct): los enlaces de entrega, en la misma lista.
+   Se distinguen a simple vista de una persona —el circulo no lleva
+   iniciales— porque al otro lado no hay nadie con cuenta: hay una
+   puerta abierta a nombre de quien la abrio. */
+.share-row.enlace{background:var(--bg-soft)}
+.share-row.enlace.vencido,
+.share-row.enlace.retirado{opacity:.62}
+.avatar.sm.enl{background:var(--gris-100);color:var(--gris-400);font-size:14px;
+  display:flex;align-items:center;justify-content:center}
+.enl-dest{display:block;font-size:12px;color:var(--gris-300);margin-top:1px}
+.enl-tag{background:rgba(14,116,144,.12);color:#0e7490;white-space:nowrap}
+.share-row.enlace.vencido .enl-tag,
+.share-row.enlace.retirado .enl-tag{background:var(--gris-100);color:var(--gris-300)}
+@media(max-width:560px){
+  .share-row.enlace{flex-wrap:wrap}
+  .share-row.enlace .enl-tag{margin-left:40px}
+}
+
 /* ← NUEVO (Etapa 3): roles al compartir y aviso de correo sin confirmar */
 .rol-lista{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
 .rol-op{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;align-items:baseline;
@@ -919,6 +937,55 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .entrega-tip{display:flex;gap:9px;align-items:flex-start;margin-top:16px;padding:11px 13px;
   border-radius:10px;background:rgba(202,138,4,.09);color:#a16207;font-size:13px;line-height:1.5}
 .entrega-pie{font-size:12.5px;color:var(--gris-300);line-height:1.6;margin-top:18px}
+/* ← NUEVO (28 oct): la invitacion a tener cuenta, al final de todo.
+   Gris y con el boton en borde, no en negro solido: el negro solido
+   es de «Subir», que es a lo que esta persona vino. */
+.entrega-cta{display:flex;gap:12px;align-items:flex-start;margin-top:22px;
+  padding:16px 18px;border:1px solid var(--bordes);border-radius:12px;
+  background:var(--bg-soft);color:var(--gris-200)}
+.entrega-cta-b{min-width:0}
+.entrega-cta strong{display:block;font-size:15.5px;color:var(--negro);margin-bottom:5px}
+.entrega-cta p{font-size:13.5px;color:var(--gris-300);line-height:1.55;margin:0 0 12px;
+  max-width:62ch}
+.entrega-cta-btn{display:inline-flex;align-items:center;gap:7px;
+  border:1.5px solid var(--negro);border-radius:10px;padding:9px 16px;
+  font-size:14px;font-weight:600;color:var(--negro);text-decoration:none;
+  transition:background .15s,color .15s}
+.entrega-cta-btn:hover{background:var(--negro);color:var(--blanco)}
+
+/* ← NUEVO (28 oct): en una pantalla grande, la tarjeta deja de ser
+   una columna de telefono centrada.
+   Lo que cambia no es solo el ancho: con 880px los titulos y las
+   descripciones caben en un renglon, que es lo que hacia que se viera
+   «sacado de movil». Los botones se alinean en una columna propia a
+   la derecha para que las filas no bailen entre si. Debajo de 760px
+   no cambia nada. */
+@media (min-width:760px){
+  .entrega-wrap{padding:48px 24px}
+  .entrega{max-width:880px;padding:36px 40px;border-radius:20px}
+  .entrega h1{font-size:28px}
+  .entrega-de{font-size:16px}
+  .entrega-cab{margin-bottom:26px}
+  .entrega-lista{gap:11px}
+  .entrega-item{gap:26px;padding:17px 22px;flex-wrap:nowrap}
+  .entrega-item-b{min-width:0}
+  .entrega-item-t{font-size:17px}
+  .entrega-item-d{font-size:14px;max-width:68ch}
+  .entrega-acts .entrega-btn{min-width:122px;justify-content:center}
+  .entrega-tip,.entrega-listo{padding:13px 16px;font-size:14px}
+  .entrega-cta{margin-top:28px;padding:20px 22px;gap:14px}
+  .entrega-cta strong{font-size:17px}
+  /* 72ch y no 62: a 880px de tarjeta, la medida corta dejaba un hueco
+     a la derecha que hacia parecer el bloque a medio hacer. */
+  .entrega-cta p{font-size:14.5px;max-width:72ch}
+}
+
+/* El formulario de entregar un enlace necesita su propio renglon
+   entero, asi que ahi si se permite envolver otra vez. */
+@media (min-width:760px){
+  .entrega-item:has(.enl-form){flex-wrap:wrap}
+}
+
 .entrega-mal,.entrega-ok{text-align:center;padding:14px 0}
 .entrega-mal{color:var(--rojo)}
 .entrega-ok{color:#15803d}
