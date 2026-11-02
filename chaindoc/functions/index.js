@@ -329,9 +329,51 @@ export const agregarBloque = onCall(OPCIONES, async (req) => {
   // Una sola puerta, y la buena.
 
   const autor = await nombreDe(uid, email);
-  const { doc } = await asentar({ opId, evento, cambios, uid, email, autor, tocarFecha });
+  const camposServidor = await puertaDelVinculo(evento, uid, email);
+  const { doc } = await asentar({
+    opId, evento, cambios, uid, email, autor, tocarFecha,
+    ...(camposServidor ? { camposServidor } : {}),
+  });
   return { doc };
 });
+
+/**
+ * Adjuntar un documento como evidencia le abre la puerta al contrato.
+ *
+ * ← NUEVO (2 nov): hasta hoy, adjuntar un recibo a un contrato dejaba
+ * constancia en las dos cadenas pero NO le daba acceso a la otra parte.
+ * El cliente veía en el expediente «documento «Recibo 07»» con su
+ * huella y, al tocarlo, un permission-denied: evidencia que la
+ * contraparte no puede leer, que es evidencia que no prueba nada.
+ *
+ * El acceso se DERIVA, no se copia. El documento queda apuntando al
+ * expediente (`adjuntoA`) y las reglas de Firestore preguntan por ese
+ * campo. Copiar el acceso a cada parte en el momento de adjuntar
+ * habría sido una foto: quien entrara al contrato después seguiría sin
+ * poder abrir la evidencia, y retirarla no le quitaría el acceso.
+ *
+ * Lo escribe el SERVIDOR y no viaja en `cambios` a propósito: es un
+ * campo del que depende quién puede leer, y esos no se dejan en manos
+ * del navegador.
+ */
+async function puertaDelVinculo(evento, uid, email){
+  if(evento?.accion !== "VINCULADO") return null;
+  const expId = evento?.meta?.expId;
+  if(!expId) return null;
+
+  // La baja la escribe el servidor por su cuenta (ver
+  // `quitarArchivoDeRequisito`); si llegara por aquí, cierra la puerta.
+  if(evento?.meta?.tipo === "baja") return { adjuntoA: null };
+
+  // Que quien adjunta tenga acceso al expediente. Sin esto, cualquiera
+  // podría apuntar su documento al contrato de otro y regalarle la
+  // lectura a un grupo de desconocidos.
+  const exp = (await db.doc(`${OPS}/${expId}`).get()).data();
+  if(!exp) throw new HttpsError("not-found", "Ese expediente no existe.");
+  exigir(exp, uid, email, "ver");
+
+  return { adjuntoA: expId };
+}
 
 // ── Guardar campos sin asentar nada ───────────────────────────
 export const guardarCampos = onCall(OPCIONES, async (req) => {
@@ -361,7 +403,9 @@ export const registrarConsulta = onCall(OPCIONES, async (req) => {
 
   const actual = await leerOperacion(opId);
   if(!actual) throw new HttpsError("not-found", "La operación no existe.");
-  exigir(actual, uid, email, "ver");
+  // ← ACTUALIZADO (2 nov): quien abre una evidencia de su contrato
+  // también deja constancia. Es de lo que más falta hace que quede.
+  await exigirVer(actual, uid, email);
   if(!debeRegistrarConsulta(actual, actual.chain, uid, email)) return { doc: actual };
 
   const autor = await nombreDe(uid, email);
@@ -444,6 +488,44 @@ function correoValido(valor){
  * cualquiera podría registrarse con una dirección que no es suya y
  * repartir accesos desde ahí.
  */
+/**
+ * Ver algo que es evidencia de un contrato al que sí entras.
+ *
+ * ← NUEVO (2 nov): el campo `adjuntoA` llegó primero sólo a la regla
+ * de Firestore que deja ABRIR el documento. Pero «quién puede ver esta
+ * evidencia» se decide en cinco sitios, no en uno, y los otros cuatro
+ * seguían diciendo que no: no quedaba asentado que la contraparte la
+ * consultó, no podía ver su anclaje en Bitcoin, y no podía abrir las
+ * fotos de dentro.
+ *
+ * Lo del anclaje era lo peor: la contraparte es PRECISAMENTE quien
+ * necesita comprobar que la fecha no la pusimos nosotros, y era la
+ * única que no podía verlo.
+ *
+ * Esto da «ver» y nada más. Firmar, editar, subir o retirar siguen
+ * pidiendo rol propio en el documento: se mira la evidencia, no se
+ * toca.
+ */
+async function verComoEvidencia(op, uid, email){
+  const expId = op?.adjuntoA;
+  if(!expId) return false;
+  const exp = (await db.doc(`${OPS}/${expId}`).get()).data();
+  return Boolean(exp && rolDe(exp, uid, email));
+}
+
+/**
+ * La puerta de las funciones que sólo LEEN.
+ *
+ * Primero el rol propio, con todo lo que `exigir` comprueba —incluido
+ * el estado del acuerdo—. Si no hay rol, se mira si lo que se pide ver
+ * es evidencia de un contrato suyo.
+ */
+async function exigirVer(op, uid, email){
+  if(rolDe(op, uid, email)){ exigir(op, uid, email, "ver"); return; }
+  if(await verComoEvidencia(op, uid, email)) return;
+  throw new HttpsError("permission-denied", "No tienes acceso a esta operación.");
+}
+
 function exigirCorreoVerificado(req){
   if(req.auth?.token?.email_verified) return;
   throw new HttpsError("failed-precondition",
@@ -978,6 +1060,10 @@ export const quitarArchivoDeRequisito = onCall(OPCIONES, async (req) => {
           contenido: `Retirado del expediente «${actual.title || opId}»`,
           meta: { tipo: "baja", expId: opId, requisito: reqId },
         },
+        // ← NUEVO (2 nov): y se cierra la puerta. Mientras estuvo
+        // adjunto, las partes del contrato podían abrirlo; al
+        // retirarlo dejan de poder, sin tener que tocar sus accesos.
+        camposServidor: { adjuntoA: null },
       });
     }catch(e){
       // Que el documento de origen ya no exista no puede tumbar el
@@ -1087,7 +1173,14 @@ export const archivo = onRequest({ cors: true, memory: "512MiB" }, async (req, r
       const padre = op || viejo;
       const rol = padre ? rolDe(padre, sesion.uid, correo) : null;
       // El aportador ve lo que él entregó, no lo que entregaron los demás.
-      if(!puede(rol, "ver") || rol === "aportador"){
+      const porRol = puede(rol, "ver") && rol !== "aportador";
+      // ← NUEVO (2 nov): y si no, por ser evidencia de un contrato suyo.
+      // Sin esto, la contraparte abría el recibo pero no las fotos de
+      // dentro, que es casi siempre lo único que de verdad quería ver.
+      const porEvidencia = !porRol && padre
+        ? await verComoEvidencia(padre, sesion.uid, correo)
+        : false;
+      if(!porRol && !porEvidencia){
         return res.status(403).send("No tienes acceso a este archivo.");
       }
     }
@@ -1737,7 +1830,7 @@ export const abrirDocumento = onCall(OPCIONES, async (req) => {
   const refOp = db.doc(`${OPS}/${opId}`);
   const op = (await refOp.get()).data();
   if(!op) throw new HttpsError("not-found", "La operación no existe.");
-  exigir(op, uid, email, "ver");
+  await exigirVer(op, uid, email);
 
   const texto = String(password || "");
   const refP = db.doc(`${PROTEGIDOS}/${opId}`);
@@ -2621,7 +2714,9 @@ export const anclajesDe = onCall(
 
     const op = await leerOperacion(opId);
     if(!op) throw new HttpsError("not-found", "La operación no existe.");
-    exigir(op, uid, email, "ver");
+    // ← ACTUALIZADO (2 nov): la contraparte es quien más necesita ver
+    // que la fecha la puso Bitcoin y no nosotros.
+    await exigirVer(op, uid, email);
 
     const conPrueba = req.data?.conPrueba !== false;
     const cache = new Map();

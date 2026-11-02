@@ -23,12 +23,14 @@ import { fmtFull } from "../nucleo/formato";
 import { CampoEnlace } from "../ui/CampoEnlace";
 
 /**
- * A dónde lleva «Conoce chaindoc».
+ * A dónde lleva «Conoce caraxes».
  *
- * De momento, a la portada de la propia app. Cuando exista la landing
- * que explica qué ofrecemos, se cambia AQUÍ y en ningún otro sitio.
+ * ← ACTUALIZADO (29 oct): ya existe la landing. Vive en
+ * `public/landing.html`, así que se sirve tal cual sin pasar por la
+ * aplicación: quien llega aquí no tiene cuenta y no hay motivo para
+ * hacerle cargar la app entera.
  */
-export const LANDING = "/";
+export const LANDING = "/landing.html";
 
 export function renderEntrega(ctx){
   const {
@@ -193,7 +195,7 @@ export function renderEntrega(ctx){
           </p>
           <a className="entrega-cta-btn" href={LANDING}
              target="_blank" rel="noopener noreferrer">
-            Conoce chaindoc
+            Conoce caraxes
           </a>
         </div>
       </div>

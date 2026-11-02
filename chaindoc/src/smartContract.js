@@ -432,6 +432,58 @@ export function resumenVinculos(mapa) {
   };
 }
 
+/**
+ * Qué decir sobre los vínculos que tienen algo que reportar.
+ *
+ * ← ARREGLADO (2 nov): la alerta enseñaba SIEMPRE «la huella que se
+ * registró ya no corresponde con su historia actual», incluyendo
+ * cuando lo único que pasaba era que no tenías acceso al documento.
+ *
+ * Eso no es un matiz. A quien abría el contrato desde la otra cuenta
+ * le decía que su evidencia había sido alterada —en un producto cuyo
+ * argumento entero es «si algo cambia, te enteras»— cuando no había
+ * cambiado absolutamente nada. Una falsa alarma aquí hace más daño
+ * que no avisar: enseña a desconfiar del aviso.
+ *
+ * Son dos cosas distintas y ahora se dicen distinto:
+ *   · alterado → el documento ya no es el que se adjuntó.
+ *   · faltante → el documento está, pero tú no lo puedes leer.
+ */
+export function explicarVinculos(rv) {
+  const alterados = rv?.alterados || 0;
+  const faltantes = rv?.faltantes || 0;
+  if (!alterados && !faltantes) return null;
+
+  const trozos = [];
+  if (alterados) {
+    trozos.push(`${alterados} comprobante${alterados === 1 ? "" : "s"} que ya no `
+      + `coincide${alterados === 1 ? "" : "n"} con su documento`);
+  }
+  if (faltantes) trozos.push(`${faltantes} sin acceso`);
+
+  const porQue = [];
+  if (alterados) {
+    porQue.push(alterados === 1
+      ? "Uno ya no es el documento que se adjuntó: su historia fue rehecha o reemplazada."
+      : "Esos ya no son los documentos que se adjuntaron: su historia fue rehecha o reemplazada.");
+  }
+  if (faltantes) {
+    porQue.push(faltantes === 1
+      ? "Del otro no tienes acceso al documento de origen, así que no se puede comprobar "
+        + "desde esta cuenta. Eso no quiere decir que haya cambiado."
+      : `De ${alterados ? "los otros" : "esos"} no tienes acceso al documento de origen, así `
+        + "que no se pueden comprobar desde esta cuenta. Eso no quiere decir que hayan cambiado.");
+  }
+
+  return {
+    titulo: trozos.join(" · "),
+    detalle: porQue.join(" "),
+    // Sólo lo alterado es una alarma. No poder leer algo es una
+    // limitación de permisos, y pintarla de rojo era parte del error.
+    grave: alterados > 0,
+  };
+}
+
 /** Formatea un importe con su moneda. */
 export const fmtMonto = (n, moneda = "MXN") =>
   n == null ? "—" : `$${Number(n).toLocaleString("es-MX", {

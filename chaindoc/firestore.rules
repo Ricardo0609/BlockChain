@@ -21,11 +21,48 @@ service cloud.firestore {
           || miCorreo() in data.get('roles', {}).keys();
     }
 
+    // Un documento adjunto como evidencia de un contrato lo pueden
+    // ABRIR las partes de ese contrato.
+    //
+    // ← NUEVO (2 nov): sin esto, adjuntar un recibo a un contrato
+    // dejaba constancia en las dos cadenas pero la otra parte recibia
+    // permission-denied al intentar abrirlo. Evidencia que la
+    // contraparte no puede leer es evidencia que no prueba nada, que
+    // es justo lo contrario de para lo que existe adjuntarla.
+    //
+    // El campo `adjuntoA` lo escribe el servidor al vincular y lo pone
+    // en null al retirar; el navegador no puede tocarlo. Por eso aqui
+    // se puede confiar en el: dice a que expediente pertenece esta
+    // evidencia, y el acceso sale del acceso a ESE expediente. Asi,
+    // quien entre al contrato manana puede abrirla, y retirarla se la
+    // quita a todos sin tocar ningun acceso.
+    //
+    // Es un `get` extra por lectura y solo cuando el documento esta
+    // adjunto a algo: el caso normal no paga nada.
+    function evidenciaDeUnContratoMio(data) {
+      return data.get('adjuntoA', null) != null
+          && exists(/databases/$(database)/documents/operaciones/$(data.adjuntoA))
+          && tengoAcceso(get(/databases/$(database)/documents/operaciones/$(data.adjuntoA)).data);
+    }
+
+    // Ver una operacion: por rol propio, o por ser evidencia de un
+    // contrato al que si entras. Se declara aqui porque la usan dos
+    // sitios -la propia operacion y sus evidencias- y una regla de
+    // acceso repetida en dos sitios acaba diciendo cosas distintas.
+    function puedeVerOperacion(data) {
+      return tengoAcceso(data) || evidenciaDeUnContratoMio(data);
+    }
+
     // Durante la migración un documento puede estar en cualquiera de las
     // dos colecciones. Esto pregunta por las dos.
+    //
+    // ← ACTUALIZADO (2 nov): para las operaciones vale tambien el
+    // acceso derivado. Sin esto, la contraparte podia abrir el recibo
+    // adjunto pero no las FOTOS de dentro, que es casi siempre lo unico
+    // que de verdad queria ver. La mitad de un permiso no sirve.
     function accesoADocumento(docId) {
       return (exists(/databases/$(database)/documents/operaciones/$(docId))
-              && tengoAcceso(get(/databases/$(database)/documents/operaciones/$(docId)).data))
+              && puedeVerOperacion(get(/databases/$(database)/documents/operaciones/$(docId)).data))
           || (exists(/databases/$(database)/documents/documents/$(docId))
               && tengoAcceso(get(/databases/$(database)/documents/documents/$(docId)).data));
     }
@@ -50,7 +87,11 @@ service cloud.firestore {
     // El navegador lee; escribir es cosa de las Cloud Functions, que
     // entran como administrador y no pasan por estas reglas.
     match /operaciones/{opId} {
-      allow get: if sesion() && tengoAcceso(resource.data);
+      // Abrirlo: tus documentos, los que te compartieron, y la
+      // evidencia de los contratos en los que estas. `list` NO lo
+      // incluye a proposito (ver abajo): la evidencia de un contrato
+      // ajeno se abre desde el contrato, no se mete en tu lista.
+      allow get: if sesion() && puedeVerOperacion(resource.data);
 
       // La regla de una consulta tiene que decir lo MISMO que la
       // consulta, ni más ni menos: la app pide lo propio y lo

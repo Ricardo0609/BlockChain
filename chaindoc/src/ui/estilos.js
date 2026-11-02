@@ -682,6 +682,12 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .vin-alerta{display:flex;align-items:flex-start;gap:11px;border:1px solid rgba(194,65,12,.45);
   background:rgba(194,65,12,.07);color:#c2410c;border-radius:12px;padding:13px 15px;
   margin-bottom:16px;font-size:14px;line-height:1.45}
+/* ← NUEVO (2 nov): la version «suave». No poder LEER un documento no
+   es una alarma de integridad: es un permiso que falta. Pintarlo del
+   mismo rojo que «este documento fue alterado» era la mitad visual
+   del mismo error que decia el texto. */
+.vin-alerta.suave{border-color:var(--bordes);background:var(--bg-soft);color:var(--gris-400)}
+.vin-alerta.suave strong{color:var(--negro)}
 .vin-alerta-s{color:var(--gris-400);font-weight:400;margin-top:3px}
 .vin-nota{display:flex;align-items:center;gap:9px;background:rgba(14,116,144,.08);
   color:#0e7490;border-radius:10px;padding:10px 13px;margin-bottom:16px;

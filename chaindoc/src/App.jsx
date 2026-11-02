@@ -1681,7 +1681,19 @@ export default function ChainDoc(){
         contenido:`Adjuntado al expediente «${exp.title}» como ${req?.titulo||reqId}`,
         meta:{ expId:exp.id, requisito:reqId },
       }, {}, { autor:user, autorUid:uid });
+
+      // ← NUEVO (2 nov): si esta segunda escritura falla, se dice.
+      //
+      // Adjuntar escribe en DOS sitios: el contrato y el documento de
+      // origen. Antes, si el segundo fallaba, esto hacía `if(src)` y
+      // seguía como si nada: el comprobante aparecía adjunto, nadie se
+      // enteraba, y la consecuencia —que la otra parte no pueda
+      // abrirlo, porque es aquí donde se escribe de qué contrato es
+      // evidencia— salía horas después como un «no tienes acceso» sin
+      // relación aparente con esto. Nos costó una tarde entera.
       if(src) setD(src);
+      else notify("Se adjuntó al contrato, pero no quedó asentado en este documento. "
+        + "La otra parte podría no poder abrirlo: retíralo y vuelve a adjuntarlo.", "err");
 
       setModal(null); setLinkExp(null);
       refresh();   // ← NUEVO: así el aviso de duplicado aparece de inmediato

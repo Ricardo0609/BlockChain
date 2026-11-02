@@ -24,6 +24,7 @@ import {
   resumenConsultas,
   resumenVinculos,
   solicitudesDe,
+  explicarVinculos,
 } from "../smartContract";
 import { fmtFecha, fmtFull, fmtShort } from "../nucleo/formato";
 import { SelloFiscal } from "../ui/SelloFiscal";
@@ -219,22 +220,23 @@ export function renderExpediente(ctx){
 
     {/* ← NUEVO: alerta de integridad. Sólo aparece cuando hay algo
         que reportar; el caso normal no dice nada. */}
-    {(rv.alterados>0 || rv.faltantes>0) && (
-      <div className="vin-alerta">
-        <Icon n="warning" size={20}/>
-        <div>
-          <strong>
-            {/* ← ACTUALIZADO (16 oct): decía «con la cadena reescrita» */}
-            {rv.alterados>0 && `${rv.alterados} comprobante${rv.alterados===1?"":"s"} que ya no coincide${rv.alterados===1?"":"n"} con su documento`}
-            {rv.alterados>0 && rv.faltantes>0 && " · "}
-            {rv.faltantes>0 && `${rv.faltantes} sin acceso`}
-          </strong>
-          <div className="vin-alerta-s">
-            La huella que se registró al adjuntarlos ya no corresponde con su historia actual.
+    {/* ← ARREGLADO (2 nov): el texto depende de QUÉ pasa. Ver
+        `explicarVinculos` en smartContract.js: antes decía que la
+        huella no cuadraba también cuando lo único que pasaba era que
+        no tenías acceso, que es una acusación falsa y de las caras. */}
+    {(()=>{
+      const av = explicarVinculos(rv);
+      if(!av) return null;
+      return (
+        <div className={`vin-alerta ${av.grave?"":"suave"}`}>
+          <Icon n={av.grave?"warning":"lock"} size={20}/>
+          <div>
+            <strong>{av.titulo}</strong>
+            <div className="vin-alerta-s">{av.detalle}</div>
           </div>
         </div>
-      </div>
-    )}
+      );
+    })()}
     {/* ← NUEVO: el mismo archivo comprobando dos gastos distintos */}
     {/* ← NUEVO: fases del contrato, cada una con su propio contador.
         Tocar una fase filtra los requisitos que le corresponden. */}

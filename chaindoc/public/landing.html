@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>caraxes — prueba lo que se cumplió</title>
+<meta name="description" content="Un contrato dice lo que se prometió. caraxes prueba lo que se cumplió: cada entrega queda sellada con su fecha, y cualquiera puede comprobarlo sin cuenta y sin internet.">
+<link rel="icon" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* ─────────────────────────────────────────────────────────────
+   caraxes — página de entrada
+
+   La paleta sale del material del que habla el producto: documentos
+   que se sellan. Tinta azul-negra sobre un papel frío de ingeniería,
+   y un violeta de sello de tinta como único acento fuerte.
+
+   El verde NO decora. Aparece exactamente donde algo está
+   verificado y en ningún otro sitio: si se usara para un botón o un
+   título, dejaría de significar nada justo en la página de un
+   producto que vende que sus señales significan algo.
+   ───────────────────────────────────────────────────────────── */
+:root{
+  --tinta:#16202b;
+  --tinta-70:#4a5b6b;
+  --tinta-45:#7e8d9a;
+  --papel:#e9eef1;
+  --blanco:#fff;
+  --linea:#c3cfd7;
+  --sello:#5b3a96;
+  --sello-suave:rgba(91,58,150,.09);
+  --prueba:#0f7a52;
+  --prueba-suave:rgba(15,122,82,.1);
+  --f-t:'Zilla Slab',Georgia,serif;
+  --f-p:'Inter',system-ui,-apple-system,sans-serif;
+  --f-m:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--papel);color:var(--tinta);
+  font:400 17px/1.6 var(--f-p);
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{font-family:var(--f-t);font-weight:600;letter-spacing:-.01em;margin:0}
+p{margin:0}
+a{color:inherit}
+
+.limite{max-width:1080px;margin:0 auto;padding:0 28px}
+
+/* ── Cabecera ───────────────────────────────────────────── */
+.cab{border-bottom:1px solid var(--linea)}
+.cab .limite{display:flex;align-items:center;justify-content:space-between;
+  gap:20px;padding-top:20px;padding-bottom:20px}
+.marca{font-family:var(--f-t);font-weight:700;font-size:21px;letter-spacing:-.02em}
+.marca::after{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;
+  background:var(--sello);margin-left:7px;vertical-align:.32em}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;
+  font:600 15px/1 var(--f-p);padding:13px 22px;border-radius:7px;
+  text-decoration:none;border:1.5px solid var(--tinta);
+  transition:background .14s,color .14s,border-color .14s}
+.btn-s{background:var(--tinta);color:var(--papel)}
+.btn-s:hover{background:#0b131c;border-color:#0b131c}
+.btn-f{background:transparent;color:var(--tinta)}
+.btn-f:hover{background:var(--tinta);color:var(--papel)}
+.btn-cab{padding:9px 17px;font-size:14.5px;border-width:1.5px}
+a:focus-visible,button:focus-visible,summary:focus-visible{
+  outline:2.5px solid var(--sello);outline-offset:3px;border-radius:4px}
+
+/* ── Rejilla de sección: la anotación va al MARGEN ───────── */
+/* No es una etiqueta encima del título, es una nota al margen, como
+   en un documento anotado a mano. Dice en qué parte del argumento
+   estás, y en pantalla chica se apila sin fingir que hay margen. */
+.sec{border-bottom:1px solid var(--linea)}
+.sec .limite{display:grid;grid-template-columns:132px 1fr;gap:0 36px;
+  padding-top:66px;padding-bottom:66px}
+.nota{font-size:13.5px;line-height:1.45;color:var(--tinta-45);
+  padding-top:6px;border-top:2px solid var(--sello);align-self:start}
+.cuerpo{min-width:0;max-width:760px}
+
+/* ── Portada ────────────────────────────────────────────── */
+.portada .limite{display:block;padding-top:76px;padding-bottom:70px}
+.tesis{font-size:clamp(34px,5.4vw,58px);line-height:1.08;max-width:17ch;
+  letter-spacing:-.025em;font-weight:600}
+/* La segunda linea es la marca: tiene que ser secundaria, pero a
+   --tinta-45 se quedaba por debajo del contraste minimo. */
+.tesis .b{display:block;color:var(--tinta-70);font-weight:500}
+.entrada{margin-top:26px;font-size:19px;line-height:1.55;max-width:56ch;color:var(--tinta-70)}
+.acciones{display:flex;flex-wrap:wrap;gap:13px;margin-top:34px}
+.pie-acciones{margin-top:15px;font-size:14.5px;color:var(--tinta-45)}
+
+/* ── La cadena que se verifica sola ─────────────────────── */
+/* El corazón de la página. No es un dibujo de una verificación: el
+   navegador calcula de verdad el SHA-256 de cada bloque y comprueba
+   que enlaza con el anterior, con el mismo método que el paquete de
+   evidencia que se descarga. Por eso puede decir «ahora mismo». */
+.prueba{margin-top:52px;background:var(--blanco);border:1px solid var(--linea);
+  border-radius:12px;overflow:hidden}
+.prueba-cab{display:flex;align-items:center;justify-content:space-between;
+  gap:14px;flex-wrap:wrap;padding:15px 22px;border-bottom:1px solid var(--linea)}
+.prueba-t{font-family:var(--f-t);font-weight:600;font-size:16.5px}
+.prueba-e{font:500 13.5px/1 var(--f-p);color:var(--tinta-45)}
+.prueba-e.ok{color:var(--prueba);background:var(--prueba-suave);
+  padding:6px 11px;border-radius:99px}
+
+.bloques{list-style:none;margin:0;padding:8px 0}
+.bq{display:grid;grid-template-columns:30px 1fr auto;align-items:baseline;
+  gap:0 15px;padding:11px 22px;opacity:.26}
+.bq.listo{opacity:1}
+@media (prefers-reduced-motion:no-preference){
+  .bq{transition:opacity .34s ease}
+}
+.bq-n{font:500 12.5px/1.5 var(--f-m);color:var(--tinta-45);position:relative}
+/* El hilo que une un bloque con el anterior: la cadena, dibujada. */
+.bq-n::before{content:"";position:absolute;left:9px;top:-13px;height:13px;
+  width:1.5px;background:var(--linea)}
+.bq:first-child .bq-n::before{display:none}
+.bq-q{font-weight:500;font-size:15.5px;min-width:0}
+/* En bloque y no en linea: pegado al texto del bloque, el hash se
+   leia como si fuera parte de la frase. */
+.bq-h{display:block;font:400 11.5px/1.5 var(--f-m);color:var(--tinta-45);
+  word-break:break-all;margin-top:3px}
+.bq-v{font-size:15px;color:var(--prueba);justify-self:end;min-width:16px;text-align:right}
+.prueba-pie{padding:14px 22px;border-top:1px solid var(--linea);
+  font-size:13.5px;line-height:1.5;color:var(--tinta-45);background:#f7fafb}
+
+/* ── El hueco ───────────────────────────────────────────── */
+h2{font-size:clamp(25px,3.1vw,33px);line-height:1.18;letter-spacing:-.02em;max-width:19ch}
+.parrafo{margin-top:17px;font-size:17.5px;line-height:1.62;color:var(--tinta-70);max-width:62ch}
+
+.escenas{list-style:none;margin:32px 0 0;padding:0}
+.escenas li{padding:17px 0;border-top:1px solid var(--linea);
+  display:grid;grid-template-columns:1fr;gap:4px}
+.escenas b{font-weight:600;font-size:17px}
+.escenas span{color:var(--tinta-70);font-size:16px;line-height:1.55}
+
+/* ── Cómo funciona: esto SÍ es una secuencia ────────────── */
+.pasos{list-style:none;margin:30px 0 0;padding:0;counter-reset:p}
+.pasos li{counter-increment:p;position:relative;padding:0 0 26px 52px}
+.pasos li::before{content:counter(p);position:absolute;left:0;top:-1px;
+  width:30px;height:30px;border-radius:50%;background:var(--sello-suave);
+  color:var(--sello);font:600 14px/30px var(--f-m);text-align:center}
+/* La línea que baja de un paso al siguiente: es una cadena, y se ve. */
+.pasos li::after{content:"";position:absolute;left:14.25px;top:34px;bottom:8px;
+  width:1.5px;background:var(--linea)}
+.pasos li:last-child{padding-bottom:0}
+.pasos li:last-child::after{display:none}
+.pasos b{display:block;font-family:var(--f-t);font-weight:600;font-size:19.5px;
+  letter-spacing:-.01em}
+.pasos span{display:block;margin-top:5px;color:var(--tinta-70);font-size:16.5px;
+  line-height:1.55;max-width:58ch}
+
+/* ── Diferencias ────────────────────────────────────────── */
+.difs{margin:30px 0 0;padding:0;list-style:none}
+.difs li{padding:22px 0;border-top:1px solid var(--linea)}
+.difs h3{font-size:19.5px;letter-spacing:-.01em}
+.difs p{margin-top:6px;color:var(--tinta-70);font-size:16.5px;line-height:1.58;max-width:62ch}
+.difs code{font:400 14.5px var(--f-m);background:var(--sello-suave);
+  color:var(--sello);padding:1px 6px;border-radius:4px;overflow-wrap:anywhere}
+
+/* ── Para quién ─────────────────────────────────────────── */
+.sectores{display:flex;flex-wrap:wrap;gap:9px;margin-top:26px;padding:0;list-style:none}
+.sectores li{border:1px solid var(--linea);background:var(--blanco);
+  border-radius:99px;padding:8px 16px;font-size:15px}
+.abierto{margin-top:24px;padding:19px 22px;background:var(--sello-suave);
+  border-radius:10px;font-size:16.5px;line-height:1.58;max-width:62ch}
+
+/* ── Cierre ─────────────────────────────────────────────── */
+.cierre{background:var(--tinta);color:var(--papel);border-bottom:none}
+.cierre .limite{display:block;padding-top:70px;padding-bottom:70px;text-align:center}
+.cierre h2{max-width:26ch;margin:0 auto;color:var(--blanco)}
+.cierre .parrafo{margin:16px auto 0;color:#aebdc9;max-width:52ch}
+.cierre .acciones{justify-content:center;margin-top:30px}
+.cierre .btn-s{background:var(--papel);color:var(--tinta);border-color:var(--papel)}
+.cierre .btn-s:hover{background:#fff;border-color:#fff}
+.cierre .btn-f{color:var(--papel);border-color:#53657a}
+.cierre .btn-f:hover{background:var(--papel);color:var(--tinta);border-color:var(--papel)}
+.cierre .pie-acciones{color:#8ea0af}
+
+footer{font-size:14px;line-height:1.65;color:var(--tinta-45)}
+footer .limite{padding-top:34px;padding-bottom:46px;display:grid;
+  grid-template-columns:132px 1fr;gap:0 36px}
+footer p+p{margin-top:12px}
+footer strong{color:var(--tinta-70);font-weight:600}
+
+/* ── Pantallas chicas ───────────────────────────────────── */
+@media (max-width:860px){
+  body{font-size:16px}
+  .limite{padding:0 20px}
+  .sec .limite,footer .limite{grid-template-columns:1fr;gap:0}
+  .nota{margin-bottom:22px}
+  .sec .limite{padding-top:48px;padding-bottom:48px}
+  .portada .limite{padding-top:48px;padding-bottom:48px}
+  .tesis{max-width:none}
+  .entrada{font-size:17.5px}
+  .acciones .btn{flex:1 1 auto;justify-content:center}
+  .prueba{margin-top:38px}
+  .bq{grid-template-columns:26px 1fr auto;gap:0 11px;padding:10px 16px}
+  .prueba-cab,.prueba-pie{padding-left:16px;padding-right:16px}
+  .bq-h{font-size:10.5px}
+  .pasos li{padding-left:44px}
+}
+</style>
+</head>
+<body>
+
+<header class="cab">
+  <div class="limite">
+    <span class="marca">caraxes</span>
+    <a class="btn btn-f btn-cab" href="/">Entrar</a>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── PORTADA ─────────────────────────────────────────── -->
+  <section class="sec portada">
+    <div class="limite">
+      <h1 class="tesis">
+        Un contrato dice lo que se prometió.
+        <span class="b">caraxes prueba lo que se cumplió.</span>
+      </h1>
+
+      <p class="entrada">
+        Cada entrega, cada factura y cada firma quedan selladas con su fecha y
+        encadenadas entre sí. Si alguien cambia algo después, deja de cuadrar
+        — y se nota.
+      </p>
+
+      <div class="acciones">
+        <a class="btn btn-s" href="/">Crear una cuenta</a>
+        <a class="btn btn-f" href="#verificar">Ver cómo se comprueba</a>
+      </div>
+      <p class="pie-acciones">
+        Quien te entrega comprobantes no necesita cuenta ni instalar nada.
+      </p>
+
+      <!-- No es el dibujo de una verificación: es una. El navegador
+           calcula el SHA-256 de cada bloque y comprueba que enlaza con
+           el anterior, con el mismo método que el paquete que se
+           descarga. Si no cuadrara, esta caja lo diría. -->
+      <div class="prueba" id="verificar">
+        <div class="prueba-cab">
+          <span class="prueba-t">Expediente de ejemplo</span>
+          <span class="prueba-e" id="veredicto">Verificando…</span>
+        </div>
+        <ol class="bloques" id="bloques"></ol>
+        <p class="prueba-pie">
+          Estos cuatro bloques se acaban de comprobar en tu navegador, sin
+          mandar nada a ningún servidor. Es exactamente lo que hace el archivo
+          de evidencia que tú le entregas a un cliente, a un auditor o a un
+          juez.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── EL HUECO ────────────────────────────────────────── -->
+  <section class="sec">
+    <div class="limite">
+      <p class="nota">El hueco que nadie cubre</p>
+      <div class="cuerpo">
+        <h2>Firmar el contrato es el principio. El problema viene después.</h2>
+        <p class="parrafo">
+          Hay buenas herramientas para firmar. Lo que no hay es nada que guarde
+          lo que pasó <em>después</em> de la firma, que es donde se pierde el
+          dinero.
+        </p>
+        <ul class="escenas">
+          <li>
+            <b>La evidencia vive en WhatsApp</b>
+            <span>Las fotos del avance, las facturas y los recibos acaban repartidos
+            entre chats, correos y el teléfono de alguien que ya no trabaja ahí.</span>
+          </li>
+          <li>
+            <b>Nadie puede demostrar cuándo</b>
+            <span>La fecha de una foto se cambia en diez segundos. Cuando hay
+            desacuerdo, cada parte enseña su versión y ninguna prueba nada.</span>
+          </li>
+          <li>
+            <b>Se paga sin cruzar contra lo pactado</b>
+            <span>Se liberan anticipos y estimaciones sin un sitio donde ver qué se
+            comprobó, qué falta y cuánto suma lo entregado.</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CÓMO FUNCIONA ───────────────────────────────────── -->
+  <section class="sec">
+    <div class="limite">
+      <p class="nota">De la firma a la prueba</p>
+      <div class="cuerpo">
+        <h2>Cinco pasos, y al final un archivo que se defiende solo.</h2>
+        <ol class="pasos">
+          <li>
+            <b>Escribe o sube el contrato</b>
+            <span>Se lee y se convierte en una lista de puntos que cumplir: qué hay
+            que entregar, por cuánto y para cuándo. Tú revisas esa lista antes de
+            que exista el expediente.</span>
+          </li>
+          <li>
+            <b>Las dos partes firman</b>
+            <span>Con un código, con Face ID o con la e.firma del SAT. Desde que la
+            otra parte acepta, el contenido queda fijo: cambiarlo obliga a mandar una
+            versión nueva y volver a firmar.</span>
+          </li>
+          <li>
+            <b>Entra la evidencia</b>
+            <span>Facturas, fotos, recibos o la dirección de algo publicado. A quien
+            te entrega le mandas un enlace: sube lo suyo sin crear cuenta y sin ver
+            nada más del contrato.</span>
+          </li>
+          <li>
+            <b>Cada cosa queda sellada</b>
+            <span>Todo lo que pasa se asienta en una cadena de bloques encadenados
+            por su huella. Las fechas se publican además en Bitcoin, así que no
+            dependen de nuestra palabra.</span>
+          </li>
+          <li>
+            <b>Al terminar, las dos partes firman la conformidad</b>
+            <span>Ese es el último paso, y hasta que ocurre el contrato no está
+            cerrado. Después puedes exportar el expediente entero como un solo
+            archivo.</span>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── DIFERENCIAS ─────────────────────────────────────── -->
+  <section class="sec">
+    <div class="limite">
+      <p class="nota">Por qué es distinto</p>
+      <div class="cuerpo">
+        <h2>La prueba no sirve si hay que creerle a quien la guarda.</h2>
+        <ul class="difs">
+          <li>
+            <h3>Se comprueba sin nosotros y sin internet</h3>
+            <p>El expediente se exporta como un archivo que cualquiera abre en su
+            navegador. Recalcula las huellas él solo, con los archivos originales
+            dentro, y dice si cuadra. No consulta nada nuestro: funciona igual si
+            mañana cerramos.</p>
+          </li>
+          <li>
+            <h3>Las fechas las pone algo que no controlamos</h3>
+            <p>Cada bloque se publica en la cadena de Bitcoin mediante
+            <code>OpenTimestamps</code>, un protocolo abierto. Esa cadena no la
+            puede reescribir nadie — nosotros tampoco. La prueba se comprueba con
+            el cliente oficial, que no es nuestro.</p>
+          </li>
+          <li>
+            <h3>Quien te entrega no necesita cuenta</h3>
+            <p>El albañil, el proveedor o el diseñador reciben un enlace, suben lo
+            suyo y se acabó. No ven el contrato, ni los montos, ni lo que entregaron
+            los demás. Esa es la diferencia entre que la evidencia llegue y que no
+            llegue nunca.</p>
+          </li>
+          <li>
+            <h3>Las facturas se revisan de verdad</h3>
+            <p>Si subes el XML, se lee el CFDI, se consulta su estatus ante el SAT y
+            se avisa si el emisor aparece en la lista 69-B. Una factura vigente en
+            septiembre puede estar cancelada en octubre, y eso se vuelve a mirar
+            solo.</p>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PARA QUIÉN ──────────────────────────────────────── -->
+  <section class="sec">
+    <div class="limite">
+      <p class="nota">Para quién es</p>
+      <div class="cuerpo">
+        <h2>Empezamos donde más duele: obra y proveedores.</h2>
+        <p class="parrafo">
+          Donde hay anticipos, estimaciones, fondo de garantía y la obligación de
+          comprobar materialidad ante el SAT, la falta de pruebas cuesta dinero
+          todos los meses.
+        </p>
+        <ul class="sectores">
+          <li>Constructoras</li>
+          <li>Empresas con proveedores</li>
+          <li>Agencias y servicios</li>
+          <li>Inmobiliario y rentas</li>
+          <li>Logística</li>
+          <li>Eventos</li>
+          <li>Profesionales independientes</li>
+        </ul>
+        <p class="abierto">
+          Pero el producto no sabe de sectores. Un expediente son partes,
+          compromisos y pruebas: que las pruebas sean facturas del SAT es un caso,
+          no la definición. Sirve igual para una remodelación que para la entrega
+          de un libro.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CIERRE ──────────────────────────────────────────── -->
+  <section class="sec cierre">
+    <div class="limite">
+      <h2>La próxima vez que alguien pregunte «¿y quién dice que eso se entregó?»</h2>
+      <p class="parrafo">
+        Ten un archivo que lo conteste sin que nadie tenga que creerte.
+      </p>
+      <div class="acciones">
+        <a class="btn btn-s" href="/">Crear una cuenta</a>
+        <a class="btn btn-f" href="mailto:hola@caraxes.mx?subject=Piloto%20de%20caraxes">Hablar con nosotros</a>
+      </div>
+      <p class="pie-acciones">
+        Estamos en piloto con un grupo pequeño de empresas. Escríbenos y entras.
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="limite">
+    <p class="nota" style="border-color:var(--linea)">caraxes</p>
+    <div>
+      <p>
+        <strong>Lo que todavía no hace.</strong> No emite facturas, no sustituye
+        a un notario y no es una NOM-151: eso último requiere un prestador
+        certificado y está en camino. Tampoco valida identidades oficiales.
+      </p>
+      <p>
+        Lo que sí hace está escrito arriba, y se puede comprobar sin pedirnos
+        permiso. Nombre provisional mientras elegimos el definitivo.
+      </p>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* ─────────────────────────────────────────────────────────────
+   La cadena de la portada se verifica de verdad.
+
+   Es el mismo cálculo que hace el paquete de evidencia: el texto de
+   cada bloque, su SHA-256, y la comprobación de que el campo
+   «anterior» de cada uno es el hash del de antes. Si se cambiara
+   cualquier letra de cualquier bloque, dejaría de cuadrar y la caja
+   lo diría — que es exactamente el argumento de la página.
+   ───────────────────────────────────────────────────────────── */
+/* Los hashes van ESCRITOS, no calculados sobre la marcha.
+
+   Es la diferencia entre comprobar y fingir que se comprueba: si el
+   hash se calculara a partir del bloque anterior recién calculado,
+   cuadraría siempre, dijera lo que dijera el texto. Aquí cada bloque
+   trae el hash con el que se sello; el navegador lo vuelve a calcular
+   y los compara. Cambia una sola letra de cualquier `q` de abajo y la
+   caja dira que la cadena no cuadra. */
+const BLOQUES = [
+  { n:0, q:"Expediente abierto · Remodelación de local",
+    t:"2026-10-12T16:04:00Z",
+    anterior:"0000000000000000000000000000000000000000000000000000000000000000",
+    hash:"bd29389dd6ff678a2b5a6f126149bf815856c6f71fd864f254e92b1171ad5fa0" },
+  { n:1, q:"Contrato aceptado por las dos partes",
+    t:"2026-10-12T18:21:00Z",
+    anterior:"bd29389dd6ff678a2b5a6f126149bf815856c6f71fd864f254e92b1171ad5fa0",
+    hash:"3ba2305d7cdd7f3db16f5c0b9cf69b9f9356c46484ce104e591d44b75ada39cc" },
+  { n:2, q:"Factura de materiales entregada por el proveedor",
+    t:"2026-10-24T11:47:00Z",
+    anterior:"3ba2305d7cdd7f3db16f5c0b9cf69b9f9356c46484ce104e591d44b75ada39cc",
+    hash:"31c45435e917c48fdf8b22d9ab7d303c6646858c5d2777bbf105c33b92e13b00" },
+  { n:3, q:"Conformidad firmada · contrato cerrado",
+    t:"2026-11-03T09:15:00Z",
+    anterior:"31c45435e917c48fdf8b22d9ab7d303c6646858c5d2777bbf105c33b92e13b00",
+    hash:"8d9a9dd6178fe78a21f77f4e3cfa1642eefd8add9c91eaaf2d171f66b177f010" },
+];
+
+const CERO = "0".repeat(64);
+const hex = (buf) => [...new Uint8Array(buf)]
+  .map((b) => b.toString(16).padStart(2, "0")).join("");
+
+async function sha256(texto){
+  const datos = new TextEncoder().encode(texto);
+  return hex(await crypto.subtle.digest("SHA-256", datos));
+}
+
+const lista = document.getElementById("bloques");
+const veredicto = document.getElementById("veredicto");
+
+/* Sin Web Crypto —navegador viejo, o la página servida sin https— no
+   se puede calcular nada. Se enseñan los bloques sin inventarse una
+   palomita: fingir una verificación aquí seria mentir sobre lo unico
+   que esta pagina promete. */
+const hayCripto = Boolean(window.crypto && crypto.subtle);
+
+function pintar(b, hash, verificado){
+  const li = document.createElement("li");
+  li.className = "bq";
+  li.innerHTML =
+      '<span class="bq-n">#' + b.n + '</span>'
+    + '<span class="bq-q">' + b.q + '<span class="bq-h">' + (hash || "") + '</span></span>'
+    + '<span class="bq-v">' + (verificado ? "✓" : "") + '</span>';
+  lista.appendChild(li);
+  return li;
+}
+
+const quieto = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const esperar = (ms) => new Promise((r) => setTimeout(r, quieto ? 0 : ms));
+
+async function verificar(){
+  if(!hayCripto){
+    for(const b of BLOQUES) pintar(b, "", false).classList.add("listo");
+    veredicto.textContent = "Este navegador no puede comprobarlo";
+    return;
+  }
+
+  let anterior = CERO;
+  let falla = null;
+
+  for(const b of BLOQUES){
+    // Dos comprobaciones, las mismas que hace el paquete: que el
+    // bloque corresponda con su propio hash, y que enlace con el de
+    // antes.
+    const recalculado = await sha256([b.n, b.t, b.q, b.anterior].join("|"));
+    const cuadra = recalculado === b.hash;
+    const enlaza = b.anterior === anterior;
+    const bien = cuadra && enlaza;
+    if(bien === false && falla === null) falla = b.n;
+
+    const li = pintar(b, b.hash, bien);
+    if(!bien) li.querySelector(".bq-v").style.color = "#b4451b";
+    await esperar(120);
+    li.classList.add("listo");
+    anterior = b.hash;
+  }
+
+  if(falla === null){
+    veredicto.textContent = "Cadena íntegra · " + BLOQUES.length + " bloques verificados";
+    veredicto.classList.add("ok");
+  }else{
+    veredicto.textContent = "El bloque #" + falla + " no cuadra";
+    veredicto.style.color = "#b4451b";
+  }
+}
+
+verificar();
+</script>
+</body>
+</html>
