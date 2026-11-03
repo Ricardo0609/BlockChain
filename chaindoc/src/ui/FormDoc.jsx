@@ -76,8 +76,12 @@ export function FormDoc({ formKey, fields, onChange, editable }){
 
   return (
     <div className="fd">
+      {/* ← QUITADO (3 nov): el encabezado de la plantilla.
+          La pantalla enseñaba DOS títulos: el del documento, que le
+          pone quien lo crea, y encima este, fijo, que decía siempre
+          «Recibo de nómina» aunque el recibo fuera de la compra de
+          cemento. El segundo no añadía nada y contradecía al primero. */}
       <div className="fd-head">
-        <h2 className="fd-heading">{s.heading}</h2>
         {(s.header||[]).map(field)}
       </div>
       <div className="fd-body">

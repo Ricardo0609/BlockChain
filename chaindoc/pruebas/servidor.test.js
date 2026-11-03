@@ -5,6 +5,7 @@ import {
   limpiarCambios, validarEvento, revisarCambioDeAcceso,
   tieneAcceso, esDueno, debeRegistrarConsulta, ACCIONES, LIMITES,
   CAMPOS_EDITABLES, permisoDeEvento, PERMISOS_QUE_CAMBIAN, PERMISOS, puede,
+  esComprobante, suDueno, leTocaAlDueno, TOCAN_EL_CONTENIDO,
 } from "../functions/lib/permisos.js";
 
 const op = {
@@ -191,5 +192,81 @@ describe("el acuerdo no se escribe guardando campos", () => {
   it("aceptar o rechazar es su propia accion, y pide aprobar", () => {
     expect(ACCIONES.has("ACUERDO")).toBe(true);
     expect(permisoDeEvento({ accion: "ACUERDO" })).toBe("aprobar");
+  });
+});
+
+// ── UN RECIBO SOLO LO CAMBIA QUIEN LO CREO ──────────────────────
+//
+// El rol no alcanzaba. Un «editor» de un recibo compartido podia
+// cambiarle el monto, y desde el acceso derivado cualquiera de las dos
+// partes de un contrato abre la evidencia que lleva adjunta. La firma
+// de abajo ampararia algo que su firmante no escribio.
+//
+// Esto NO es la puerta del navegador: aquella es el orden del trabajo
+// y esta es el permiso. Las dos tienen que estar, y la que cuenta es
+// esta.
+describe("un recibo o una factura solo los cambia su dueno", () => {
+  const rec = { id: "r1", tplId: "recibo", ownerUid: "U1", ownerEmail: "ana@x.com" };
+  const fac = { id: "f1", tplId: "factura", ownerUid: "U1", ownerEmail: "ana@x.com" };
+  const texto = { id: "d1", ownerUid: "U1", ownerEmail: "ana@x.com" };
+
+  it("reconoce cual es cual", () => {
+    expect(esComprobante(rec)).toBe(true);
+    expect(esComprobante(fac)).toBe(true);
+    expect(esComprobante(texto)).toBe(false);
+    expect(esComprobante(null)).toBe(false);
+  });
+
+  it("su dueno lo edita", () => {
+    expect(leTocaAlDueno(rec, "U1", "ana@x.com", "editar")).toBe(false);
+  });
+
+  it("un editor con acceso NO", () => {
+    for (const a of ["editar", "subir", "retirar"]) {
+      expect(leTocaAlDueno(rec, "U2", "luis@x.com", a)).toBe(true);
+      expect(leTocaAlDueno(fac, "U2", "luis@x.com", a)).toBe(true);
+    }
+  });
+
+  it("pero ver, firmar, exportar y adjuntar siguen abiertos", () => {
+    // Es a lo que viene la otra parte: mirar la prueba y conformarse.
+    for (const a of ["ver", "firmar", "exportar", "vincular", "aprobar", "compartir"]) {
+      expect(leTocaAlDueno(rec, "U2", "luis@x.com", a)).toBe(false);
+    }
+  });
+
+  it("un documento de texto se sigue editando entre varios", () => {
+    expect(leTocaAlDueno(texto, "U2", "luis@x.com", "editar")).toBe(false);
+  });
+
+  it("sin ownerUid vale el correo: los primeros recibos no lo traen", () => {
+    const viejo = { tplId: "recibo", ownerEmail: "Ana@X.com" };
+    expect(suDueno(viejo, null, "ana@x.com")).toBe(true);
+    expect(leTocaAlDueno(viejo, null, "ana@x.com", "editar")).toBe(false);
+    expect(leTocaAlDueno(viejo, "U9", "luis@x.com", "editar")).toBe(true);
+  });
+
+  it("dos huecos no son la misma persona", () => {
+    // `undefined === undefined` daria «si eres el dueno» y abriria el
+    // documento a quien todavia no ha terminado de identificarse.
+    expect(suDueno({ tplId: "recibo" }, undefined, undefined)).toBe(false);
+    expect(suDueno({ tplId: "recibo" }, null, null)).toBe(false);
+    expect(suDueno({ tplId: "recibo", ownerUid: "" }, "")).toBe(false);
+    expect(leTocaAlDueno({ tplId: "recibo" }, undefined, undefined, "editar")).toBe(true);
+  });
+
+  it("la lista de acciones no se ensancha sola", () => {
+    expect([...TOCAN_EL_CONTENIDO].sort()).toEqual(["editar", "retirar", "subir"]);
+  });
+});
+
+// Y que la puerta este puesta de verdad en index.js, no solo escrita
+// en lib: la regla mas bonita no sirve si nadie la llama.
+describe("la puerta esta puesta", () => {
+  it("exigir() llama a leTocaAlDueno", () => {
+    const cuerpo = readFileSync(new URL("../functions/index.js", import.meta.url), "utf8");
+    const dentro = cuerpo.slice(cuerpo.indexOf("function exigir("));
+    expect(dentro.slice(0, dentro.indexOf("\n}")))
+      .toMatch(/leTocaAlDueno\(op, uid, email, accion\)/);
   });
 });

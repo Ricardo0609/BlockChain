@@ -64,7 +64,7 @@ export const estaProtegido = (doc) => Boolean(doc?.protegido || doc?.password);
 /** Campos del documento que el cliente puede cambiar. Todo lo demás lo fija el servidor. */
 export const CAMPOS_EDITABLES = [
   "title", "content", "fields", "folder", "password", "tplId",
-  "kind", "requisitos", "fases", "solicitudes", "imagenes", "sharedWith", "roles",
+  "kind", "requisitos", "fases", "fasesEnOrden", "solicitudes", "imagenes", "sharedWith", "roles",
   "secciones",
   "destino",
   "fechaLimite", "montoTotal", "moneda", "partes", "resumen", "analisis",

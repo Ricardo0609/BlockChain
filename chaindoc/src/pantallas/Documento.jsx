@@ -12,6 +12,8 @@ import { renderBarraEstilos } from "../ui/BarraEstilos";
 import { renderCuerpo } from "../ui/Cuerpo";
 import { estaVacio, normalizar, ID_PAPEL } from "../nucleo/texto";
 import { esBorradorContrato } from "../nucleo/catalogos";
+import { esComprobante, faltanDatos, sePuedeFirmar, puedeSalir, soloSuDueno,
+         porQueNoSale } from "../nucleo/comprobantes";
 import { renderExpediente } from "./Expediente";
 import { botonCampana, renderCampana } from "./Campana";
 import { renderMenu } from "./MenuLateral";
@@ -25,7 +27,7 @@ import { SECCIONES, motivoOcupada } from "../nucleo/secciones";
 import { ESTILOS } from "../ui/estilos";
 export function renderDocumento(ctx){
   const {
-    MAX_IMGS, abrirProtegido, addImage, bioBusy, bioCreds, bioOk, convOculto, d, doVerify,
+    MAX_IMGS, abrirProtegido, acctEmail, addImage, bioBusy, bioCreds, bioOk, convOculto, d, doVerify,
     docs, editMode, exportarPaquete, fields, getFile, goHome, histOpen, histTab, ocupado,
     iniciarConversion, lockInput, menuOpen, modal, notif, openDoc, openExpedientes,
     ocultarConvertir, puedeConvertir, removeImage, save, saving, setDirty, setEdit, setFields,
@@ -65,6 +67,18 @@ export function renderDocumento(ctx){
   // sección de firmas se queda como siempre.
   const stExp = d.kind === "expediente" ? expedienteStatus(d) : null;
   const tocaFirmar = !stExp || stExp.entregadoTodo;
+
+  // ← NUEVO (3 nov): las reglas de un recibo o una factura.
+  // Ver `nucleo/comprobantes.js`; aquí sólo se usan.
+  const esRecibo   = esComprobante(d);
+  // Sólo su dueño lo cambia: la firma de abajo dice «yo recibí esto»,
+  // y no puede amparar algo que escribió otro.
+  const loEdito    = soloSuDueno(d, uid, acctEmail);
+  const faltan     = faltanDatos(d);
+  const puedoFirmar = sePuedeFirmar(d);
+  // Llenar → firmar → compartir. Hasta el último paso no sale de aquí.
+  const puedeIrse  = puedeSalir(d);
+  const porQue     = porQueNoSale(d);
 
   // ← NUEVO (21 oct): quién más ve este documento, para las pestañas.
   // ← ACTUALIZADO (28 oct): cuenta personas Y enlaces vivos. Un
@@ -187,8 +201,13 @@ export function renderDocumento(ctx){
         {editMode && <button className="btn btn-primary" onClick={save} disabled={saving}>{saving?"Guardando…":"Guardar"}</button>}
         {/* ← NUEVO: vincula este documento a un expediente como comprobante.
             No aparece en los expedientes: uno no se adjunta a sí mismo. */}
-        {d.kind!=="expediente" && puede("vincular") && (
-          <button className="btn btn-secondary"
+        {/* ← ACTUALIZADO (3 nov): mientras editas no se ofrece nada
+            más que guardar (ver abajo), y un comprobante sin firmar no
+            sale de aquí. El botón se queda a la vista pero apagado,
+            con el motivo: esconderlo dejaría a quien lo busca sin
+            saber qué le falta. */}
+        {d.kind!=="expediente" && !editMode && puede("vincular") && (
+          <button className="btn btn-secondary" disabled={!puedeIrse} title={porQue || undefined}
             onClick={()=>{setLinkExp(null);setLinkErr("");setModal({t:"linkTo"});openExpedientes();}}>
             Adjuntar a
           </button>
@@ -197,11 +216,15 @@ export function renderDocumento(ctx){
             completo», que es lo que se espera de un botón que dice
             Compartir. Entrar desde un requisito arranca en «sólo
             entregar», con ese requisito ya marcado. */}
-        <button className="btn btn-secondary"
-          onClick={()=>{ setMIn(""); setEnlaceNuevo(null);
-                         setShareModo("completo"); setShareTodo(true); setShareReqs([]);
-                         setModal({t:"share"}); }}>Compartir</button>
-        <button className="btn btn-secondary" onClick={()=>setHist(true)}>Ver historial</button>
+        {!editMode && (
+          <button className="btn btn-secondary" disabled={!puedeIrse} title={porQue || undefined}
+            onClick={()=>{ setMIn(""); setEnlaceNuevo(null);
+                           setShareModo("completo"); setShareTodo(true); setShareReqs([]);
+                           setModal({t:"share"}); }}>Compartir</button>
+        )}
+        {!editMode && (
+          <button className="btn btn-secondary" onClick={()=>setHist(true)}>Ver historial</button>
+        )}
         {botonCampana(ctx)}
         <button className="hamburger" onClick={()=>setMenu(true)}><span/><span/><span/></button>
         </>)}
@@ -397,15 +420,21 @@ export function renderDocumento(ctx){
                     </div>
                     <div className="gal-acts">
                       <button className="btn btn-tertiary" onClick={()=>getFile(img,true)}>Descargar</button>
-                      <button className="smart-x" title="Retirar"
-                        onClick={()=>removeImage(img.path)}>×</button>
+                      {loEdito && (
+                        <button className="smart-x" title="Retirar"
+                          onClick={()=>removeImage(img.path)}>×</button>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {imgs.length<MAX_IMGS && (
+            {/* ← ACTUALIZADO (3 nov): en un recibo o una factura, sólo su
+                dueño adjunta o retira imágenes. Es la misma razón que
+                para editarlo: lo que respalda el papel forma parte de
+                lo que su firmante dijo haber recibido. */}
+            {imgs.length<MAX_IMGS && loEdito && (
               <label className="exp-up">
                 <span>{saving ? "Procesando…" : "Adjuntar imagen"}</span>
                 <input type="file" accept="image/*" style={{display:"none"}} disabled={saving}
@@ -443,8 +472,28 @@ export function renderDocumento(ctx){
           </div>
         </div>
       )}
+      {/* ← NUEVO (3 nov): un comprobante a medio llenar no se firma.
+          Y en vez de un botón apagado sin explicación, se dice qué
+          falta: lo que hace falta aquí no es avisar, es que la persona
+          sepa dónde ir. */}
+      {esRecibo && !iSigned && puede("firmar") && faltan.length > 0 && (
+        <div className="falta-datos">
+          <Icon n="edit" size={19}/>
+          <div>
+            <strong>Para poder firmarlo, llena {faltan.length === 1 ? "este dato" : "estos datos"}</strong>
+            <div className="falta-datos-s">
+              {faltan.map(f => f.etiqueta + (f.motivo === "invalido" ? " (no es un RFC válido)" : "")).join(" · ")}
+            </div>
+          </div>
+        </div>
+      )}
       <div className="sign-bar">
-        {!iSigned && puede("firmar") && (
+        {/* ← ACTUALIZADO (3 nov): mientras editas no se ofrece firmar.
+            No es sólo por el orden de los botones: la firma sella lo
+            último que se guardó, así que firmar con cambios en
+            pantalla sellaría una versión distinta de la que se está
+            leyendo. Primero Guardar, y entonces firmar. */}
+        {!editMode && !iSigned && puede("firmar") && puedoFirmar && (
           <div className="sign-group">
             <button className="btn btn-primary" onClick={()=>{setPass("");setModal({t:"sign"});}}>Firmar documento</button>
             <button className="fp-btn" onClick={()=>{setPass("");setModal({t:"sign"});}}><IcoFinger/></button>

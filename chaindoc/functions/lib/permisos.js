@@ -24,7 +24,7 @@ export const ACCIONES = new Set([
  */
 export const CAMPOS_EDITABLES = new Set([
   "title", "content", "fields", "folder", "tplId",
-  "kind", "requisitos", "fases", "solicitudes", "imagenes",
+  "kind", "requisitos", "fases", "fasesEnOrden", "solicitudes", "imagenes",
   "secciones",
   "destino",
   "fechaLimite", "montoTotal", "moneda", "partes", "resumen", "analisis",
@@ -219,6 +219,40 @@ export const LIMITES = {
 };
 
 export const esDueno = (op, uid) => op?.ownerUid === uid;
+
+// ── UN RECIBO O UNA FACTURA SÓLO LOS CAMBIA SU DUEÑO ────────────
+//
+// El rol no alcanza aquí. Un recibo dice «yo recibí esto»: si quien lo
+// tiene compartido —o cualquiera que entre al contrato donde está
+// adjunto, que desde el acceso derivado es cualquiera de los dos
+// lados— pudiera cambiarle el monto o el concepto, la firma de abajo
+// ampararía algo que su firmante no escribió. No es un permiso de
+// más: es que el papel dejaría de decir lo que dice.
+
+/** Un documento llenado con plantilla de recibo o de factura. */
+export const esComprobante = (op) =>
+  op?.tplId === "recibo" || op?.tplId === "factura";
+
+/** Lo que cambia lo que el papel dice. Ver, firmar, exportar y
+ *  adjuntar quedan fuera: es a lo que viene la otra parte. */
+export const TOCAN_EL_CONTENIDO = new Set(["editar", "subir", "retirar"]);
+
+/**
+ * Su dueño: por uid y, si el documento es de los primeros y no lo
+ * trae, por correo. Dos huecos no son la misma persona, así que
+ * `undefined === undefined` no cuenta como dueño.
+ */
+export function suDueno(op, uid, email){
+  if(uid && op?.ownerUid) return op.ownerUid === uid;
+  if(email && op?.ownerEmail){
+    return String(op.ownerEmail).toLowerCase() === String(email).toLowerCase();
+  }
+  return false;
+}
+
+/** Si esta acción hay que negarla por no ser quien lo creó. */
+export const leTocaAlDueno = (op, uid, email, accion) =>
+  esComprobante(op) && TOCAN_EL_CONTENIDO.has(accion) && !suDueno(op, uid, email);
 
 export const tieneAcceso = (op, uid, email) =>
   esDueno(op, uid) || (op?.sharedWith || []).includes((email || "").toLowerCase());

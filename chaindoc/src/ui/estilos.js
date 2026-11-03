@@ -444,6 +444,13 @@ span.dup-lugar.aqui{cursor:default}
 .fase-cont.vencida{color:#c2410c}
 .fase.actual .fase-cont.pendiente{color:var(--negro)}
 .fase-aviso{font-size:11px;color:#a16207;margin-top:2px}
+/* ← NUEVO (3 nov): en orden o sueltas. Gris y no de color: es un
+   dato de lo pactado, no una alarma ni un logro. */
+.fases-orden{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  margin-bottom:12px;font-size:13px;color:var(--gris-400)}
+.fases-orden-t{flex:1;min-width:200px;line-height:1.45}
+.fases-orden-fijo{font-size:12px;color:var(--gris-300);font-style:italic}
+
 .fases-filtro{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
   margin-top:10px;font-size:13px;color:#4f46e5;background:rgba(99,102,241,.07);
   border-radius:9px;padding:6px 6px 6px 11px}
@@ -689,6 +696,14 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .vin-alerta.suave{border-color:var(--bordes);background:var(--bg-soft);color:var(--gris-400)}
 .vin-alerta.suave strong{color:var(--negro)}
 .vin-alerta-s{color:var(--gris-400);font-weight:400;margin-top:3px}
+/* ← NUEVO (3 nov): lo que le falta a un comprobante para firmarse.
+   Ambar y no rojo: no hay nada roto, hay trabajo a medias. */
+.falta-datos{display:flex;gap:11px;align-items:flex-start;margin:0 0 16px;
+  padding:13px 15px;border-radius:12px;background:rgba(202,138,4,.1);color:#a16207;
+  font-size:14px;line-height:1.45}
+.falta-datos strong{display:block;color:var(--negro);font-size:14.5px}
+.falta-datos-s{color:var(--gris-400);margin-top:3px}
+
 .vin-nota{display:flex;align-items:center;gap:9px;background:rgba(14,116,144,.08);
   color:#0e7490;border-radius:10px;padding:10px 13px;margin-bottom:16px;
   font-size:13px;line-height:1.45}
@@ -1166,6 +1181,23 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .exp-up{display:inline-block;margin-top:10px;border:1px dashed var(--bordes);border-radius:9px;
   padding:9px 14px;font-size:14px;color:var(--gris-400);cursor:pointer;transition:border-color .15s,color .15s}
 .exp-up:hover{border-color:var(--negro);color:var(--negro)}
+/* ← NUEVO (3 nov): mientras sube, y cuando su fase todavia no toca. */
+.exp-up.off,.exp-up:disabled{opacity:.45;cursor:not-allowed}
+.exp-up.off:hover,.exp-up:disabled:hover{border-color:var(--bordes);color:var(--gris-400)}
+.exp-up:has(.exp-spin){display:inline-flex;align-items:center;gap:9px;
+  border-style:solid;border-color:var(--negro);color:var(--negro);cursor:progress}
+.exp-spin{width:14px;height:14px;flex:none;border-radius:50%;
+  border:2px solid var(--bordes);border-top-color:var(--negro);
+  animation:exp-gira .7s linear infinite}
+@keyframes exp-gira{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.exp-spin{animation-duration:2.4s}}
+
+/* ← NUEVO (3 nov): por que este comprobante todavia no se puede
+   entregar. Ambar como lo que falta por hacer, no rojo: no hay nada
+   roto, es que todavia no toca. */
+.exp-espera{display:flex;align-items:flex-start;gap:9px;margin-top:12px;
+  background:rgba(202,138,4,.1);color:#a16207;border-radius:10px;
+  padding:10px 13px;font-size:13px;line-height:1.45}
 .exp-file{margin-top:10px;border:1px solid var(--bordes);border-radius:10px;padding:12px;background:rgba(20,130,90,.04)}
 .exp-file-n{font-weight:600;font-size:15px;color:var(--negro);overflow-wrap:anywhere}
 .exp-file-m{font-size:12px;color:var(--gris-300);margin-top:2px}
@@ -1217,8 +1249,11 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 
 /* ← NUEVO: plantilla visual (formulario) */
 .fd{text-align:left;font-family:var(--f-p)}
-.fd-head{display:flex;align-items:center;gap:24px;flex-wrap:wrap;margin-bottom:22px}
-.fd-heading{font-family:var(--f-t);font-weight:600;font-size:26px;color:var(--gris-400,#6b7280);margin:0;flex:1;min-width:180px}
+/* ← ACTUALIZADO (3 nov): sin el encabezado de la plantilla, que era
+   quien empujaba la fecha y el folio a la derecha con su flex:1.
+   Ahora los empuja el propio contenedor. */
+.fd-head{display:flex;align-items:center;justify-content:flex-end;gap:24px;
+  flex-wrap:wrap;margin-bottom:22px}
 .fd-head .fd-field{flex:0 0 auto;margin:0}
 .fd-head .fd-input{width:130px}
 .fd-body{border:1px solid var(--bordes);border-radius:14px;padding:24px 22px;display:flex;flex-direction:column;gap:18px;background:#fff}
@@ -1253,7 +1288,7 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   .fd-input{width:100%}
   .fd-head{gap:14px}
   .fd-head .fd-input{width:100%}
-  .fd-heading{font-size:21px;flex-basis:100%}
+  .fd-head{justify-content:flex-start}
 }
 .menu-mail{font-size:13px;color:var(--gris-300);text-align:center;margin-top:2px;margin-bottom:8px;word-break:break-all}
 .btn:disabled{opacity:.55;cursor:not-allowed}

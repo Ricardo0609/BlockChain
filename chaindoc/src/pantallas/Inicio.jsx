@@ -376,6 +376,17 @@ export function renderInicio(ctx){
               </div>
             </div>)}
 
+        {/* ← ACTUALIZADO (3 nov): crear va antes de lo que te
+            compartieron. Lo que uno viene a hacer a su propia pantalla
+            de inicio es crear; los documentos de otros son para
+            consultarlos. En las demás vistas sigue al pie, que es
+            donde se espera después de una lista larga. */}
+        <div className="create-zone">
+          <button className="btn btn-secondary create-btn" onClick={openCreate}>
+            <span>Crear documento</span><b>+</b>
+          </button>
+        </div>
+
         <div className="sec-h" onClick={()=>setOpenSec({...openSec,comp:!openSec.comp})}>
           <span className={`sec-arrow ${openSec.comp?"":"closed"}`}><Icon n="expand_more" size={28}/></span>
           <span className="sec-t">Compartidos conmigo</span>
@@ -421,11 +432,13 @@ export function renderInicio(ctx){
                        : <div className="empty">Aún no te han compartido documentos.</div>}
       </>)}
 
-      <div className="create-zone">
-        <button className="btn btn-secondary create-btn" onClick={openCreate}>
-          <span>Crear documento</span><b>+</b>
-        </button>
-      </div>
+      {view!=="inicio" && (
+        <div className="create-zone">
+          <button className="btn btn-secondary create-btn" onClick={openCreate}>
+            <span>Crear documento</span><b>+</b>
+          </button>
+        </div>
+      )}
     </div>
 
     {menuOpen && renderMenu(ctx)}

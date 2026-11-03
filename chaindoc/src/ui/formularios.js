@@ -23,7 +23,11 @@ export const FORMS = {
   },
 
   recibo: {
-    heading: "Recibo de nómina",
+    // ← ACTUALIZADO (3 nov): decía «Recibo de nómina». Ya no se
+    // pinta en pantalla, pero sigue encabezando el texto que se
+    // hashea, y ahí llamar nómina a la compra de cemento era
+    // meterle al registro un dato que nadie escribió.
+    heading: "Recibo",
     header: [
       { k:"fecha", label:"Fecha", type:"date" },
       { k:"folio", label:"No",    type:"text", placeholder:"000" },

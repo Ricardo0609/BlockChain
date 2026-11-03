@@ -142,6 +142,7 @@ export default function ChainDoc(){
   const [vinculos,setVinculos]     = useState({});    // ← NUEVO: aid → estado del vínculo
   const [focoDup,setFocoDup]       = useState(null);  // ← NUEVO: duplicado al que se llegó desde un aviso
   const [faseSel,setFaseSel]       = useState(null);  // ← NUEVO: fase elegida para filtrar requisitos
+  const [subiendoReq,setSubiendoReq] = useState(null); // ← NUEVO: en qué requisito se está subiendo un archivo
   const [verifVin,setVerifVin]     = useState(false); // ← NUEVO: verificación en curso
   const [verificandoFiscal,setVerificandoFiscal] = useState(null); // ← NUEVO (Etapa 4)
   const [revisando69B,setRevisando69B]           = useState(false);
@@ -1176,6 +1177,11 @@ export default function ChainDoc(){
   const attachEvidence = async(reqId, file)=>{
     if(!file || !d) return;
     setSaving(true);
+    // ← NUEVO (3 nov): CUÁL se está subiendo, no sólo que algo se sube.
+    // `saving` apaga los botones de todos los requisitos a la vez, así
+    // que sin esto el aviso saldría en los seis y no se sabría dónde
+    // fue a parar el archivo.
+    setSubiendoReq(reqId);
     let ruta = null;
     try{
       // La miniatura se hace aquí (para que la galería cargue rápido);
@@ -1196,7 +1202,7 @@ export default function ChainDoc(){
       if(ruta) await descartarSubida(ruta);   // no dejar basura en el almacén
       notify(errArchivo(e),"err");
     }
-    finally{ setSaving(false); }
+    finally{ setSaving(false); setSubiendoReq(null); }
   };
 
   // ── EVIDENCIA POR ENLACE ──
@@ -1457,6 +1463,29 @@ export default function ChainDoc(){
     });
     const up = await guardarCampos(d, { requisitos });
     if(up) setD(up);
+  };
+
+  // ← NUEVO (3 nov): cambiar si las fases van en orden o son sueltas.
+  //
+  // El orden lo saca la IA del contrato, y si se equivoca la otra
+  // parte se queda sin poder entregar. Esto es la salida. No es un
+  // ajuste de pantalla: cambia qué se puede entregar y cuándo, así que
+  // queda asentado quién lo cambió y a qué, como todo lo demás.
+  const setFasesEnOrden = async(enOrden)=>{
+    if(!d) return;
+    setSaving(true);
+    try{
+      const up = await aplicar(d, {
+        accion:"EDICIÓN",
+        contenido: enOrden
+          ? "Las fases pasan a entregarse en orden: cada una espera a la anterior."
+          : "Las fases pasan a ser independientes: se pueden entregar en cualquier orden.",
+        meta:{ tipo:"fases-orden", enOrden },
+      }, { fasesEnOrden: enOrden });
+      if(up){ setD(up); notify(enOrden ? "Las fases van en orden ✓" : "Las fases son independientes ✓"); }
+      else notify("No se pudo cambiar el orden de las fases.","err");
+    }catch(e){ console.error(e); notify("No se pudo cambiar el orden de las fases.","err"); }
+    finally{ setSaving(false); }
   };
 
   // ← NUEVO: retirar una solicitud que ya no aplica
@@ -2152,6 +2181,7 @@ export default function ChainDoc(){
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
     doLogout, doReset, doShare, doSignCode, doSignup, doVerify, docs, dragOver, drop,
     dropFase, dropReq, editMode, email, enrollBio, exportarPaquete, exps, faseSel,
+    subiendoReq, setFasesEnOrden,
     fields, filesOpen, filterF, finishAuth, focoDup, folders, getFile, goHome,
     handleFile, histOpen, histTab, imp, impErr, impMeta, impText, iniciarConversion,
     irADuplicado, linkBusy, linkErr, linkExp, linkSitios, linkToExpediente, lockInput,

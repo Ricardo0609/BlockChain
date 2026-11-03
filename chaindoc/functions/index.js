@@ -32,7 +32,7 @@ import {
 import {
   limpiarCambios, validarEvento, revisarCambioDeAcceso,
   rolDe, puede, permisoDeEvento, puedeSubirA, sanearRoles, PERMISOS_QUE_CAMBIAN,
-  ROLES, ROL_TEXTO, esDueno, debeRegistrarConsulta, LIMITES,
+  ROLES, ROL_TEXTO, esDueno, debeRegistrarConsulta, LIMITES, leTocaAlDueno,
 } from "./lib/permisos.js";
 import { decidirBorrado } from "./lib/borrado.js";
 import {
@@ -116,6 +116,12 @@ function exigir(op, uid, email, accion){
   if(bloquea(op, accion)){
     throw new HttpsError("failed-precondition",
       motivoBloqueo(estadoAcuerdo(op).estado, accion));
+  }
+  // ← NUEVO (3 nov): un recibo o una factura sólo los cambia su dueño.
+  // La regla y el porqué están en lib/permisos.js, con sus pruebas.
+  if(leTocaAlDueno(op, uid, email, accion)){
+    throw new HttpsError("permission-denied",
+      "Un recibo o una factura sólo los puede cambiar quien los creó.");
   }
   return rol;
 }

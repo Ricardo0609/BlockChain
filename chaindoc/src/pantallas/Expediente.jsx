@@ -6,6 +6,8 @@ import { Timeline } from "../ui/Timeline";
 import { renderAccesos, cuantosAcceden } from "./Accesos";
 import { renderCuerpo } from "../ui/Cuerpo";
 import { estaVacio } from "../nucleo/texto";
+import { vanEnOrden, faseQueFalta, porQueEsperar, porQueEsperarLargo } from "../nucleo/fases";
+import { permiteEstado } from "../nucleo/acuerdo";
 import {
   aidDe,
   archivosDe,
@@ -34,6 +36,7 @@ import { esEnlace } from "../nucleo/enlaces";
 export function renderExpediente(ctx){
   const {
     attachEvidence, bioCreds, bioOk, cancelarSolicitud, d, docs, faseSel, filesOpen,
+    subiendoReq, setFasesEnOrden,
     focoDup, getFile, irADuplicado, openDoc, removeEvidence, saving, setFaseSel,
     setFilesOpen, setFocoDup, setMIn, setModal, setMontoReq, setPass,
     uid, verifVin, vinculos,
@@ -68,6 +71,12 @@ export function renderExpediente(ctx){
   const dupPorClave = Object.fromEntries(dups.map(g=>[g.clave, g]));
   const focoGrupo = focoDup ? dupPorClave[focoDup] : null;
   const fases = estadoFases(d);          // ← NUEVO
+  // ← NUEVO (3 nov): el orden de las fases. Si el contrato las tiene
+  // en orden, no se entrega en una hasta cerrar la anterior.
+  const enOrden   = vanEnOrden(d);
+  const esperaDe  = (r)=> faseQueFalta(d, fases, r?.fase || null);
+  const porEsperar= (r)=> porQueEsperar(d, fases, r?.fase || null);
+  const porEsperarL=(r)=> porQueEsperarLargo(d, fases, r?.fase || null);
   const fActual = faseActual(d);         // ← NUEVO
   const faseSelOk = faseSel && fases.some(f=>f.id===faseSel) ? faseSel : null;
   // ← NUEVO (14 oct): el expediente en pestañas.
@@ -246,6 +255,33 @@ export function renderExpediente(ctx){
           <span className="fases-t">Fases del contrato</span>
           <span className="adj-n">{fases.filter(f=>f.completa).length}/{fases.length}</span>
         </div>
+        {/* ← NUEVO (3 nov): en orden o sueltas, y quién lo decide.
+            El orden sale de leer el contrato, así que puede salir mal;
+            el dueño lo corrige aquí y queda asentado en la cadena.
+            Para los demás es una frase, no un interruptor: es parte de
+            lo pactado, no una preferencia de quien mira. */}
+        <div className="fases-orden">
+          <Icon n={enOrden ? "linear_scale" : "widgets"} size={17}/>
+          <span className="fases-orden-t">
+            {enOrden
+              ? "Se entregan en orden: cada fase espera a la anterior."
+              : "Son independientes: se entregan en cualquier orden."}
+          </span>
+          {/* El orden es un término del contrato, no un ajuste de
+              pantalla: se cambia mientras se puede cambiar el
+              contrato, y después queda fijo como todo lo demás. Si no
+              se dice aquí, el dueño pulsa y se come un error. */}
+          {puedo && puedo("editar") && setFasesEnOrden && (
+            permiteEstado(acu.estado, "editar")
+              ? <button className="btn btn-tertiary" disabled={saving}
+                  onClick={()=>setFasesEnOrden(!enOrden)}>
+                  {enOrden ? "Hacerlas independientes" : "Ponerlas en orden"}
+                </button>
+              : <span className="fases-orden-fijo">
+                  Ya no se puede cambiar: es parte de lo que se firmó.
+                </span>
+          )}
+        </div>
         <div className="fases-lista">
           {fases.map(f=>{
             const actual = fActual && fActual.id===f.id;
@@ -269,6 +305,9 @@ export function renderExpediente(ctx){
                       : `Faltan ${f.dias} día${f.dias===1?"":"s"}`}
                   </span>
                   {f.sinRequisitos && <span className="fase-aviso">Sin comprobantes asignados</span>}
+                  {/* ← NUEVO (3 nov): qué fases todavía no tocan. */}
+                  {faseQueFalta(d, fases, f.id) &&
+                    <span className="fase-aviso">Espera a la fase {faseQueFalta(d, fases, f.id).n}</span>}
                 </span>
               </button>
             );
@@ -614,14 +653,29 @@ export function renderExpediente(ctx){
             </div>
           ))}
 
+          {/* ← NUEVO (3 nov): la fase de este comprobante todavía no
+              toca. Se dice aquí, junto a los botones apagados, y se
+              dice CUÁL es la que falta: un botón gris sin motivo deja
+              a la otra parte pensando que algo se rompió. */}
+          {esperaDe(r) && (
+            <div className="exp-espera">
+              <Icon n="lock" size={17}/>
+              <span>{porEsperar(r)}</span>
+            </div>
+          )}
+
           <div className="exp-acts">
             {/* ← ACTUALIZADO (Etapa 3): adjuntar sólo donde se puede.
                 El aportador sube nada más a los requisitos que le
                 pidieron; el lector y el auditor no suben nada. */}
+            {/* ← ACTUALIZADO (3 nov): y sólo cuando su fase toca. */}
             {(!puedoSubirA || puedoSubirA(r.id)) && (
-              <label className="exp-up">
-                <span>{listo ? "Adjuntar otro archivo" : "Adjuntar archivo"}</span>
-                <input type="file" style={{display:"none"}} disabled={saving}
+              <label className={`exp-up ${esperaDe(r)||saving ? "off" : ""}`}
+                title={porEsperarL(r) || undefined}>
+                {subiendoReq===r.id
+                  ? (<><span className="exp-spin"/><span>Subiendo el archivo…</span></>)
+                  : <span>{listo ? "Adjuntar otro archivo" : "Adjuntar archivo"}</span>}
+                <input type="file" style={{display:"none"}} disabled={saving || Boolean(esperaDe(r))}
                   onChange={e=>{ attachEvidence(r.id, e.target.files?.[0]); e.target.value=""; }} />
               </label>
             )}
@@ -636,7 +690,8 @@ export function renderExpediente(ctx){
                 «entregable» suele ser LA forma de cumplirlo, no la
                 excepción. */}
             {(!puedoSubirA || puedoSubirA(r.id)) && enlReq!==r.id && (
-              <button className="exp-up como-btn" disabled={saving}
+              <button className="exp-up como-btn" disabled={saving || Boolean(esperaDe(r))}
+                title={porEsperarL(r) || undefined}
                 onClick={()=>abrirEnlace(r.id)}>
                 Entregar un enlace
               </button>

@@ -124,6 +124,10 @@ const SCHEMA = {
         required: ["titulo", "descripcion", "tipo", "obligatorio"],
       },
     },
+    // ← NUEVO (3 nov): si las fases van una detrás de otra o son
+    // compartimentos independientes. Decide si se puede entregar en la
+    // fase 3 con la 1 todavía vacía.
+    fasesEnOrden: { type: "boolean" },
     // ← NUEVO: etapas del contrato (avances, revisiones, entregas parciales)
     fases: {
       type: "array",
@@ -157,6 +161,7 @@ Reglas:
 - Si una fase se define de forma relativa ("a la mitad del plazo", "a los 5 días del inicio"), calcula su fecha a partir de las fechas del contrato.
 - Asigna cada requisito a la fase en la que debe entregarse, escribiendo en "fase" el título EXACTO de esa fase. Si no corresponde a ninguna, déjalo nulo.
 - Toda fase debe poder comprobarse: si una fase no tiene ningún requisito, crea uno de tipo "entregable" que la demuestre (por ejemplo, un reporte de avance con fotografías).
+- FASES EN ORDEN: devuelve "fasesEnOrden" como false SÓLO si el contrato dice expresamente que las etapas son independientes, simultáneas o que pueden entregarse en cualquier orden. En cualquier otro caso devuélvelo como true, incluido cuando el contrato no diga nada: unas etapas numeradas o con fechas escalonadas son secuenciales aunque no use la palabra "orden".
 - El resumen es una frase de máximo 25 palabras.
 - Escribe todo en español.
 
@@ -280,6 +285,10 @@ function normalize(raw) {
   const porTitulo = new Map(fases.map((f) => [llaveTexto(f.titulo), f.id]));
   return {
     fases,
+    // Secuenciales salvo que el contrato diga lo contrario: para que no
+    // lo sean hay que decirlo, y así un contrato sin el campo no cambia
+    // de significado.
+    fasesEnOrden: raw.fasesEnOrden !== false,
     titulo:      String(raw.titulo || "").trim() || "Contrato inteligente",
     resumen:     String(raw.resumen || "").trim(),
     fechaLimite: isDate(raw.fechaLimite) ? raw.fechaLimite : null,
