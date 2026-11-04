@@ -5,7 +5,7 @@ import { Icon } from "../ui/iconos";
 import { METHODS, TEMPLATES } from "../nucleo/catalogos";
 import { MIN_CONTRATO, aiConfigured, listModels } from "../smartContract";
 import { fmtFecha } from "../nucleo/formato";
-import { renderSelectorCarpeta } from "../ui/SelectorCarpeta";
+import { renderCampoCarpeta } from "../ui/SelectorCarpeta";
 
 export function modalCrear(ctx){
   const {
@@ -111,8 +111,7 @@ export function modalCrear(ctx){
         <input className="inp" placeholder="Nombre del contrato" value={mIn} autoFocus
           onChange={e=>setMIn(e.target.value)}
           onKeyDown={e=>{ if(e.key==="Enter" && !creando && mIn.trim()) crearBorrador(); }} />
-        <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Guardar en carpeta (opcional):</p>
-        {renderSelectorCarpeta(ctx)}
+        {renderCampoCarpeta(ctx)}
       </>)}
 
       {isSmart && method && impText && (<>
@@ -224,8 +223,7 @@ export function modalCrear(ctx){
 
           <input className="inp" style={{marginTop:18}} placeholder="Nombre del expediente"
             value={mIn} onChange={e=>setMIn(e.target.value)} />
-          <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Guardar en carpeta (opcional):</p>
-          {renderSelectorCarpeta(ctx)}
+          {renderCampoCarpeta(ctx)}
         </>)}
       </>)}
 
@@ -322,8 +320,7 @@ export function modalCrear(ctx){
       {method && !isSmart && (<>
         <input className="inp" style={{marginTop:20}} placeholder="Nombre del documento"
           value={mIn} onChange={e=>setMIn(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter" && !creando) createDoc(); }} />
-        <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Guardar en carpeta (opcional):</p>
-        {renderSelectorCarpeta(ctx)}
+        {renderCampoCarpeta(ctx)}
       </>)}
 
       <div className="modal-row">

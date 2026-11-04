@@ -1,6 +1,7 @@
 // Pruebas de las reglas del contrato inteligente, con el contrato de
 // prueba de la remodelación (Café La Tortuga Lenta, $48,000).
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   calcularMontos, expedienteStatus, estadoFases, faseActual, faseCritica,
   duplicados, claveDup, destinoDuplicado, dondeEstaAdjunto, estadoVinculo,
@@ -507,5 +508,52 @@ describe("la firma como ultimo paso", () => {
     expect([st.cumplidos, st.total, st.porcentaje]).toEqual([4, 4, 100]);
     expect(st.completo).toBe(true);
     expect(st.firmaPendiente).toBe(false);
+  });
+});
+
+// ── EL HISTORIAL LATERAL Y LA PESTANA DE FIRMAS (4 nov) ─────────
+//
+// El panel «Ver historial» nacio cuando era la unica forma de ver la
+// cadena. El expediente ya trae pestanas que dicen lo mismo mejor, asi
+// que en contratos inteligentes el boton se fue; en recibos, facturas
+// y documentos de texto sigue, porque ahi es el unico sitio.
+//
+// Y una pestana de Firmas que SOLO existe con el contrato cerrado:
+// ensenarla antes mostraria media firma —la aceptacion sin la
+// conformidad— y leer eso como «firmado» es justo el malentendido que
+// este producto existe para evitar.
+describe("el historial lateral y las firmas", () => {
+  const leer = (f) => readFileSync(new URL(`../src/pantallas/${f}`, import.meta.url), "utf8");
+
+  it("el boton de Ver historial se esconde en los contratos", () => {
+    // El patron entero, no «lo que hay cerca»: un comentario que
+    // mencione el boton no puede hacer pasar la prueba.
+    expect(leer("Documento.jsx")).toMatch(
+      /\{!editMode && d\.kind!=="expediente" && \(\s*<button[^>]*onClick=\{\(\)=>setHist\(true\)\}>Ver historial<\/button>/);
+  });
+
+  it("y el panel tampoco se abre por la puerta de atras", () => {
+    // Si quedo abierto en un recibo y se navega a un contrato.
+    expect(leer("Documento.jsx")).toMatch(/histOpen && d\.kind!=="expediente"/);
+  });
+
+  it("en recibos y documentos de texto sigue estando", () => {
+    // La condicion es por tipo, no por un interruptor que apague el
+    // panel entero: si alguien lo borrara, esto lo dice.
+    const doc = leer("Documento.jsx");
+    expect(doc).toMatch(/onClick=\{\(\)=>setHist\(true\)\}/);
+    expect(doc).toMatch(/histTab==="Firmas"/);
+  });
+
+  it("la pestana de Firmas pide las dos conformidades", () => {
+    const exp = leer("Expediente.jsx");
+    expect(exp).toMatch(/firmaronLasDos\(d, "conformidad"\)/);
+    expect(exp).toMatch(/cerrado \? \[\{ id:"firmas"/);
+  });
+
+  it("y separa aceptacion de conformidad, que no son lo mismo", () => {
+    const exp = leer("Expediente.jsx");
+    expect(exp).toMatch(/Aceptación del contrato/);
+    expect(exp).toMatch(/Conformidad final/);
   });
 });

@@ -7,7 +7,7 @@ import { renderAccesos, cuantosAcceden } from "./Accesos";
 import { renderCuerpo } from "../ui/Cuerpo";
 import { estaVacio } from "../nucleo/texto";
 import { vanEnOrden, faseQueFalta, porQueEsperar, porQueEsperarLargo } from "../nucleo/fases";
-import { permiteEstado } from "../nucleo/acuerdo";
+import { permiteEstado, firmasDe, firmaronLasDos, FUERZA_TEXTO, PARTES } from "../nucleo/acuerdo";
 import {
   aidDe,
   archivosDe,
@@ -100,12 +100,26 @@ export function renderExpediente(ctx){
   // lo que antes obligaba a abrir el modal de compartir y reescribir
   // el correo de alguien que ya estaba en la lista.
   const nAcceso = cuantosAcceden(accesos, d.chain);
+  // ← NUEVO (4 nov): las firmas del acuerdo, no los bloques FIRMA de
+  // la cadena. Dicen más: qué parte es cada quien, en qué momento
+  // firmó y con qué fuerza. La cadena entera sigue en Línea de tiempo.
+  const firmas  = firmasDe(d);
+  const cerrado = firmaronLasDos(d, "conformidad");
   const PESTANAS = [
     { id:"expediente", txt:"Expediente" },
     { id:"tiempo",     txt:"Línea de tiempo" },
     { id:"archivos",   txt:"Archivos", n:nArchivos, candado:!filesOpen && nArchivos>0 },
     { id:"contrato",   txt:"Contrato" },
     ...(nAcceso ? [{ id:"accesos", txt:"Con acceso", n:nAcceso }] : []),
+    // ← NUEVO (4 nov): sólo cuando el contrato ya está firmado de
+    // terminado por las dos partes. Antes de eso la pestaña enseñaría
+    // media firma —la aceptación sin la conformidad— y leerla como
+    // «firmado» es justo el malentendido que este producto existe
+    // para evitar. Mientras tanto, la banda de arriba ya dice en qué
+    // punto va y quién falta.
+    // Sin contador: cuando la pestaña existe son siempre cuatro, y un
+    // número que nunca cambia no informa de nada.
+    ...(cerrado ? [{ id:"firmas", txt:"Firmas" }] : []),
   ];
   const tab = PESTANAS.some(x=>x.id===expTab) ? expTab : "expediente";
 
@@ -778,6 +792,62 @@ export function renderExpediente(ctx){
     {/* El mismo panel que el documento de texto, no una copia: es la
         misma pregunta y tiene que comportarse igual en los dos. */}
     {tab==="accesos" && renderAccesos(ctx, { panelId:"panel-accesos", tabId:"tab-accesos" })}
+
+    {/* ← NUEVO (4 nov): las cuatro firmas de un contrato terminado.
+        Separadas por momento y no en una lista corrida: aceptar y dar
+        por cumplido son dos cosas distintas, y mezclarlas deja la
+        pregunta de siempre —«¿esto está firmado?»— sin responder. */}
+    {tab==="firmas" && (
+    <div role="tabpanel" id="panel-firmas" aria-labelledby="tab-firmas">
+      <div className="fir-cab">
+        <Icon n="task_alt" size={20}/>
+        <div>
+          <strong>Contrato firmado y cumplido</strong>
+          <div className="fir-cab-s">
+            Las dos partes lo aceptaron al principio y dieron su
+            conformidad al final. Cada firma de abajo quedó asentada en
+            la cadena; la puedes seguir en Línea de tiempo.
+          </div>
+        </div>
+      </div>
+
+      {[["aceptacion", "Aceptación del contrato",
+         "Al firmar aquí, cada parte dijo que aceptaba lo pactado. Desde ese momento el texto ya no se pudo cambiar."],
+        ["conformidad", "Conformidad final",
+         "Al firmar aquí, cada parte dio por cumplido lo pactado con los comprobantes que están en el expediente."],
+       ].map(([momento, titulo, nota])=>(
+        <div key={momento} className="fir-grupo">
+          <div className="fir-g-t">{titulo}</div>
+          <div className="fir-g-n">{nota}</div>
+          {PARTES.map(parte=>{
+            // El nombre sale de la firma misma. Cruzarlo con `partes`
+            // obligaría a adivinar qué palabra usó la IA para cada rol
+            // —«contratante», «cliente», «la empresa»— y acertar a
+            // medias aquí sería peor que no intentarlo.
+            const f = firmas.find(x=>x.parte===parte && x.momento===momento);
+            return (
+              <div key={parte} className={`fir-row ${f?"ok":"falta"}`}>
+                <div className="avatar sm">
+                  {(f?.nombre || f?.email || "?").slice(0,2).toUpperCase()}
+                </div>
+                <div className="fir-b">
+                  <div className="fir-n">{f?.nombre || f?.email || "Sin firmar"}</div>
+                  <div className="fir-m">
+                    {parte==="emisor" ? "Quien mandó el contrato" : "Quien lo recibió"}
+                    {f?.email && ` · ${f.email}`}
+                  </div>
+                  {f && <div className="fir-f">{FUERZA_TEXTO[f.fuerza] || "Firmó"}</div>}
+                </div>
+                <div className="fir-d">
+                  {f ? fmtFull(f.fecha) : <span className="fir-pend">Sin firma</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+    )}
 
     {/* ← ACTUALIZADO (14 oct): los adjuntos, en su pestaña. El candado
         no cambia: siguen pidiendo el código de firma o la biometría. */}

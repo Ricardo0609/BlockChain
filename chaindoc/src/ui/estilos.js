@@ -669,6 +669,35 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .cons-d{font-size:12px;color:var(--gris-300);text-align:right;flex:0 0 auto}
 .cons-v{color:var(--gris-400);margin-top:1px}
 .cons-nota{font-size:12px;color:var(--gris-300);font-style:italic;margin-top:10px}
+
+/* ── FIRMAS DE UN CONTRATO TERMINADO (4 nov) ──────────────────
+   Verde como «cumplido», igual que el aviso del ultimo paso. Es la
+   unica pestana que solo existe cuando algo salio bien. */
+.fir-cab{display:flex;align-items:flex-start;gap:11px;
+  background:rgba(20,130,90,.08);color:#14825a;border-radius:12px;
+  padding:14px 16px;margin-bottom:22px;font-size:13px;line-height:1.5}
+.fir-cab strong{display:block;font-size:15px;font-weight:600;margin-bottom:2px}
+.fir-cab-s{color:var(--gris-300)}
+
+.fir-grupo{border:1px solid var(--bordes);border-radius:12px;
+  padding:15px 16px;margin-bottom:14px;background:#fff}
+.fir-g-t{font-weight:600;font-size:15px;color:var(--negro)}
+.fir-g-n{font-size:12px;color:var(--gris-300);line-height:1.5;margin:3px 0 12px}
+
+.fir-row{display:flex;align-items:center;gap:11px;padding:10px 0;
+  border-bottom:1px solid var(--bordes)}
+.fir-row:last-of-type{border-bottom:none}
+.fir-row.falta{opacity:.55}
+.fir-b{flex:1;min-width:0}
+.fir-n{font-weight:600;font-size:15px;color:var(--negro);overflow-wrap:anywhere}
+.fir-m{font-size:12px;color:var(--gris-300);overflow-wrap:anywhere}
+.fir-f{font-size:12px;color:#14825a;margin-top:2px}
+.fir-d{font-size:12px;color:var(--gris-300);text-align:right;flex:0 0 auto}
+.fir-pend{color:#a16207}
+@media(max-width:760px){
+  .fir-row{align-items:flex-start;flex-wrap:wrap}
+  .fir-d{width:100%;text-align:left;padding-left:43px}
+}
 .tono-consulta .tl-punto{background:rgba(120,113,108,.14);color:#78716c}
 @media(max-width:760px){
   .pv{padding:14px;margin-bottom:20px}
@@ -1733,6 +1762,43 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 }
 
 /* ── NUEVO (25 oct): crear una carpeta sin salir del formulario ── */
+/* ← NUEVO (4 nov): el destino que se da por hecho al crear dentro de
+   una carpeta. Gris y discreto: no es una eleccion que pedir, es un
+   dato que conviene decir antes de que lo pregunten. */
+.carp-dicha{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  border:1px solid var(--bordes);border-radius:10px;padding:9px 12px;
+  margin-bottom:6px;font-size:14px;color:var(--gris-400)}
+.carp-dicha strong{color:var(--negro);font-weight:600;overflow-wrap:anywhere}
+
+/* ── BUSCAR Y ORDENAR EN UNA LISTA (4 nov) ────────────────────
+   Encima de las tarjetas y no en una barra flotante: aparece con la
+   lista, se va con ella, y en el telefono no come pantalla. */
+.lista-barra{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+/* Con tope: un campo de 1200px de ancho para escribir «cemento»
+   promete un buscador que no es. */
+.busca{display:flex;align-items:center;gap:8px;flex:1 1 240px;max-width:430px;min-width:0;
+  border:1px solid var(--bordes);border-radius:10px;padding:0 10px;
+  color:var(--gris-300);transition:border-color .15s}
+.busca:focus-within{border-color:var(--negro);color:var(--negro)}
+.busca-in{flex:1;min-width:0;border:none;outline:none;background:none;
+  font-family:var(--f-p);font-size:15px;color:var(--negro);padding:10px 0}
+.busca-in::placeholder{color:var(--gris-200)}
+/* La cruz nativa de type=search sobra: ya hay una, y dos cruces en el
+   mismo campo son dos preguntas de para que sirve cada una. */
+.busca-in::-webkit-search-cancel-button{display:none}
+.busca-x{display:flex;align-items:center;border:none;background:none;cursor:pointer;
+  color:var(--gris-300);padding:4px;border-radius:6px}
+.busca-x:hover{color:var(--negro);background:var(--gris-50,rgba(0,0,0,.04))}
+.orden-sel{font-family:var(--f-p);font-size:14px;color:var(--negro);cursor:pointer;
+  border:1px solid var(--bordes);border-radius:10px;padding:10px 12px;background:#fff}
+.orden-sel:focus-visible{outline:2px solid var(--negro);outline-offset:1px}
+.lista-n{font-size:13px;color:var(--gris-300);flex:0 0 auto}
+@media(max-width:760px){
+  .lista-barra{gap:8px}
+  .busca{flex:1 1 100%;max-width:none}
+  .orden-sel{flex:1 1 100%}
+}
+
 .sel-carp{display:flex;flex-direction:column;gap:10px}
 .pill-nueva{border-style:dashed;color:var(--gris-300);
   display:inline-flex;align-items:center;gap:5px}

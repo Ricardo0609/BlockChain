@@ -36,6 +36,7 @@ import { aceptoVigente, selloDeAceptacion, VERSION as LEGAL_VERSION } from "./nu
 import { descargarPaquete, recogerAdjuntos } from "./paquete";
 import { FORMS, serializeForm } from "./ui/formularios";
 import { TEMPLATES, esBorradorContrato } from "./nucleo/catalogos";
+import { ORDEN_POR_DEFECTO } from "./nucleo/orden";
 import { getUrlDoc, setUrlDoc } from "./nucleo/formato";
 import { folioTexto, genId, sha256, siguienteFolio, verifyChain } from "./nucleo/cadena";
 import { normalizarEnlace, nombreDeEnlace, textoFirmado } from "./nucleo/enlaces";
@@ -143,6 +144,14 @@ export default function ChainDoc(){
   const [focoDup,setFocoDup]       = useState(null);  // ← NUEVO: duplicado al que se llegó desde un aviso
   const [faseSel,setFaseSel]       = useState(null);  // ← NUEVO: fase elegida para filtrar requisitos
   const [subiendoReq,setSubiendoReq] = useState(null); // ← NUEVO: en qué requisito se está subiendo un archivo
+  // ← NUEVO (4 nov): si el que crea quiso cambiar la carpeta que se
+  // daba por hecha. Vive aquí y no en el modal porque las pantallas
+  // son funciones, no componentes.
+  const [carpAbierta,setCarpAbierta] = useState(false);
+  // ← NUEVO (4 nov): cómo se ordena y qué se busca en una lista de
+  // documentos. Vive aquí porque las pantallas son funciones.
+  const [orden,setOrden]     = useState(ORDEN_POR_DEFECTO);
+  const [busca,setBusca]     = useState("");
   const [verifVin,setVerifVin]     = useState(false); // ← NUEVO: verificación en curso
   const [verificandoFiscal,setVerificandoFiscal] = useState(null); // ← NUEVO (Etapa 4)
   const [revisando69B,setRevisando69B]           = useState(false);
@@ -799,13 +808,17 @@ export default function ChainDoc(){
 
   // ← NUEVO: abre y cierra el asistente de creación en un solo lugar
   const openCreate = ()=>{
-    setMIn(""); setMIn2(""); setTpl("contrato");
+    // ← ACTUALIZADO (4 nov): si estás dentro de una carpeta, el
+    // documento nace ahí. Entrar a la carpeta y pulsar crear ya dijo
+    // dónde va; preguntarlo otra vez es hacer dos veces la misma
+    // elección. El modal lo dice en una línea, con un «Cambiar».
+    setMIn(""); setMIn2(filterF || ""); setCarpAbierta(false); setTpl("contrato");
     setMethod(null); setCreateStep(0); resetImport(); setTplInfo(null);
     setSmartText(""); setSmartRes(null); setSmartErr("");   // ← NUEVO
     setModal({t:"create"});
   };
   const closeCreate = ()=>{
-    setModal(null); setMIn(""); setMIn2("");
+    setModal(null); setMIn(""); setMIn2(""); setCarpAbierta(false);
     setMethod(null); setCreateStep(0); resetImport(); setTplInfo(null);
     setSmartText(""); setSmartRes(null); setSmartErr("");   // ← NUEVO
   };
@@ -2181,7 +2194,8 @@ export default function ChainDoc(){
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
     doLogout, doReset, doShare, doSignCode, doSignup, doVerify, docs, dragOver, drop,
     dropFase, dropReq, editMode, email, enrollBio, exportarPaquete, exps, faseSel,
-    subiendoReq, setFasesEnOrden,
+    subiendoReq, setFasesEnOrden, carpAbierta, setCarpAbierta,
+    orden, setOrden, busca, setBusca,
     fields, filesOpen, filterF, finishAuth, focoDup, folders, getFile, goHome,
     handleFile, histOpen, histTab, imp, impErr, impMeta, impText, iniciarConversion,
     irADuplicado, linkBusy, linkErr, linkExp, linkSitios, linkToExpediente, lockInput,

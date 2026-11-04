@@ -10,6 +10,7 @@ import {
   panelExpedientes,
 } from "../smartContract";
 import { fmtShort } from "../nucleo/formato";
+import { ORDENES, ordenarYBuscar, nadaEncontrado } from "../nucleo/orden";
 import { renderMenu } from "./MenuLateral";
 import { renderModales } from "../modales";
 import { ESTILOS } from "../ui/estilos";
@@ -29,12 +30,37 @@ export function renderInicio(ctx){
     campanaOpen,
     verificado, verifBusy, reenviarVerificacion, comprobarVerificacion, avisos,
     legalPend, aceptarLegal, setLegalTab,
+    orden, setOrden, busca, setBusca,
   } = ctx;
   const recientes = docs.slice(0,3);
   // ← ACTUALIZADO: se compara por uid, no por nombre (dos personas pueden llamarse igual)
   const mine      = docs.filter(x=>x.ownerUid===uid);
   const shared    = docs.filter(x=>x.ownerUid!==uid);
   const shown     = filterF ? docs.filter(x=>x.folder===filterF) : (view==="documentos"?mine:docs);
+  // ← NUEVO (4 nov): ordenar y buscar. Sólo en las listas largas
+  // —una carpeta, todos tus documentos, lo que te compartieron—; la
+  // sección «Recientes» del inicio son tres tarjetas y ya están en el
+  // orden que su propio nombre promete.
+  const lista     = ordenarYBuscar(shown,  { orden, busca });
+  const compartidos = ordenarYBuscar(shared, { orden, busca });
+  const barra = (n)=>(
+    <div className="lista-barra">
+      <div className="busca">
+        <Icon n="search" size={19}/>
+        <input className="busca-in" type="search" value={busca} placeholder="Buscar por nombre, folio o datos…"
+          onChange={e=>setBusca(e.target.value)} aria-label="Buscar documentos"/>
+        {busca && <button className="busca-x" onClick={()=>setBusca("")} aria-label="Limpiar">
+          <Icon n="close" size={17}/></button>}
+      </div>
+      <select className="orden-sel" value={orden} onChange={e=>setOrden(e.target.value)}
+        aria-label="Ordenar documentos">
+        {ORDENES.map(o=><option key={o.id} value={o.id}>{o.txt}</option>)}
+      </select>
+      {/* En cero no se dice nada: el mensaje de abajo ya explica qué
+          se buscó, y dos avisos del mismo vacío es uno de más. */}
+      {busca && n>0 && <span className="lista-n">{n===1?"1 resultado":`${n} resultados`}</span>}
+    </div>
+  );
 
   // ← NUEVO (14 oct): tu papel en el documento, en la misma fila de
   // etiquetas que el tipo y los bloques.
@@ -422,14 +448,18 @@ export function renderInicio(ctx){
         <h2 className="page-title">{filterF?`Carpeta: ${filterF}`:"Documentos"}
           {filterF && <button className="btn btn-tertiary" style={{marginLeft:16,fontSize:15}} onClick={()=>setFilterF(null)}>✕ Quitar filtro</button>}
         </h2>
-        {shown.length ? <div className="cards">{shown.map(Card)}</div>
-                      : <div className="empty">No hay documentos aquí.</div>}
+        {shown.length>0 && barra(lista.length)}
+        {lista.length ? <div className="cards">{lista.map(Card)}</div>
+         : shown.length ? <div className="empty">{nadaEncontrado(busca)}</div>
+                        : <div className="empty">No hay documentos aquí.</div>}
       </>)}
 
       {view==="compartidos" && (<>
         <h2 className="page-title">Compartidos conmigo</h2>
-        {shared.length ? <div className="cards">{shared.map(Card)}</div>
-                       : <div className="empty">Aún no te han compartido documentos.</div>}
+        {shared.length>0 && barra(compartidos.length)}
+        {compartidos.length ? <div className="cards">{compartidos.map(Card)}</div>
+         : shared.length ? <div className="empty">{nadaEncontrado(busca)}</div>
+                         : <div className="empty">Aún no te han compartido documentos.</div>}
       </>)}
 
       {view!=="inicio" && (

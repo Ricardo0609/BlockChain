@@ -222,7 +222,16 @@ export function renderDocumento(ctx){
                            setShareModo("completo"); setShareTodo(true); setShareReqs([]);
                            setModal({t:"share"}); }}>Compartir</button>
         )}
-        {!editMode && (
+        {/* ← ACTUALIZADO (4 nov): en un contrato inteligente no hay
+            «Ver historial». El panel lateral nació cuando esta era la
+            única forma de ver la cadena; el expediente ya trae sus
+            pestañas y dicen lo mismo mejor: Línea de tiempo en vez de
+            «Línea de tiempo» y «Ediciones», Con acceso en vez de
+            «Compartidos», y Firmas cuando el contrato se cierra. Un
+            botón que abre una copia peor de lo que ya está en pantalla
+            es un botón que sobra. En recibos, facturas y documentos de
+            texto sigue, que ahí sí es el único sitio donde está. */}
+        {!editMode && d.kind!=="expediente" && (
           <button className="btn btn-secondary" onClick={()=>setHist(true)}>Ver historial</button>
         )}
         {botonCampana(ctx)}
@@ -629,7 +638,9 @@ export function renderDocumento(ctx){
       </>)}
     </div>
 
-    {histOpen && (
+    {/* `d.kind` también aquí: si el panel quedó abierto y se navega a un
+        contrato, no tiene que reaparecer por la puerta de atrás. */}
+    {histOpen && d.kind!=="expediente" && (
       <div className="hist-ov" onClick={()=>setHist(false)}>
         <div className="hist" onClick={e=>e.stopPropagation()}>
           <h2 className="hist-title">Historial</h2>
