@@ -8,6 +8,10 @@ import {
   verificarAsercion, leerAuthData, nuevoReto, retoValido, bytesAB64u,
 } from "../functions/lib/identidad.js";
 
+// El host NO se renombra con la marca: la llave de Face ID se ata a
+// window.location.hostname, asi que cambiar el dominio deja sin
+// valor todas las llaves ya registradas. Cuando se mude, se cambia
+// aqui Y en los hosts que acepta el servidor, sabiendo eso.
 const HOSTS = ["localhost", "chaindoc.onrender.com"];
 const sha256 = (b) => createHash("sha256").update(b).digest();
 

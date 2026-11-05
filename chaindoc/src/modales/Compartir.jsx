@@ -279,7 +279,7 @@ export function modalCompartir(ctx){
               value={solMsg} disabled={shareBusy||saving}
               onChange={e=>setSolMsg(e.target.value)} />
             <div className="enl-nota">
-              Si ya tiene cuenta en chaindoc, pídeselo por correo: cada entrega queda
+              Si ya tiene cuenta en OCTAVIN, pídeselo por correo: cada entrega queda
               a su nombre. Si no la tiene —o no quieres que se registre— el enlace
               funciona igual, y el correo aquí es sólo para tu registro.
             </div>

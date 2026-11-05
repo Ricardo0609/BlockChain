@@ -20,7 +20,7 @@ export async function leerAvisos(uid){
     const s = await getDoc(doc(db, "avisos", uid));
     return s.exists() ? s.data() : { avisos: [], total: 0 };
   }catch(e){
-    console.error("[chaindoc] no se pudieron leer los avisos:", e?.code || e);
+    console.error("[octavin] no se pudieron leer los avisos:", e?.code || e);
     return null;
   }
 }

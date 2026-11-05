@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// index.js — Funciones de servidor de chaindoc
+// index.js — Funciones de servidor de OCTAVIN
 //
 // Regla de oro: los bloques sólo se escriben aquí. El navegador pide
 // que se asiente algo; el servidor decide si procede, pone la hora,
@@ -1074,7 +1074,7 @@ export const quitarArchivoDeRequisito = onCall(OPCIONES, async (req) => {
     }catch(e){
       // Que el documento de origen ya no exista no puede tumbar el
       // retiro del comprobante, que es lo que se pidió.
-      console.error("[chaindoc] no se pudo asentar la baja del vínculo", quitado.docId, e);
+      console.error("[octavin] no se pudo asentar la baja del vínculo", quitado.docId, e);
     }
   }
 
@@ -1346,7 +1346,7 @@ export const verificarCodigoFirma = onCall(OPCIONES, async (req) => {
 // ══════════════════════════════════════════════════════════════
 // LA DOBLE FIRMA DEL CONTRATO
 //
-// Un contrato dice lo que se prometió; chaindoc prueba lo que se
+// Un contrato dice lo que se prometió; OCTAVIN prueba lo que se
 // cumplió. Hasta aquí el expediente lo armaba una sola parte: los
 // requisitos, los montos y las fechas los ponía quien lo creaba, y si
 // el cliente decía «yo nunca acordé eso», no había nada que
@@ -2311,7 +2311,7 @@ export const invitacionesDe = onCall(OPCIONES, async (req) => {
 
 // ── Lo que ve y hace el invitado, sin cuenta ──────────────────
 //
-// Estas dos no exigen sesión propia de chaindoc. Sí exigen una sesión
+// Estas dos no exigen sesión propia de OCTAVIN. Sí exigen una sesión
 // anónima de Firebase, que es lo que permite subir el archivo a un
 // rincón aislado del almacén; esa sesión no da acceso a nada más.
 

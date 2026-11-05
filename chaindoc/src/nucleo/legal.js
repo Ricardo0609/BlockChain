@@ -20,9 +20,12 @@
 // ─────────────────────────────────────────────────────────────
 
 /** Sube con cada cambio de fondo. Es lo que se guarda en el perfil. */
-export const VERSION = 1;
+// 2 (5 nov 2026): el producto pasa a llamarse OCTAVIN. El nombre
+// está dentro del texto que la gente acepta, así que es un cambio de
+// fondo: quien aceptó la 1 vuelve a ver la pantalla.
+export const VERSION = 2;
 
-export const FECHA = "30 de septiembre de 2026";
+export const FECHA = "5 de noviembre de 2026";
 
 /**
  * Los datos que faltan por decidir. Están juntos a propósito: son lo
@@ -34,7 +37,7 @@ export const RESPONSABLE = {
   domicilio: "[Domicilio en México]",
   correo: "[correo de contacto]",
   sitio: "[dominio]",
-  producto: "chaindoc",
+  producto: "OCTAVIN",
 };
 
 const R = RESPONSABLE;

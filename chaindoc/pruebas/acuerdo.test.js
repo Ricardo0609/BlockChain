@@ -652,7 +652,7 @@ describe("todo entregado", () => {
 describe("quien es parte del acuerdo", () => {
   const c = () => {
     const x = enFirma();
-    x.ownerEmail = "Ricardo@Chaindoc.MX";
+    x.ownerEmail = "Ricardo@Octavin.MX";
     return x;
   };
 
@@ -661,7 +661,7 @@ describe("quien es parte del acuerdo", () => {
   });
 
   it("el dueno es el emisor, sin importar mayusculas ni espacios", () => {
-    expect(parteDe(c(), "  RICARDO@chaindoc.mx ")).toBe("emisor");
+    expect(parteDe(c(), "  RICARDO@octavin.mx ")).toBe("emisor");
   });
 
   it("un tercero con acceso no firma la conformidad", () => {
@@ -671,7 +671,7 @@ describe("quien es parte del acuerdo", () => {
   });
 
   it("sin acuerdo no hay partes", () => {
-    expect(parteDe({ ownerEmail: "ricardo@chaindoc.mx" }, "ricardo@chaindoc.mx")).toBe(null);
+    expect(parteDe({ ownerEmail: "ricardo@octavin.mx" }, "ricardo@octavin.mx")).toBe(null);
     expect(parteDe(null, "ana@correo.com")).toBe(null);
     expect(parteDe(c(), "")).toBe(null);
   });

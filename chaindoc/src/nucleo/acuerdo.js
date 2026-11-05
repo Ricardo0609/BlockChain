@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 // acuerdo.js — Los estados de un contrato con doble firma
 //
-// Un contrato dice lo que se prometió; chaindoc prueba lo que se
+// Un contrato dice lo que se prometió; OCTAVIN prueba lo que se
 // cumplió. Hasta aquí probábamos bien la segunda mitad y nada de la
 // primera: el expediente lo armaba una sola parte, y si mañana el
 // cliente decía «yo nunca acordé ese monto», no había nada que

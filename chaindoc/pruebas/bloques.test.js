@@ -128,6 +128,6 @@ describe("cliente y servidor comparten el mismo archivo", () => {
     // La versión va clavada a propósito: cambiar el formato del
     // manifiesto tiene que ser una decisión, no un descuido. La 3
     // agregó el anclaje en Bitcoin (Etapa 5).
-    expect(paquete).toContain("chaindoc-evidencia/3");
+    expect(paquete).toContain("octavin-evidencia/3");
   });
 });

@@ -32,7 +32,7 @@
 // independiente: si los dos coinciden, el formato está bien.
 //
 // Lo que sale de aquí lo verifica cualquiera con las herramientas
-// estándar, sin chaindoc y sin confiar en nosotros:
+// estándar, sin OCTAVIN y sin confiar en nosotros:
 //
 //     ots verify -d <hash del bloque> bloque.ots
 //

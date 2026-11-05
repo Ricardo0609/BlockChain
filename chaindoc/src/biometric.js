@@ -11,7 +11,7 @@
 // y un dispositivo con autenticador de plataforma.
 // ─────────────────────────────────────────────────────────────
 
-const RP_NAME = "chaindoc";
+const RP_NAME = "OCTAVIN";
 
 // ── Utilidades base64url ──────────────────────────────────────
 const b64uEncode = (buf) => {

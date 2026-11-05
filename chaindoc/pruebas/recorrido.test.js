@@ -52,7 +52,7 @@ const leer = (f) => readFileSync(new URL(`./fixtures/${f}`, import.meta.url));
 
 // ── Quiénes participan ────────────────────────────────────────
 
-const RICARDO = { uid: "U1", email: "ricardo@chaindoc.mx", nombre: "Ricardo García" };
+const RICARDO = { uid: "U1", email: "ricardo@octavin.mx", nombre: "Ricardo García" };
 const ANA     = { uid: "U2", email: "ana@cliente.com.mx",  nombre: "Ana Solís" };
 const LUIS    = { uid: "U3", email: "luis@proveedor.com",  nombre: "Luis Pérez" };
 const INTRUSO = { uid: "U9", email: "nadie@fuera.com",     nombre: "Nadie" };
@@ -531,7 +531,7 @@ describe("recorrido completo: de crear el contrato a entregar la evidencia", () 
       && a.requisito === "Fotografías de la obra terminada")).toBe(true);
   });
 
-  // ── ACTO 8 · La fecha, fuera de chaindoc ────────────────────
+  // ── ACTO 8 · La fecha, fuera de OCTAVIN ─────────────────────
 
   it("29 · la cadena entera se ancla y cada bloque conserva su prueba", async () => {
     const hojas = op.chain.map((b) => deHex(b.hash));

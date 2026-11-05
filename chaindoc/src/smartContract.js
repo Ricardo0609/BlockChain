@@ -515,7 +515,7 @@ export function montoDeDocumento(doc) {
 /**
  * El importe que vale HOY para un comprobante.
  *
- * ← NUEVO (16 oct): un comprobante que es un documento de chaindoc
+ * ← NUEVO (16 oct): un comprobante que es un documento de OCTAVIN
  * —un recibo, una factura— tiene su importe escrito en el propio
  * documento. Al adjuntarlo se copiaba ese número al expediente y ahí
  * se quedaba: si después corregías el recibo, el contrato seguía
@@ -548,7 +548,7 @@ export function montoVigente(archivo, docs = []) {
  * documento que la originó.
  *
  * El paquete de evidencia NO pasa por aquí a propósito: ese se arma
- * para que alguien lo verifique sin chaindoc y años después, así que
+ * para que alguien lo verifique sin OCTAVIN y años después, así que
  * lleva lo que quedó asentado, no lo que diga una pantalla.
  */
 export function conMontosVigentes(exp, docs = []) {
@@ -807,7 +807,7 @@ export function resumenConsultas(chain = []) {
  * - Un archivo subido se identifica por su SHA-256: dos PDF con el
  *   mismo contenido son el mismo comprobante aunque los renombren.
  *
- * - Un documento de chaindoc se identifica por su `docId`, NO por su
+ * - Un documento de OCTAVIN se identifica por su `docId`, NO por su
  *   hash. El hash que guardamos es el de su último bloque al momento
  *   de adjuntarlo: si adjuntas la misma factura a dos expedientes en
  *   días distintos y entre medias la firmaste, los hashes difieren

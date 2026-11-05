@@ -77,7 +77,12 @@ import { renderDocumento } from "./pantallas/Documento";
 import { renderRevision } from "./pantallas/Revision";
 import { renderInicio } from "./pantallas/Inicio";
 import { ESTILOS } from "./ui/estilos";
-export default function ChainDoc(){
+// ← ACTUALIZADO (5 nov): la llave del almacén local lleva el nombre
+// nuevo, pero al leer se mira también la vieja: cambiarla a secas
+// habría borrado en silencio lo que cada quien tenía oculto.
+const LLAVE_OCULTO = "octavin.convOculto";
+
+export default function Octavin(){
   const [screen,setScreen]   = useState("loading");
   const [authStep,setAuthStep] = useState(0);
   const [authMode,setAuthMode] = useState("signup");   // ← NUEVO: "signup" | "login"
@@ -240,7 +245,7 @@ export default function ChainDoc(){
       // `formatBlock` quiere la etiqueta entre ángulos en casi todos
       // los navegadores; los demás comandos no llevan valor.
       document.execCommand(cmd, false, cmd==="formatBlock" ? `<${valor}>` : valor);
-    }catch(e){ console.error("[chaindoc] no se pudo aplicar el estilo", cmd, e); }
+    }catch(e){ console.error("[octavin] no se pudo aplicar el estilo", cmd, e); }
     setDirty(true);
   };
   // ← NUEVO (22 oct): el panel de notificaciones. No guarda nada: lo
@@ -376,7 +381,7 @@ export default function ChainDoc(){
       try{
         const r = await anclajesDe(d.id, false);   // sin las pruebas: aquí sólo se pintan marcas
         if(vigente) setAnclaje(r);
-      }catch(e){ console.warn("[chaindoc] no se pudo leer el anclaje:", e?.message || e); }
+      }catch(e){ console.warn("[octavin] no se pudo leer el anclaje:", e?.message || e); }
     })();
     return ()=>{ vigente = false; };
   },[d?.id, d?.bloques]);
@@ -707,7 +712,8 @@ export default function ChainDoc(){
   // qué viajar a la cadena ni verlo quien tenga el documento compartido.
   const [convOculto, setConvOculto] = useState(() => {
     try{
-      const v = JSON.parse(localStorage.getItem("chaindoc.convOculto") || "[]");
+      const v = JSON.parse(localStorage.getItem(LLAVE_OCULTO)
+                        || localStorage.getItem("chaindoc.convOculto") || "[]");
       return Array.isArray(v) ? v : [];
     }catch{ return []; }
   });
@@ -718,7 +724,7 @@ export default function ChainDoc(){
       // En modo privado escribir revienta; el aviso se queda quitado
       // mientras dure la sesión y vuelve al recargar. Es lo peor que
       // puede pasar y no vale la pena avisarlo.
-      try{ localStorage.setItem("chaindoc.convOculto", JSON.stringify(n)); }catch{ /* sin almacén */ }
+      try{ localStorage.setItem(LLAVE_OCULTO, JSON.stringify(n)); }catch{ /* sin almacén */ }
       return n;
     });
   };
@@ -1527,7 +1533,7 @@ export default function ChainDoc(){
       let pruebas = null;
       if(enServidor()){
         try{ pruebas = await anclajesDe(d.id, true); }
-        catch(e){ console.warn("[chaindoc] el paquete va sin anclaje:", e?.message || e); }
+        catch(e){ console.warn("[octavin] el paquete va sin anclaje:", e?.message || e); }
       }
       // ← NUEVO (28 oct): los originales viajan dentro del paquete.
       // Si no se pueden bajar —sesión caída, red— cada uno cae a su
@@ -1536,7 +1542,7 @@ export default function ChainDoc(){
       let adjuntos = null;
       if(enServidor()){
         try{ adjuntos = await recogerAdjuntos(d, traerArchivo); }
-        catch(e){ console.warn("[chaindoc] el paquete va sin los originales:", e?.message || e); }
+        catch(e){ console.warn("[octavin] el paquete va sin los originales:", e?.message || e); }
       }
       const nombre = descargarPaquete(d, pruebas ? paraElPaquete(pruebas) : null, adjuntos);
       const up = await aplicar(d, {

@@ -192,7 +192,7 @@ describe("servidor y navegador dicen lo mismo", () => {
 //
 // Esto nacio de un 403 en la cara de Ricardo: con el rol Involucrado
 // podia subir un archivo suelto pero NO adjuntar uno de sus propios
-// documentos de chaindoc. Faltaba «vincular».
+// documentos de OCTAVIN. Faltaba «vincular».
 //
 // La prueba no mira la tabla de permisos: arma los EVENTOS que de
 // verdad escribe la pantalla y pregunta por cada uno, que es lo mismo

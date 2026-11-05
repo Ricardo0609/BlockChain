@@ -96,9 +96,9 @@ const conCadena = async (id, datos) =>
  */
 const avisar = (que, e, extra = "") => {
   const codigo = e?.code || e?.message || String(e);
-  console.error(`[chaindoc] ${que}${extra ? ` (${extra})` : ""} → ${codigo}`);
+  console.error(`[octavin] ${que}${extra ? ` (${extra})` : ""} → ${codigo}`);
   if(String(codigo).includes("permission")){
-    console.error(`[chaindoc]   lo rechazaron las reglas de Firestore, no el código. Colección: «${COL}». Modo: «${MODO}».`);
+    console.error(`[octavin]   lo rechazaron las reglas de Firestore, no el código. Colección: «${COL}». Modo: «${MODO}».`);
   }
   return e;
 };

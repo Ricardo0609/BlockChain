@@ -8,7 +8,7 @@
 //
 // Lo que se está cuidando es que un auditor pueda tomar el paquete,
 // sacar una prueba y verificarla con el cliente oficial de
-// OpenTimestamps —que no es nuestro— sin que chaindoc exista.
+// OpenTimestamps —que no es nuestro— sin que OCTAVIN exista.
 
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
@@ -108,7 +108,7 @@ describe("el ciclo completo del anclaje", () => {
     };
     const m = armarManifiesto(exp, paraElPaquete(respuesta));
 
-    expect(m.formato).toBe("chaindoc-evidencia/3");
+    expect(m.formato).toBe("octavin-evidencia/3");
     expect(m.anclaje.bloques).toHaveLength(6);
     expect(m.cadena[0].anclaje.alturaBitcoin).toBe(912443);
     // La instrucción tiene que venir en el paquete: el auditor no nos

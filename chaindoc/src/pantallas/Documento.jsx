@@ -589,7 +589,7 @@ export function renderDocumento(ctx){
 
           La prueba no se pierde: cuando Bitcoin confirma la fecha,
           sigue apareciendo en el historial, pestaña Línea de tiempo,
-          con su enlace para comprobarla fuera de chaindoc. Ahí se mira
+          con su enlace para comprobarla fuera de OCTAVIN. Ahí se mira
           cuando se busca; ya no se grita cuando no se busca.
 
           Los estilos .ancla-caja siguen en estilos.js, sin usar, por si

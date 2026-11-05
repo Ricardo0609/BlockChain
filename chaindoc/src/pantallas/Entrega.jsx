@@ -23,7 +23,7 @@ import { fmtFull } from "../nucleo/formato";
 import { CampoEnlace } from "../ui/CampoEnlace";
 
 /**
- * A dónde lleva «Conoce caraxes».
+ * A dónde lleva «Conoce OCTAVIN».
  *
  * ← ACTUALIZADO (29 oct): ya existe la landing. Vive en
  * `public/landing.html`, así que se sirve tal cual sin pasar por la
@@ -43,7 +43,7 @@ export function renderEntrega(ctx){
     {notif && <div className={`notif ${notif.t}`}>{notif.m}</div>}
     <div className="entrega-wrap">
       <div className="entrega">
-        <div className="entrega-marca">chaindoc</div>
+        <div className="entrega-marca">OCTAVIN</div>
         {children}
       </div>
     </div></>);
@@ -195,7 +195,7 @@ export function renderEntrega(ctx){
           </p>
           <a className="entrega-cta-btn" href={LANDING}
              target="_blank" rel="noopener noreferrer">
-            Conoce caraxes
+            Conoce OCTAVIN
           </a>
         </div>
       </div>

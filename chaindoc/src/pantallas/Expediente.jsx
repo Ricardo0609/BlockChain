@@ -58,7 +58,7 @@ export function renderExpediente(ctx){
   } = ctx;
   const st = expedienteStatus(d);
   // ← NUEVO (16 oct): la vista con los importes al día. Los
-  // comprobantes que son documentos de chaindoc traen su importe del
+  // comprobantes que son documentos de OCTAVIN traen su importe del
   // propio documento, releído ahora, no de la copia que se guardó al
   // adjuntarlos. Es una vista: no se guarda, igual que los vínculos.
   const dv = conMontosVigentes(d, docs);
@@ -502,7 +502,7 @@ export function renderExpediente(ctx){
               className={`exp-file ${vinculos[aid]?.estado==="alterado"?"vin-malo":""}
                 ${dupPorClave[claveDup(a)]?"es-dup":""} ${focoDup && claveDup(a)===focoDup?"dup-foco":""}`}>
               <div className="exp-file-n">
-                {a.origen==="interno" && <span className="tag" style={{marginRight:6}}>chaindoc</span>}
+                {a.origen==="interno" && <span className="tag" style={{marginRight:6}}>OCTAVIN</span>}
                 {/* ← NUEVO: el enlace se marca aparte del archivo porque
                     prueba otra cosa, y quien lo lea tiene que notarlo
                     antes de leer el nombre. */}
@@ -604,7 +604,7 @@ export function renderExpediente(ctx){
                   enlace no hay monto que anotar, y el campo vacío sólo
                   servía para dejar el expediente pareciendo incompleto. */}
               {/* ← ACTUALIZADO (16 oct): el importe de un documento de
-                  chaindoc ya no se escribe aquí. Lo dice el documento.
+                  OCTAVIN ya no se escribe aquí. Lo dice el documento.
                   Antes era un campo editable y se podía dejar en el
                   contrato una cifra distinta de la del recibo que la
                   respalda, sin que nada avisara: justo lo contrario de

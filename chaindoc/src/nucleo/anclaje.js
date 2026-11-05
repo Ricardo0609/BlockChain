@@ -38,7 +38,7 @@ export function textoDeAnclaje(a){
     tono: "ok",
     corto: `Anclado en Bitcoin · bloque ${a.altura}`,
     largo: "La fecha de este bloque está publicada en la cadena de Bitcoin. "
-         + "Ya no depende de chaindoc: cualquiera puede comprobarla por su cuenta, "
+         + "Ya no depende de OCTAVIN: cualquiera puede comprobarla por su cuenta, "
          + "y nadie —nosotros incluidos— puede cambiarla.",
   };
   if(a.estado === "pendiente") return {

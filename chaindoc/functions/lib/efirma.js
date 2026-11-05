@@ -201,6 +201,12 @@ export function revisarEfirma({ certificadoB64, firmaB64, hashHex, raices, ahora
  *  · un reto de un solo uso — para que una firma capturada no se pueda
  *    volver a presentar mañana.
  */
+// OJO con la primera línea: NO se renombró con el resto (5 nov).
+// Es el texto EXACTO que se firmó con cada e.firma ya emitida.
+// Cambiarlo dejaría todas esas firmas sin poder verificarse nunca
+// más, ni por nosotros ni por un tercero años después, que es
+// justo para lo que están. El «/1» es la versión del formato; el
+// nombre del producto no es un cambio de formato.
 export function loQueSeFirma({ opId, sobreHash, reto }){
   const texto = [
     "chaindoc-efirma/1",

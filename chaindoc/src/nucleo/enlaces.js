@@ -20,7 +20,19 @@
 export const ESQUEMAS = ["http:", "https:"];
 export const MAX_URL = 2048;
 
-/** Prefijo del texto que se firma, para que una huella no se pueda confundir con otra cosa. */
+/**
+ * Prefijo del texto que se firma, para que una huella no se pueda
+ * confundir con otra cosa.
+ *
+ * NO se renombró con el resto (5 nov). Esto no es la marca: es el
+ * identificador del formato, y va DENTRO de lo que se le pasa al
+ * SHA-256. El hash que quedó en la cadena de cada enlace ya entregado
+ * se calculó con este texto exacto, así que cambiarlo dejaría esas
+ * huellas sin forma de recalcularse —ni por nosotros ni por un tercero
+ * años después, que es justo para lo que existen—. El «/1» del final
+ * está para cuando cambie el formato de verdad; el nombre del producto
+ * no es un cambio de formato.
+ */
 export const PREFIJO_ENLACE = "chaindoc-enlace/1\n";
 
 /**

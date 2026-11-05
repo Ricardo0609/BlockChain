@@ -2,7 +2,7 @@
 // paquete.js — Paquete de evidencia verificable por terceros
 //
 // Genera un HTML autocontenido que un auditor abre sin cuenta, sin
-// internet y sin confiar en chaindoc: el archivo recalcula los hashes
+// internet y sin confiar en OCTAVIN: el archivo recalcula los hashes
 // con Web Crypto del propio navegador y comprueba que la cadena cierra.
 //
 // Además acepta que le arrastren los archivos originales para
@@ -17,7 +17,8 @@ import { aTextoPlano } from "./nucleo/texto";
 import { archivosDe, expedienteStatus, calcularMontos, resumenConsultas, estadoFases } from "./smartContract";
 import { eventoDe } from "./ui/eventos";
 
-export const FORMATO = "chaindoc-evidencia/3";
+// El nombre cambió, el formato no: sigue siendo la versión 3.
+export const FORMATO = "octavin-evidencia/3";
 
 // ── LOS ORIGINALES, DENTRO DEL PAQUETE (28 oct) ───────────────
 //
@@ -106,7 +107,7 @@ export async function recogerAdjuntos(exp, traer, tope = TOPE_ADJUNTOS) {
         tam: it.tam, dataUri: await aDataUri(blob),
       };
     } catch (e) {
-      console.warn("[chaindoc] el paquete va sin este original:", it.nombre, e?.message || e);
+      console.warn("[octavin] el paquete va sin este original:", it.nombre, e?.message || e);
       out[it.hash] = { clase: it.thumb ? "miniatura" : "nada",
                        dataUri: it.thumb || null, tipo: it.tipo, nombre: it.nombre };
     }
@@ -165,7 +166,7 @@ export function armarManifiesto(exp, anclaje = null) {
         // auditor que lea el paquete tiene que poder distinguir «aquí
         // hay un archivo con esta huella» de «aquí se entregó esta
         // dirección», que prueban cosas distintas.
-        origen: a.origen === "interno" ? "documento-chaindoc"
+        origen: a.origen === "interno" ? "documento-octavin"
               : a.origen === "enlace"  ? "enlace" : "archivo",
         numId: a.numId || null,
         url: a.url || null,
@@ -213,7 +214,7 @@ export function armarManifiesto(exp, anclaje = null) {
       };
     }),
     // ← NUEVO (Etapa 5): las pruebas de OpenTimestamps, para que el
-    // tercero compruebe la fecha SIN chaindoc y sin confiar en
+    // tercero compruebe la fecha SIN OCTAVIN y sin confiar en
     // nosotros. Es lo único del paquete que no depende de nuestra
     // palabra ni de nuestro código.
     anclaje,
@@ -413,7 +414,7 @@ export function generarHTML(exp, anclaje = null, adjuntos = null) {
   .fch{white-space:nowrap;color:var(--mut);font-size:12px}
   .h{text-align:center;font-size:17px;width:44px}
   .mut{color:var(--mut);font-size:12px}
-  /* ← NUEVO (Etapa 5): la seccion que NO depende de chaindoc */
+  /* ← NUEVO (Etapa 5): la seccion que NO depende de OCTAVIN */
   .anclaje p{font-size:14px;line-height:1.6;margin:0 0 12px}
   .anclaje .cmd{background:#0f172a;color:#e2e8f0;padding:12px 14px;border-radius:10px;
     font-size:12px;line-height:1.6;overflow-x:auto;margin:0 0 14px;white-space:pre}
@@ -612,16 +613,16 @@ export function generarHTML(exp, anclaje = null, adjuntos = null) {
   <div class="caja"><div class="tl">${lineaTiempo || '<p class="mut">Sin actividad.</p>'}</div></div>
 
   ${m.anclaje ? `<details class="caja anclaje plegable">
-    <summary><b>Fecha comprobable fuera de chaindoc</b>
+    <summary><b>Fecha comprobable fuera de OCTAVIN</b>
       <span class="mut">${m.anclaje.bloques.length} prueba${m.anclaje.bloques.length === 1 ? "" : "s"} de OpenTimestamps</span>
     </summary>
     <div class="plegable-b">
     <p>
       Todo lo anterior lo puedes recalcular con este mismo archivo, pero las
-      <b>fechas</b> las puso el servidor de chaindoc. Esta sección existe para que
+      <b>fechas</b> las puso el servidor de OCTAVIN. Esta sección existe para que
       no tengas que creerle: cada bloque de abajo está publicado en la cadena de
       <b>Bitcoin</b> mediante <b>OpenTimestamps</b>, un protocolo abierto. Nadie
-      puede reescribir esa cadena — tampoco chaindoc.
+      puede reescribir esa cadena — tampoco OCTAVIN.
     </p>
     <p>
       Guarda el contenido de cada prueba en un archivo <code>.ots</code> y
@@ -672,7 +673,7 @@ ots verify -d &lt;hash del bloque&gt; bloque.ots</pre>
     y la hora puesta por el servidor.
     El cálculo usa Web Crypto, el motor criptográfico del propio navegador.<br><br>
     ${e.analisis ? `Los requisitos fueron extraídos del contrato por ${esc(e.analisis.modelo)} el ${fecha(e.analisis.fecha)}, y revisados por ${esc(e.propietario || "el propietario")} antes de abrirse el expediente.<br><br>` : ""}
-    Formato ${FORMATO} · Generado por chaindoc
+    Formato ${FORMATO} · Generado por OCTAVIN
   </footer>
 </div>
 

@@ -394,7 +394,7 @@ export async function firmarConEfirma({ cer, key, contraseña, hashHex, onPaso }
  */
 async function mismoPar(pkcs8, cert){
   if(!cert.llavePublica) throw new Error("certificado-sin-llave-publica");
-  const reto = new TextEncoder().encode("chaindoc/par");
+  const reto = new TextEncoder().encode("octavin/par");
 
   const priv = await cripto().subtle.importKey(
     "pkcs8", pkcs8, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);

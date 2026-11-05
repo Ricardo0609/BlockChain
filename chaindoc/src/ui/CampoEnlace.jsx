@@ -40,7 +40,7 @@ export function CampoEnlace({
         <Icon n="info" size={15}/>
         <span>
           Queda registrada <b>la dirección y la fecha</b> en que se entregó. Lo que haya
-          en esa dirección puede cambiar después: eso no lo guarda chaindoc.
+          en esa dirección puede cambiar después: eso no lo guarda OCTAVIN.
         </span>
       </div>
 

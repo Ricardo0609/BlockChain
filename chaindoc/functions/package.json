@@ -1,6 +1,6 @@
 {
-  "name": "chaindoc-functions",
-  "description": "Funciones de servidor de chaindoc: sólo aquí se escriben bloques.",
+  "name": "octavin-functions",
+  "description": "Funciones de servidor de OCTAVIN: sólo aquí se escriben bloques.",
   "type": "module",
   "main": "index.js",
   "engines": {

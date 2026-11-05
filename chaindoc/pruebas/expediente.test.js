@@ -118,7 +118,7 @@ describe("fases", () => {
 });
 
 // ← NUEVO (16 oct): el importe de un comprobante que es un documento
-// de chaindoc lo dice el documento, no la copia que se guardo al
+// de OCTAVIN lo dice el documento, no la copia que se guardo al
 // adjuntarlo.
 //
 // El error que esto cierra: al adjuntar un recibo se copiaba su
@@ -177,7 +177,7 @@ describe("el importe manda desde el documento, no desde el contrato", () => {
 
   it("lo que decide es el origen, no que traiga un docId suelto", () => {
     // Un enlace, o un registro viejo, puede acarrear un docId sin ser
-    // un documento de chaindoc. Si bastara con el docId para releer, el
+    // un documento de OCTAVIN. Si bastara con el docId para releer, el
     // importe escrito a mano se sobrescribiria solo.
     const suelto = { aid: "x1", origen: "enlace", docId: "d1", monto: 3000 };
     expect(montoVigente(suelto, [recibo("d1", "99999")])).toBe(3000);
@@ -434,7 +434,7 @@ describe("el aviso de «sin importe anotado»", () => {
 // bueno.
 describe("la firma como ultimo paso", () => {
   const conAcuerdo = (firmas = []) => contrato({
-    ownerEmail: "ricardo@chaindoc.mx",
+    ownerEmail: "ricardo@octavin.mx",
     acuerdo: {
       pedidoEn: "2026-09-10T10:00:00Z", paraEmail: "ana@correo.com",
       firmas: [

@@ -1098,7 +1098,7 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   background:var(--gris-100);color:var(--gris-400);flex:0 0 auto}
 
 /* ← NUEVO (Etapa 5): el anclaje en Bitcoin. Se distingue del resto a
-   propósito: es lo único de la pantalla que no lo afirma chaindoc. */
+   propósito: es lo único de la pantalla que no lo afirma OCTAVIN. */
 .ancla-caja{display:flex;gap:11px;align-items:flex-start;margin:18px 0 0;
   padding:13px 15px;border-radius:12px;text-align:left;border:1px solid}
 .ancla-caja.lista{background:rgba(21,128,61,.06);border-color:#bbf7d0;color:#15803d}
