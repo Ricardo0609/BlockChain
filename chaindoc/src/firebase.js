@@ -48,6 +48,22 @@ export const app  = initializeApp(firebaseConfig);
 export const db   = getFirestore(app);
 export const auth = getAuth(app);
 
+// ← NUEVO (10 nov): los correos que manda Firebase, en español.
+//
+// Confirmar el correo, recuperar la contraseña y deshacer un cambio de
+// correo los manda Firebase, no nosotros. Sin esta línea salen en
+// inglés: la segunda pantalla que ve alguien que acaba de registrarse
+// en un producto en español es un correo en inglés.
+//
+// Fijo en "es" y no `useDeviceLanguage()`: el producto es en español y
+// tiene una sola versión. Con el idioma del navegador, alguien con el
+// sistema en inglés recibiría el correo en inglés y la aplicación en
+// español, que es peor que cualquiera de las dos cosas sola.
+//
+// Esto elige la PLANTILLA; el nombre del remitente y el asunto se
+// cambian en la consola de Firebase, que es trabajo aparte.
+auth.languageCode = "es";
+
 // ── App Check (Etapa 3) ───────────────────────────────────────
 // Comprueba que quien llama al servidor sea esta aplicación y no un
 // script apuntando a nuestras funciones. Se activa sólo si existe la
@@ -55,6 +71,17 @@ export const auth = getAuth(app);
 //
 // En desarrollo se usa el «token de depuración» que imprime la consola
 // del navegador; hay que registrarlo una vez en la consola de Firebase.
+//
+// ← ACTUALIZADO (10 nov): proveedor de Fraud Defense, antes reCAPTCHA
+// Enterprise, en vez del de reCAPTCHA Classic.
+//
+// No fue por mejorarlo: Google dejó de permitir llaves Classic nuevas
+// en 2024, así que la que pedía el código ya no se podía conseguir.
+//
+// La diferencia práctica es que esta llave es PÚBLICA —la de sitio— y
+// la Classic venía con una secreta aparte. Una llave menos que
+// custodiar, y ninguna que pueda acabar en el repositorio por
+// descuido: ésta está hecha para ir en el navegador a la vista.
 export const APP_CHECK = Boolean(ENV.VITE_RECAPTCHA_KEY);
 
 if(APP_CHECK){
@@ -62,9 +89,9 @@ if(APP_CHECK){
     self.FIREBASE_APPCHECK_DEBUG_TOKEN = ENV.VITE_APPCHECK_DEBUG || true;
   }
   import("firebase/app-check")
-    .then(({ initializeAppCheck, ReCaptchaV3Provider }) => {
+    .then(({ initializeAppCheck, ReCaptchaEnterpriseProvider }) => {
       initializeAppCheck(app, {
-        provider: new ReCaptchaV3Provider(ENV.VITE_RECAPTCHA_KEY),
+        provider: new ReCaptchaEnterpriseProvider(ENV.VITE_RECAPTCHA_KEY),
         isTokenAutoRefreshEnabled: true,
       });
     })

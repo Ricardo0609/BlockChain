@@ -12,6 +12,7 @@ import {
   findUserByEmail,
   publishDirectory,
   enviarVerificacion,
+  confirmarCorreo, correoDelReinicio, ponerContrasena, deshacerCambioDeCorreo,
   refrescarVerificacion,
 } from "./auth";
 import { bioAvailable, bioRegister, bioAssert, bioError, b64uToBytes } from "./biometric";
@@ -38,6 +39,8 @@ import { FORMS, serializeForm } from "./ui/formularios";
 import { TEMPLATES, esBorradorContrato } from "./nucleo/catalogos";
 import { ORDEN_POR_DEFECTO } from "./nucleo/orden";
 import { leerActivos } from "./ui/estiloActivo";
+import { leerAccion, porQueFallo } from "./nucleo/accionCorreo";
+import { renderAccion } from "./pantallas/Accion";
 import { getUrlDoc, setUrlDoc } from "./nucleo/formato";
 import { folioConPrefijo, genId, sha256, siguienteFolio, tipoDeFolio, verifyChain } from "./nucleo/cadena";
 import { normalizarEnlace, nombreDeEnlace, textoFirmado } from "./nucleo/enlaces";
@@ -153,6 +156,20 @@ export default function Octavin(){
   // daba por hecha. Vive aquí y no en el modal porque las pantallas
   // son funciones, no componentes.
   const [carpAbierta,setCarpAbierta] = useState(false);
+
+  // ← NUEVO (10 nov): los enlaces que Firebase manda por correo.
+  //
+  // Se lee la dirección UNA vez, al cargar, y antes que nada: quien
+  // llega por un enlace de contraseña no tiene sesión, así que esta
+  // pantalla no puede depender de ella. El código se consume al
+  // comprobarlo, así que el efecto corre una sola vez.
+  const [accion]  = useState(() => leerAccion(window.location.href));
+  const [accEstado,setAccEstado] = useState("comprobando");
+  const [accCorreo,setAccCorreo] = useState(null);
+  const [accError,setAccError]   = useState("");
+  const [accBusy,setAccBusy]     = useState(false);
+  const [accPass,setAccPass]     = useState("");
+  const [accPass2,setAccPass2]   = useState("");
   // ← NUEVO (4 nov): cómo se ordena y qué se busca en una lista de
   // documentos. Vive aquí porque las pantallas son funciones.
   const [orden,setOrden]     = useState(ORDEN_POR_DEFECTO);
@@ -248,6 +265,73 @@ export default function Octavin(){
     }catch(e){ console.error("[octavin] no se pudo aplicar el estilo", cmd, e); }
     setDirty(true);
     setEstiloAct(leerActivos(document));
+  };
+
+  // ← NUEVO (10 nov): comprobar el enlace del correo al llegar.
+  useEffect(()=>{
+    if(!accion) return;
+    let vivo = true;
+    (async()=>{
+      try{
+        if(accion.caso === "confirmar"){
+          const c = await confirmarCorreo(accion.codigo);
+          if(!vivo) return;
+          setAccCorreo(c); setAccEstado("hecho");
+        }else if(accion.caso === "recuperar"){
+          const c = await deshacerCambioDeCorreo(accion.codigo);
+          if(!vivo) return;
+          setAccCorreo(c); setAccEstado("hecho");
+        }else{
+          // La contraseña no se cambia todavía: primero se comprueba
+          // que el código sirva, para no enseñar un formulario que al
+          // enviarlo va a fallar de todas formas.
+          const c = await correoDelReinicio(accion.codigo);
+          if(!vivo) return;
+          setAccCorreo(c); setAccEstado("formulario");
+        }
+      }catch(e){
+        if(!vivo) return;
+        setAccEstado(porQueFallo(e?.code));
+      }
+    })();
+    return ()=>{ vivo = false; };
+  }, [accion]);
+
+  // `assign` y no asignar a `location.href`: hace lo mismo, y no es
+  // una asignación a algo de fuera, que es lo que el linter vigila.
+  const irALaApp = ()=> window.location.assign(accion?.continuar || "/");
+
+  const pedirOtroEnlace = async()=>{
+    setAccBusy(true); setAccError("");
+    try{
+      // Sólo se puede volver a mandar el de contraseña: para el de
+      // confirmación hace falta la sesión, y aquí no la hay. Por eso
+      // ese caso manda a entrar, donde el aviso de arriba tiene su
+      // propio «Reenviar enlace».
+      if(accCorreo && accion?.caso === "contrasena"){
+        await resetPassword(accCorreo);
+        setAccEstado("hecho-enviado");
+        notify("Te mandamos otro enlace ✓");
+      }else{
+        irALaApp();
+      }
+    }catch(e){ console.error(e); setAccError("No se pudo enviar. Inténtalo otra vez."); }
+    finally{ setAccBusy(false); }
+  };
+
+  const guardarContrasena = async()=>{
+    setAccError("");
+    if(accPass.length < 6){ setAccError("Usa al menos 6 caracteres."); return; }
+    if(accPass !== accPass2){ setAccError("Las dos no coinciden."); return; }
+    setAccBusy(true);
+    try{
+      await ponerContrasena(accion.codigo, accPass);
+      setAccPass(""); setAccPass2(""); setAccEstado("hecho");
+    }catch(e){
+      const q = porQueFallo(e?.code);
+      if(q === "floja") setAccError("Esa contraseña es muy fácil de adivinar. Prueba con una más larga.");
+      else setAccEstado(q);
+    }finally{ setAccBusy(false); }
   };
 
   // ← NUEVO (6 nov): qué estilo tiene el texto donde está el cursor,
@@ -2289,7 +2373,16 @@ export default function Octavin(){
     invitacion, invError, invBusy, invPaso, invSubiendo, entregas, entregar,
     crearEnlace, verEnlaces, revocarEnlace, copiarEnlace, enlaces,
     enlaceNuevo, setEnlaceNuevo, invDias, setInvDias, avisos,
+    accCaso: accion?.caso || null, accEstado, accCorreo, accError, accBusy,
+    accPass, setAccPass, accPass2, setAccPass2,
+    guardarContrasena, irALaApp, pedirOtroEnlace,
   };
+
+  // ── RENDER: ENLACE DEL CORREO ──
+  // Antes que todo lo demás, incluso que la entrega: quien llega por
+  // un enlace de contraseña no tiene sesión, y la pantalla de acceso
+  // en medio sería justo lo que no puede hacer.
+  if(accion) return (<><style>{ESTILOS}</style>{renderAccion(ctx)}</>);
 
   // ── RENDER: ENTREGA POR ENLACE ──
   // Va primero a propósito: quien llega con un enlace no tiene cuenta,

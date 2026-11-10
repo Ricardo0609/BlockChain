@@ -14,6 +14,10 @@ import {
   updateProfile,
   sendPasswordResetEmail,
   sendEmailVerification,
+  applyActionCode,
+  checkActionCode,
+  verifyPasswordResetCode,
+  confirmPasswordReset,
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
@@ -82,6 +86,48 @@ export const logOut = () => signOut(auth);
 /** Envía el correo de restablecimiento de contraseña. */
 export const resetPassword = (email) =>
   sendPasswordResetEmail(auth, email.trim());
+
+// ── Los enlaces que llegan por correo (10 nov) ────────────────
+//
+// Los tres casos que Firebase manda a `/accion`. Cada uno devuelve lo
+// que la pantalla necesita enseñar, o lanza con un código que
+// `porQueFallo()` traduce.
+
+/** Confirma el correo. Devuelve cuál quedó confirmado. */
+export async function confirmarCorreo(codigo){
+  // `checkActionCode` ANTES de aplicarlo: una vez aplicado, el código
+  // se consume y ya no se puede preguntar de quién era. Sin esto, la
+  // pantalla de «confirmado» no podría decir qué dirección confirmó.
+  const info = await checkActionCode(auth, codigo);
+  await applyActionCode(auth, codigo);
+  // Si la sesión está abierta, que la aplicación se entere sin que la
+  // persona tenga que recargar.
+  if(auth.currentUser) await auth.currentUser.reload().catch(() => {});
+  return info?.data?.email || null;
+}
+
+/** De quién es este enlace de contraseña. Falla si no sirve. */
+export const correoDelReinicio = (codigo) => verifyPasswordResetCode(auth, codigo);
+
+/** Pone la contraseña nueva. */
+export const ponerContrasena = (codigo, nueva) =>
+  confirmPasswordReset(auth, codigo, nueva);
+
+/**
+ * Deshace un cambio de correo: devuelve el anterior.
+ *
+ * Quien llega aquí es alguien a quien le cambiaron el correo de la
+ * cuenta sin su permiso, así que además se le manda el enlace para
+ * poner contraseña nueva: recuperar el correo sin cambiar la
+ * contraseña lo deja con la puerta abierta a quien se la cambió.
+ */
+export async function deshacerCambioDeCorreo(codigo){
+  const info = await checkActionCode(auth, codigo);
+  const correo = info?.data?.email || null;
+  await applyActionCode(auth, codigo);
+  if(correo) await sendPasswordResetEmail(auth, correo).catch(() => {});
+  return correo;
+}
 
 /**
  * Observa el estado de sesión. Se dispara al cargar la app y en cada

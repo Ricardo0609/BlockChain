@@ -694,6 +694,49 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .fir-f{font-size:12px;color:#14825a;margin-top:2px}
 .fir-d{font-size:12px;color:var(--gris-300);text-align:right;flex:0 0 auto}
 .fir-pend{color:#a16207}
+
+/* ── LOS ENLACES DEL CORREO (10 nov) ──────────────────────────
+   Del lienzo «Pantalla de confirmacion de correo». Centrada en la
+   pantalla y no dentro de la aplicacion: quien llega aqui viene de su
+   bandeja de entrada, no de navegar, y puede no tener sesion. */
+.acc{min-height:100vh;box-sizing:border-box;background:var(--papel,#fff);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:48px 24px;text-align:center}
+.acc-marca{font-family:var(--f-t,inherit);font-weight:600;font-size:19px;
+  letter-spacing:-.01em;color:var(--negro);margin-bottom:48px}
+.acc-circulo{width:72px;height:72px;border-radius:50%;border:2.5px solid;
+  display:flex;align-items:center;justify-content:center;margin-bottom:28px}
+.acc-giro{width:44px;height:44px;border:3px solid var(--bordes);
+  border-top-color:var(--negro);border-radius:50%;margin-bottom:30px;
+  animation:acc-gira .9s linear infinite}
+@keyframes acc-gira{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.acc-giro{animation-duration:2.6s}}
+.acc-t{margin:0 0 14px;font-size:31px;font-weight:600;letter-spacing:-.015em;
+  text-wrap:balance;max-width:16ch}
+.acc-p{margin:0 0 6px;font-size:16.5px;line-height:1.6;color:var(--gris-400);
+  max-width:440px}
+.acc-dato{margin:6px 0 0;font-size:14px;color:var(--gris-300);
+  font-family:ui-monospace,"SF Mono",Menlo,monospace;overflow-wrap:anywhere}
+.acc-botones{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  justify-content:center;margin-top:30px}
+.acc-link{border:none;background:none;cursor:pointer;font:inherit;font-size:15.5px;
+  color:var(--gris-400);text-decoration:underline;padding:13px 24px;min-height:48px}
+.acc-link:hover{color:var(--negro)}
+.acc-pie{margin:44px 0 0;font-size:13px;line-height:1.6;color:var(--gris-200);
+  max-width:420px}
+.acc-err{margin:4px 0 0;font-size:13.5px;color:#b3261e;text-align:left}
+.acc-form{width:100%;max-width:340px;margin-top:26px;text-align:left;
+  display:flex;flex-direction:column;gap:7px}
+.acc-lbl{font-size:13px;color:var(--gris-400)}
+.acc-form .inp{margin:0}
+.acc .btn-primary{min-height:48px;padding:13px 30px;margin-top:30px}
+.acc-botones .btn-primary,.acc-form .btn-primary{margin-top:0}
+@media(max-width:620px){
+  .acc-t{font-size:26px}
+  .acc-marca{margin-bottom:36px}
+  .acc-botones{flex-direction:column;width:100%}
+  .acc-botones .btn-primary,.acc-link{width:100%}
+}
 @media(max-width:760px){
   .fir-row{align-items:flex-start;flex-wrap:wrap}
   .fir-d{width:100%;text-align:left;padding-left:43px}
