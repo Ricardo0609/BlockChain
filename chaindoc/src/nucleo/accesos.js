@@ -182,6 +182,14 @@ export const compartir = (opId, correo, rol) =>
 export const quitarAcceso = (opId, correo) =>
   llamar("quitarAcceso", { opId, correo: String(correo).toLowerCase().trim() });
 
+/**
+ * Salirse uno mismo de algo que le compartieron.
+ *
+ * No lleva correo: el servidor usa el de quien llama. Pasarlo seria
+ * abrir la puerta a quitar a otro por esta via.
+ */
+export const dejarDeVer = (opId) => llamar("dejarDeVer", { opId });
+
 export const pedirComprobante = (opId, reqId, correo, mensaje, cuenta = {}) =>
   llamar("pedirEvidencia", {
     opId, reqId, mensaje,

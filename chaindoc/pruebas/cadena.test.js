@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("../src/firebase", () => ({ db: {}, auth: {}, app: {}, ENTORNO: "prueba" }));
 
-import { folioTexto, genId, genNumId, sha256, siguienteFolio, verifyChain } from "../src/nucleo/cadena";
+import { folioTexto, genId, sha256, siguienteFolio, verifyChain } from "../src/nucleo/cadena";
 import { sinUndefined, quitarArchivoViejo, CAMPOS_EDITABLES } from "../src/nucleo/datos";
 
 describe("sha256", () => {
@@ -18,9 +18,6 @@ describe("identificadores", () => {
   it("no se repiten", () => {
     const ids = new Set(Array.from({ length: 500 }, genId));
     expect(ids.size).toBe(500);
-  });
-  it("el número de documento tiene 11 dígitos", () => {
-    expect(genNumId()).toMatch(/^\d{11}$/);
   });
 });
 
@@ -45,14 +42,15 @@ describe("folio consecutivo", () => {
     expect(siguienteFolio()).toBe(1);
   });
 
-  it("sigue al folio más alto, no a la cantidad de documentos", () => {
+  it("sigue al folio más alto de su tipo, no a la cantidad", () => {
     // Borrar el 2 no debe hacer que el siguiente repita el 3.
-    expect(siguienteFolio([{ folio: 1 }, { folio: 3 }])).toBe(4);
+    const d = (folio) => ({ folio, numId: `D-0${folio}` });
+    expect(siguienteFolio([d(1), d(3)], "contrato")).toBe(4);
   });
 
   it("ignora los documentos viejos, que no tienen folio", () => {
-    expect(siguienteFolio([{ numId: "62173423069" }, { folio: 2 }])).toBe(3);
-    expect(siguienteFolio([{ numId: "62173423069" }])).toBe(1);
+    expect(siguienteFolio([{ numId: "62173423069" }, { folio: 2, numId: "D-02" }], "contrato")).toBe(3);
+    expect(siguienteFolio([{ numId: "62173423069" }], "contrato")).toBe(1);
   });
 });
 

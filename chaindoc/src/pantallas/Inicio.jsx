@@ -133,6 +133,15 @@ export function renderInicio(ctx){
                 compartidos: el usuario confirmaba, esperaba el
                 cargando, y se llevaba un rechazo. Un botón que no va a
                 funcionar no debería estar. */}
+            {/* ← NUEVO (6 nov): lo que te compartieron se quedaba en tu
+                lista para siempre. Borrar está bien prohibido —borra
+                para todos y no es tuyo— pero salirse no existía, y el
+                único camino era pedirle al dueño que te quitara. */}
+            {x.ownerUid!==uid && (
+              <button onClick={()=>{setModal({t:"salir",id:x.id,name:x.title});setDrop(null);}}>
+                Dejar de ver
+              </button>
+            )}
             {x.ownerUid===uid && (
               <button className={decidirBorrado(x).modo==="ocultar" ? "" : "danger"}
                 onClick={()=>{setModal({t:"del",id:x.id,name:x.title});setDrop(null);}}>

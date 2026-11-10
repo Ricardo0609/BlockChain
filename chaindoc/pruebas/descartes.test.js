@@ -6,7 +6,8 @@
 // enterarias nunca.
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  TOPE, claveDescartes, descartar, estaDescartada, leerDescartes, podar, recuperar,
+  TOPE, claveDescartes, descartar, estaDescartada, fundir, guardarLocales,
+  leerLocales, podar, recuperar,
 } from "../src/nucleo/descartes.js";
 import { notificacionesDe } from "../src/nucleo/notificaciones.js";
 
@@ -27,28 +28,78 @@ beforeEach(() => {
 describe("quitar y volver a poner", () => {
   it("lo quitado se queda quitado", () => {
     const n = noti("comp:d1", AYER);
-    const m = descartar("U1", n);
-    expect(estaDescartada(m, n)).toBe(true);
-    expect(leerDescartes("U1")).toEqual(m);
+    expect(estaDescartada(descartar({}, n), n)).toBe(true);
   });
 
   it("deshacer lo devuelve", () => {
     const n = noti("comp:d1", AYER);
-    descartar("U1", n);
-    const m = recuperar("U1", "comp:d1");
-    expect(estaDescartada(m, n)).toBe(false);
-    expect(leerDescartes("U1")).toEqual({});
+    expect(estaDescartada(recuperar(descartar({}, n), "comp:d1"), n)).toBe(false);
   });
 
-  it("cada cuenta tiene su caja", () => {
-    descartar("U1", noti("comp:d1", AYER));
-    expect(leerDescartes("U2")).toEqual({});
+  it("no toca el mapa que recibe", () => {
+    // Es estado de React. Cambiarlo en el sitio lo movería por debajo
+    // y la campana no se enteraria de repintar.
+    const antes = { "comp:d1": AYER };
+    const copia = { ...antes };
+    descartar(antes, noti("otra", HOY));
+    recuperar(antes, "comp:d1");
+    expect(antes).toEqual(copia);
+  });
+
+  it("cada cuenta tiene su caja en el navegador", () => {
     expect(claveDescartes("U1")).not.toBe(claveDescartes("U2"));
+    guardarLocales("U1", { a: AYER });
+    expect(leerLocales("U2")).toEqual({});
   });
 
   it("sin cuenta no truena", () => {
     expect(() => descartar(null, noti("x", AYER))).not.toThrow();
-    expect(leerDescartes(null)).toHaveProperty("x");
+    expect(descartar(null, noti("x", AYER))).toHaveProperty("x");
+    expect(() => recuperar(null, "x")).not.toThrow();
+  });
+});
+
+// ── LO DE LA CUENTA Y LO DEL NAVEGADOR, JUNTOS (6 nov) ───────────
+//
+// Antes esto vivia solo en el navegador, asi que lo que quitabas en la
+// computadora seguia saliendo en el telefono. Ahora va en la cuenta y
+// las dos cajas se funden. Lo que se vigila aqui es que fundir no
+// RESUCITE un aviso quitado ni TAPE uno nuevo.
+describe("juntar lo de la cuenta con lo del navegador", () => {
+  it("lo que solo esta en un lado, entra", () => {
+    expect(fundir({ a: AYER }, { b: HOY })).toEqual({ a: AYER, b: HOY });
+  });
+
+  it("si esta en los dos, gana la fecha mas nueva", () => {
+    // No gana «el perfil» ni «el navegador»: gana la respuesta mas
+    // reciente, venga de donde venga.
+    expect(fundir({ a: HOY }, { a: AYER })).toEqual({ a: HOY });
+    expect(fundir({ a: AYER }, { a: HOY })).toEqual({ a: HOY });
+  });
+
+  it("asi lo que ya tenias guardado aqui sube solo", () => {
+    // Es la migracion entera: no hay un paso aparte que pueda fallar
+    // a medias y dejar a alguien con la campana llena otra vez.
+    const local = { "comp:d1": AYER, "comp:d2": AYER };
+    expect(fundir(local, undefined)).toEqual(local);
+    expect(fundir(local, null)).toEqual(local);
+  });
+
+  it("y un aviso nuevo con la misma clave NO queda tapado al fundir", () => {
+    const juntos = fundir({ "comp:d1": AYER }, { "comp:d1": AYER });
+    expect(estaDescartada(juntos, noti("comp:d1", HOY))).toBe(false);
+  });
+
+  it("dos cajas vacias dan una vacia", () => {
+    expect(fundir({}, {})).toEqual({});
+    expect(fundir(null, null)).toEqual({});
+  });
+
+  it("al juntar tambien se respeta el tope", () => {
+    const uno = {}, otro = {};
+    for (let i = 0; i < TOPE; i++) uno[`a${i}`] = HOY;
+    for (let i = 0; i < TOPE; i++) otro[`b${i}`] = AYER;
+    expect(Object.keys(fundir(uno, otro))).toHaveLength(TOPE);
   });
 });
 
@@ -123,22 +174,24 @@ describe("no crece para siempre", () => {
     expect(podar({})).toEqual({});
   });
 
-  it("guardar de mas no revienta la caja", () => {
-    for (let i = 0; i < TOPE + 20; i++) descartar("U1", noti(`k${i}`, HOY));
-    expect(Object.keys(leerDescartes("U1")).length).toBeLessThanOrEqual(TOPE);
+  it("quitar de mas no revienta la caja", () => {
+    let m = {};
+    for (let i = 0; i < TOPE + 20; i++) m = descartar(m, noti(`k${i}`, HOY));
+    expect(Object.keys(m).length).toBeLessThanOrEqual(TOPE);
   });
 });
 
 describe("si el navegador no deja guardar", () => {
   it("lee vacio en vez de tronar", () => {
     globalThis.localStorage.getItem = () => "{esto no es json";
-    expect(leerDescartes("U1")).toEqual({});
+    expect(leerLocales("U1")).toEqual({});
     globalThis.localStorage.getItem = () => '["una","lista"]';
-    expect(leerDescartes("U1")).toEqual({});
+    expect(leerLocales("U1")).toEqual({});
   });
 
   it("si no puede escribir, sigue adelante", () => {
+    // El bueno es el de la cuenta; esto solo evita el parpadeo.
     globalThis.localStorage.setItem = () => { throw new Error("sin sitio"); };
-    expect(() => descartar("U1", noti("x", HOY))).not.toThrow();
+    expect(() => guardarLocales("U1", { x: HOY })).not.toThrow();
   });
 });

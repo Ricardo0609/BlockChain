@@ -1,12 +1,12 @@
 // Modal de configuración de la cuenta.
 
 import { deviceLabel } from "../biometric";
-import { enServidor } from "../nucleo/datos";
+
 
 export function modalAjustes(ctx){
   const {
     bioBusy, bioCreds, bioOk, enrollBio, mIn, modal, pass, saveSettings, setMIn,
-    setModal, setPass, migrarDatos, migrando, migrarArchivosDatos, migrandoArch,
+    setModal, setPass,
   } = ctx;
   if(modal.t==="settings") return (
     <div className="ov" onClick={()=>setModal(null)}><div className="modal" onClick={e=>e.stopPropagation()}>
@@ -34,19 +34,14 @@ export function modalAjustes(ctx){
               : `Activar en ${deviceLabel()}`}
         </button>
       </>)}
-      {/* ← NUEVO (Etapa 2): traslado al formato nuevo, donde la cadena
-          la escribe el servidor. Se puede correr las veces que haga falta. */}
-      {enServidor() && (<>
-        <p style={{fontSize:14,color:"var(--gris-300)",marginBottom:6}}>Documentos del formato anterior:</p>
-        <button className="btn btn-secondary" style={{width:"100%",marginBottom:8}}
-          disabled={migrando} onClick={migrarDatos}>
-          {migrando ? "Trasladando…" : "Trasladar mis documentos al formato nuevo"}
-        </button>
-        <button className="btn btn-secondary" style={{width:"100%",marginBottom:16}}
-          disabled={migrandoArch} onClick={migrarArchivosDatos}>
-          {migrandoArch ? "Trasladando archivos…" : "Trasladar mis archivos al almacén nuevo"}
-        </button>
-      </>)}
+      {/* ← QUITADO (10 nov): los dos botones de traslado.
+          Movían documentos de la colección `documents` y archivos
+          guardados en base64 dentro de Firestore a donde viven ahora.
+          Eran de cuando se estaba mudando de un sistema a otro, y una
+          cuenta nueva nunca ha tenido nada ahí: lo único que hacían
+          era prometerle a alguien recién llegado que algo suyo se
+          quedó atrás. Las funciones `migrar` y `migrarArchivos` del
+          servidor también se fueron. */}
       <div className="modal-row">
         <button className="btn btn-secondary" onClick={()=>{setPass("");setModal(null);}}>Cancelar</button>
         {/* ← ACTUALIZADO: ahora persiste en Firestore, antes sólo vivía en memoria */}

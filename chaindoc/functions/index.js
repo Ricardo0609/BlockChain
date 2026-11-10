@@ -34,7 +34,7 @@ import {
   rolDe, puede, permisoDeEvento, puedeSubirA, sanearRoles, PERMISOS_QUE_CAMBIAN,
   ROLES, ROL_TEXTO, esDueno, debeRegistrarConsulta, LIMITES, leTocaAlDueno,
 } from "./lib/permisos.js";
-import { decidirBorrado } from "./lib/borrado.js";
+import { decidirBorrado, vinculosVivos } from "./lib/borrado.js";
 import {
   sellarSecreto, comprobarSecreto, estadoIntentos, trasIntento,
   verificarAsercion, nuevoReto, retoValido,
@@ -58,6 +58,25 @@ const idBloque = (n) => String(n).padStart(6, "0");
 // el orden en que se crearon los documentos.
 const FOLIOS = "folios";
 const folioTexto = (n) => String(Math.max(1, Math.trunc(Number(n) || 1))).padStart(2, "0");
+
+// ← NUEVO (10 nov): un contador por tipo, con su letra delante.
+//
+// Antes era uno solo para toda la cuenta, así que el 03 de alguien
+// podía ser un recibo, una factura o un contrato, y el número no decía
+// nada de lo que estabas citando. Ahora R-01 es el primer recibo y
+// D-01 el primer documento de texto, y existen a la vez.
+//
+// Copia de lo que hay en `src/nucleo/cadena.js`, igual que `folioTexto`
+// justo arriba. `pruebas/folios.test.js` comprueba que las dos digan lo
+// mismo; si una cambia sin la otra, la prueba se cae.
+const PREFIJOS = { recibo: "R", factura: "F", contrato: "D", expediente: "C" };
+const tipoDeFolio = (doc) => {
+  const t = doc?.tplId;
+  if(t && PREFIJOS[t]) return t;
+  if(doc?.kind === "expediente" || doc?.destino === "expediente") return "expediente";
+  return "contrato";
+};
+const folioConPrefijo = (tipo, n) => `${PREFIJOS[tipo] || "D"}-${folioTexto(n)}`;
 
 // ── Sellos de firma (10 oct) ──────────────────────────────────
 //
@@ -287,13 +306,20 @@ export const crearOperacion = onCall(OPCIONES, async (req) => {
   // antes de subirlo: con un lote, dos documentos creados en el mismo
   // instante se quedarían con el mismo folio. La transacción reintenta
   // sola si alguien se le adelanta.
+  const tipoFolio = tipoDeFolio(campos);
   const op = await db.runTransaction(async (t) => {
     const previo = await t.get(refFolio);
-    const folio = Math.trunc(Number(previo.data()?.ultimo) || 0) + 1;
+    const datos = previo.data() || {};
+    // ← ACTUALIZADO (10 nov): la cuenta de SU tipo. `ultimo` se sigue
+    // escribiendo para no dejar ciego a nada que lo lea, pero ya no es
+    // de donde sale el número.
+    const porTipo = (datos.porTipo && typeof datos.porTipo === "object") ? datos.porTipo : {};
+    const folio = Math.trunc(Number(porTipo[tipoFolio]) || 0) + 1;
 
     const operacion = {
       ...campos,
-      id: ref.id, folio, numId: folioTexto(folio), version: 2,
+      id: ref.id, folio, numId: folioConPrefijo(tipoFolio, folio), version: 3,
+      tipoFolio,
       owner: autor, ownerUid: uid, ownerEmail: email,
       sharedWith: [],
       roles: {},
@@ -303,7 +329,11 @@ export const crearOperacion = onCall(OPCIONES, async (req) => {
       lastModified: b.timestamp,
     };
 
-    t.set(refFolio, { ultimo: folio, actualizadoEn: FieldValue.serverTimestamp() }, { merge: true });
+    t.set(refFolio, {
+      ultimo: Math.max(Math.trunc(Number(datos.ultimo) || 0), folio),
+      porTipo: { ...porTipo, [tipoFolio]: folio },
+      actualizadoEn: FieldValue.serverTimestamp(),
+    }, { merge: true });
     t.set(ref, operacion);
     t.set(db.doc(`${OPS}/${ref.id}/bloques/${idBloque(0)}`), b);
     encolarParaAnclar(t, ref.id, b);
@@ -335,7 +365,7 @@ export const agregarBloque = onCall(OPCIONES, async (req) => {
   // Una sola puerta, y la buena.
 
   const autor = await nombreDe(uid, email);
-  const camposServidor = await puertaDelVinculo(evento, uid, email);
+  const camposServidor = await puertaDelVinculo(opId, evento, uid, email);
   const { doc } = await asentar({
     opId, evento, cambios, uid, email, autor, tocarFecha,
     ...(camposServidor ? { camposServidor } : {}),
@@ -362,7 +392,7 @@ export const agregarBloque = onCall(OPCIONES, async (req) => {
  * campo del que depende quién puede leer, y esos no se dejan en manos
  * del navegador.
  */
-async function puertaDelVinculo(evento, uid, email){
+async function puertaDelVinculo(opId, evento, uid, email){
   if(evento?.accion !== "VINCULADO") return null;
   const expId = evento?.meta?.expId;
   if(!expId) return null;
@@ -377,6 +407,33 @@ async function puertaDelVinculo(evento, uid, email){
   const exp = (await db.doc(`${OPS}/${expId}`).get()).data();
   if(!exp) throw new HttpsError("not-found", "Ese expediente no existe.");
   exigir(exp, uid, email, "ver");
+
+  // ← NUEVO (6 nov): UN COMPROBANTE, UN CONTRATO.
+  //
+  // El navegador ya lo impedía; faltaba aquí, y no era un lujo. El
+  // motivo de fondo es que el mismo gasto quedaría comprobado dos
+  // veces, que es justo lo que este producto existe para que no pase.
+  //
+  // Pero además rompía el acceso: `adjuntoA` es UN campo, y de él
+  // cuelga quién puede leer la evidencia. Adjuntar el mismo recibo a
+  // un segundo contrato lo sobrescribía, y la gente del primero se
+  // quedaba viendo el recibo listado, con su huella, y un
+  // permission-denied al abrirlo. Retirarlo del segundo lo dejaba en
+  // null y entonces no lo abría nadie.
+  //
+  // Otro requisito DEL MISMO contrato sí: eso es un comprobante que
+  // cubre dos obligaciones del mismo acuerdo, y no duplica nada.
+  // El bloque VINCULADO se asienta en el DOCUMENTO, no en el
+  // expediente, así que `opId` ya es el recibo.
+  const yaEn = vinculosVivos((await db.doc(`${OPS}/${opId}`).get()).data());
+  const otro = yaEn.find((x) => x !== expId);
+  if(otro){
+    const titulo = ((await db.doc(`${OPS}/${otro}`).get()).data() || {}).title;
+    throw new HttpsError("failed-precondition",
+      titulo
+        ? `Este documento ya está adjunto a «${titulo}». Un comprobante sólo puede justificar un contrato: retíralo de ahí antes de adjuntarlo a otro.`
+        : "Este documento ya está adjunto a otro contrato. Un comprobante sólo puede justificar un contrato: retíralo de ahí antes de adjuntarlo a otro.");
+  }
 
   return { adjuntoA: expId };
 }
@@ -643,6 +700,71 @@ export const quitarAcceso = onCall(OPCIONES, async (req) => {
 });
 
 /**
+ * Salirse uno mismo de un documento que le compartieron.
+ *
+ * ← NUEVO (6 nov). Hasta hoy, lo que te compartían se quedaba en tu
+ * lista para siempre: borrar está bien prohibido —borra para todos y
+ * no es tuyo—, pero salirse no existía. El único camino era pedirle al
+ * dueño que te quitara.
+ *
+ * Es `quitarAcceso` con dos diferencias que importan:
+ *
+ *   · No pide permiso de «compartir», porque no estás tocando el
+ *     acceso de nadie más: el tuyo. Lo único que se exige es que
+ *     tengas acceso ahora mismo.
+ *   · El dueño NO puede usarla. Salirse de lo tuyo propio te dejaría
+ *     un documento que existe y que no puede abrir nadie.
+ *
+ * Y queda asentado. No es cortesía: si la otra parte de un contrato se
+ * sale, eso cambia quién va a ver lo que pase después, y el dueño
+ * tiene que poder enterarse sin adivinarlo.
+ */
+export const dejarDeVer = onCall(OPCIONES, async (req) => {
+  const { uid, email } = quien(req);
+  const { opId } = req.data || {};
+  if(!opId) throw new HttpsError("invalid-argument", "Falta el identificador de la operación.");
+
+  const refOp = db.doc(`${OPS}/${opId}`);
+  const op = (await refOp.get()).data();
+  if(!op) throw new HttpsError("not-found", "La operación no existe.");
+
+  const correo = String(email || "").toLowerCase();
+  if(op.ownerUid === uid || (op.ownerEmail || "").toLowerCase() === correo){
+    throw new HttpsError("failed-precondition",
+      "Este documento es tuyo: no puedes dejar de verlo. Si ya no lo quieres, elimínalo.");
+  }
+
+  const antes = rolDe(op, uid, correo);
+  if(!antes) throw new HttpsError("permission-denied", "No tienes acceso a este documento.");
+
+  const roles = sanearRoles(op.roles);
+  delete roles[correo];
+
+  await refOp.update({
+    sharedWith: (op.sharedWith || []).filter((c) => c !== correo),
+    roles,
+    actualizadoEn: FieldValue.serverTimestamp(),
+  });
+
+  const autor = await nombreDe(uid, email);
+  // `tocarFecha: false`: salirse no es actividad del documento, y
+  // subirlo al principio de la lista de todos los demás seria mentir
+  // sobre que algo se movio ahi dentro.
+  await asentar({
+    opId, uid, email, autor, tocarFecha: false, exigirAcceso: false,
+    evento: {
+      accion: "COMPARTIDO",
+      contenido: `${autor} dejó de ver este documento`,
+      meta: { tipo: "salida", correo, rolAnterior: antes },
+    },
+  });
+
+  // A propósito no se devuelve el documento: quien llama acaba de
+  // perder el acceso, y leerlo otra vez fallaría.
+  return { fuera: true };
+});
+
+/**
  * Pedirle un comprobante a alguien. La solicitud es lo que le da
  * permiso de subir, y sólo a ese requisito: si no tenía acceso, entra
  * como aportador; si ya tenía uno mayor, se le respeta.
@@ -695,70 +817,6 @@ export const pedirEvidencia = onCall(OPCIONES, async (req) => {
   return { doc, solicitud };
 });
 
-// ── Migración v1 → v2 ─────────────────────────────────────────
-// Copia los documentos del usuario al modelo nuevo. Los bloques viejos
-// se conservan tal cual (siguen verificando con su fórmula v1) y encima
-// se asienta un bloque de MIGRACIÓN que los encadena al formato nuevo.
-export const migrar = onCall(OPCIONES, async (req) => {
-  const { uid, email } = quien(req);
-  const autor = await nombreDe(uid, email);
-
-  const viejos = await db.collection("documents").where("ownerUid", "==", uid).limit(300).get();
-  const resultado = { revisados: viejos.size, migrados: 0, omitidos: 0, errores: [] };
-
-  for(const d of viejos.docs){
-    const v1 = d.data();
-    try{
-      const ref = db.doc(`${OPS}/${d.id}`);
-      if((await ref.get()).exists){ resultado.omitidos++; continue; }
-
-      const cadena = Array.isArray(v1.chain) ? v1.chain : [];
-      const revision = await verificarCadena(cadena);
-
-      const lote = db.batch();
-      const campos = { ...v1 };
-      delete campos.chain;                 // la cadena se copia aparte, a la subcolección
-      // Los bloques migrados también entran a la cola: son historia
-      // real y merecen fecha comprobable como los nuevos.
-      cadena.forEach((b) => {
-        lote.set(db.doc(`${OPS}/${d.id}/bloques/${idBloque(b.index)}`), b);
-        if(b.hash) encolarParaAnclar(lote, d.id, b);
-      });
-
-      const previo = cadena.length ? cadena[cadena.length - 1] : null;
-      const sello = await armarBloqueV2({
-        previo,
-        action: "MIGRACIÓN",
-        content: `Historia trasladada al formato nuevo (${cadena.length} bloques)`,
-        author: autor, autorUid: uid,
-        meta: { desde: "v1", bloques: cadena.length, cadenaValida: revision.valid,
-                fallaEn: revision.valid ? null : revision.failedAt },
-        timestamp: new Date().toISOString(),
-      });
-      lote.set(db.doc(`${OPS}/${d.id}/bloques/${idBloque(sello.index)}`), sello);
-      encolarParaAnclar(lote, d.id, sello);
-
-      lote.set(ref, {
-        ...campos,
-        id: d.id, version: 2,
-        sharedWith: v1.sharedWith || [],
-        bloques: cadena.length + 1,
-        ultimoHash: sello.hash,
-        migradoEn: new Date().toISOString(),
-        creadoEn: cadena[0]?.timestamp || v1.lastModified || new Date().toISOString(),
-        actualizadoEn: FieldValue.serverTimestamp(),
-      });
-
-      lote.update(d.ref, { migradoA: `${OPS}/${d.id}`, migradoEn: new Date().toISOString() });
-      await lote.commit();
-      resultado.migrados++;
-    }catch(e){
-      resultado.errores.push({ id: d.id, error: String(e?.message || e) });
-    }
-  }
-
-  return resultado;
-});
 
 // ══════════════════════════════════════════════════════════════
 // ARCHIVOS EN STORAGE
@@ -771,6 +829,17 @@ export const migrar = onCall(OPCIONES, async (req) => {
 
 const bucket = () => getStorage().bucket();
 const META = "evidencias";                 // registro de archivos (sin los bytes)
+
+// ← QUITADO (10 nov): `migrar` y `migrarArchivos`.
+//
+// Movían documentos de la colección `documents` —el formato de antes
+// de la Etapa 2, cuando la cadena la escribía el navegador— y archivos
+// guardados como base64 dentro de Firestore. Eran de cuando se estaba
+// mudando de un sistema de guardado a otro.
+//
+// Se van enteras, no sólo sus botones. `migrar` copiaba documentos de
+// una colección a otra, y un endpoint que hace eso no tiene por qué
+// seguir alcanzable cuando ya no queda nada que mover.
 const LIMITE_ARCHIVO = 20 * 1024 * 1024;   // 20 MB
 
 /** Lee un objeto de Storage y devuelve sus bytes y su huella. */
@@ -1213,35 +1282,6 @@ export const archivo = onRequest({ cors: true, memory: "512MiB" }, async (req, r
   }
 });
 
-// ── Migración de los archivos en base64 a Storage ─────────────
-export const migrarArchivos = onCall({ ...OPCIONES, timeoutSeconds: 540, memory: "512MiB" }, async (req) => {
-  const { uid } = quien(req);
-  const pend = await db.collection(META).where("ownerUid", "==", uid).limit(300).get();
-  const resultado = { revisados: pend.size, migrados: 0, omitidos: 0, errores: [] };
-
-  for(const d of pend.docs){
-    const f = d.data();
-    try{
-      if(f.ruta || !f.data){ resultado.omitidos++; continue; }
-
-      const bytes = Buffer.from(f.data, "base64");
-      const ruta = `evidencias/${uid}/${f.docId}/${d.id}`;
-      await bucket().file(ruta).save(bytes, {
-        contentType: f.tipo || "application/octet-stream",
-        metadata: { cacheControl: "private, max-age=60" },
-      });
-
-      const hash = f.hash || await sha256Bytes(bytes);
-      await d.ref.update({ ruta, hash, tam: bytes.length, data: FieldValue.delete(),
-                           migradoEn: new Date().toISOString() });
-      resultado.migrados++;
-    }catch(e){
-      resultado.errores.push({ id: d.id, error: String(e?.message || e) });
-    }
-  }
-
-  return resultado;
-});
 
 // ══════════════════════════════════════════════════════════════
 // IDENTIDAD: CÓDIGO DE FIRMA, CONTRASEÑAS Y BIOMETRÍA

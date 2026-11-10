@@ -14,20 +14,49 @@ import { almacen } from "../storage";
 import { llamar } from "./backend";
 
 /** El testigo viaja en la dirección: ?entrega=... */
+// ── EL ENLACE DE ENTREGA ──────────────────────────────────────
+//
+// ← CAMBIADO (6 nov): de `?entrega=<testigo>` a `/e/<testigo>`.
+//
+// El viejo se rompía al pegarlo. Un enlace con `?` y un testigo largo
+// lo parten en dos WhatsApp y Outlook, y lo que le llega al proveedor
+// es media dirección que no abre nada. El corto aguanta.
+//
+// LOS VIEJOS SIGUEN FUNCIONANDO PARA SIEMPRE. Hay enlaces repartidos
+// que viven en bandejas de entrada y no se pueden volver a mandar, así
+// que leer `?entrega=` no es compatibilidad por pereza: es que la otra
+// parte no tiene forma de conseguir el nuevo.
+//
+// OJO AL PUBLICAR: `/e/<testigo>` exige que el servidor devuelva
+// index.html para cualquier ruta. Sin esa regla da 404 y el enlace no
+// llega a abrir la aplicación. La prueba es entrar a /e/loquesea y ver
+// si carga la página o un error del servidor.
+
+const PREFIJO = "/e/";
+
 export const testigoDeUrl = () => {
-  try{ return new URLSearchParams(window.location.search).get("entrega") || null; }
-  catch{ return null; }
+  try{
+    const ruta = window.location.pathname || "";
+    if(ruta.startsWith(PREFIJO)){
+      const t = decodeURIComponent(ruta.slice(PREFIJO.length)).replace(/\/+$/, "");
+      if(t) return t;
+    }
+    return new URLSearchParams(window.location.search).get("entrega") || null;
+  }catch{ return null; }
 };
 
 export const enlaceDeEntrega = (testigo) =>
-  `${window.location.origin}${window.location.pathname}?entrega=${encodeURIComponent(testigo)}`;
+  `${window.location.origin}${PREFIJO}${encodeURIComponent(testigo)}`;
 
 /** Limpia la dirección sin recargar, para que el testigo no quede a la vista. */
 export function limpiarUrlDeEntrega(){
   try{
     const u = new URL(window.location.href);
     u.searchParams.delete("entrega");
-    window.history.replaceState({}, "", u.pathname + (u.search || ""));
+    // La ruta corta lleva el testigo DENTRO del camino, así que
+    // limpiarla es volver a la raíz, no quitar un parámetro.
+    const ruta = u.pathname.startsWith(PREFIJO) ? "/" : u.pathname;
+    window.history.replaceState({}, "", ruta + (u.search || ""));
   }catch{ /* si el navegador no deja, no pasa nada */ }
 }
 

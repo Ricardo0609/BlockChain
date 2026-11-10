@@ -3,6 +3,29 @@
 import { ENTORNO } from "../firebase";
 
 // Si algo truena al dibujar, se muestra esto en vez de una pantalla en blanco.
+// ← NUEVO (10 nov): falta VITE_BACKEND=servidor en el despliegue.
+//
+// Esto no se le enseña a un usuario normal nunca: si sale, es que el
+// sitio se publicó mal. Dice qué falta en vez de un «algo salió mal»,
+// porque quien lo va a leer es quien puede arreglarlo.
+export function PantallaMalConfigurada(){
+  return (
+    <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center",
+                  justifyContent:"center", gap:16, padding:24, textAlign:"center",
+                  fontFamily:"Inter, system-ui, sans-serif" }}>
+      <h1 style={{ fontSize:22 }}>Esta copia está mal configurada</h1>
+      <p style={{ color:"#666", maxWidth:420, lineHeight:1.55 }}>
+        Falta <code>VITE_BACKEND=servidor</code> en las variables de entorno del
+        despliegue. Sin eso, la aplicación guardaría en el formato anterior y
+        escribiría la cadena desde el navegador.
+      </p>
+      <p style={{ color:"#666", maxWidth:420, lineHeight:1.55 }}>
+        No se ha guardado nada. Añade la variable, vuelve a publicar y recarga.
+      </p>
+    </div>
+  );
+}
+
 export function PantallaError(){
   return (
     <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center",

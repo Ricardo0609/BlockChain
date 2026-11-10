@@ -27,11 +27,19 @@ export function vinculosVivos(doc) {
 }
 
 /**
- * Quién más ha firmado esto, sin contar al dueño.
+ * Quién más ha dejado constancia aquí, sin contar al dueño.
  *
- * Mira los dos sitios donde queda una firma: los bloques FIRMA de la
- * cadena y las firmas del acuerdo —la aceptación de la otra parte en
- * un contrato—, porque esa segunda no escribe bloque de firma.
+ * Mira los TRES sitios donde alguien que no eres tú deja algo que es
+ * suyo: los bloques FIRMA de la cadena, las firmas del acuerdo —la
+ * aceptación de la otra parte, que no escribe bloque de firma— y el
+ * RECHAZO.
+ *
+ * ← NUEVO (6 nov): el rechazo. Faltaba, y era el hueco más feo de
+ * todos: un contrato que la otra parte NO aceptó no tenía firmas ni
+ * vínculos, así que se podía borrar del todo. Quien lo mandó podía
+ * hacer desaparecer la constancia de que se lo rechazaron, y con ella
+ * el motivo que la otra parte escribió. El «no» de alguien es suyo
+ * igual que su «sí».
  */
 export function firmasDeOtros(doc) {
   const dueno = doc?.ownerUid || null;
@@ -52,6 +60,11 @@ export function firmasDeOtros(doc) {
     nombres.add(f?.nombre || f?.email || "la otra parte");
   }
 
+  const r = doc?.acuerdo?.rechazo;
+  if (r && String(r.porEmail || "").toLowerCase() !== correoDueno) {
+    nombres.add(r.porNombre || r.porEmail || "la otra parte");
+  }
+
   return [...nombres];
 }
 
@@ -69,9 +82,19 @@ export function decidirBorrado(doc) {
   const motivos = [];
 
   if (firmaron.length) {
-    motivos.push(firmaron.length === 1
-      ? `${firmaron[0]} lo firmó, así que también es su prueba.`
-      : `Lo firmaron ${firmaron.join(", ")}, así que también es su prueba.`);
+    const rechazo = doc?.acuerdo?.rechazo;
+    const soloRechazo = rechazo && firmaron.length === 1
+      && !BLOQUES(doc).some((b) => b?.action === "FIRMA")
+      && !(doc?.acuerdo?.firmas || []).some((f) => f?.parte === "receptor");
+    if (soloRechazo) {
+      // Decirle «lo firmó» a quien justamente NO lo firmó sería mentir
+      // en el único sitio donde el producto no se lo puede permitir.
+      motivos.push(`${firmaron[0]} no aceptó este contrato, y esa respuesta es suya.`);
+    } else {
+      motivos.push(firmaron.length === 1
+        ? `${firmaron[0]} lo firmó, así que también es su prueba.`
+        : `Lo firmaron ${firmaron.join(", ")}, así que también es su prueba.`);
+    }
   }
   if (adjuntoEn.length) {
     motivos.push(adjuntoEn.length === 1

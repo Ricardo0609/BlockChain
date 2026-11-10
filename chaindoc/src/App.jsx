@@ -37,8 +37,9 @@ import { descargarPaquete, recogerAdjuntos } from "./paquete";
 import { FORMS, serializeForm } from "./ui/formularios";
 import { TEMPLATES, esBorradorContrato } from "./nucleo/catalogos";
 import { ORDEN_POR_DEFECTO } from "./nucleo/orden";
+import { leerActivos } from "./ui/estiloActivo";
 import { getUrlDoc, setUrlDoc } from "./nucleo/formato";
-import { folioTexto, genId, sha256, siguienteFolio, verifyChain } from "./nucleo/cadena";
+import { folioConPrefijo, genId, sha256, siguienteFolio, tipoDeFolio, verifyChain } from "./nucleo/cadena";
 import { normalizarEnlace, nombreDeEnlace, textoFirmado } from "./nucleo/enlaces";
 import { parseFactura } from "./nucleo/extraccion";
 import {
@@ -59,7 +60,7 @@ import { bloquea, decideAhora, esperaFirmaDe, estadoAcuerdo, firmaDe, parteDe } 
 import { limpiarSecciones, seccionesDe } from "./nucleo/secciones";
 import { aTextoPlano, normalizar, ID_PAPEL } from "./nucleo/texto";
 import { notificacionesDe } from "./nucleo/notificaciones";
-import { descartar, leerDescartes, recuperar } from "./nucleo/descartes";
+import { descartar, fundir, guardarLocales, leerLocales, recuperar } from "./nucleo/descartes";
 import { llamar, errorBackend } from "./nucleo/backend";
 import { leerAvisos } from "./nucleo/avisos";
 import {
@@ -69,6 +70,7 @@ import {
 import {
   ROLES_ASIGNABLES, ROL_TEXTO, ROL_AYUDA, rolDe, puede, puedeSubirA,
   listaDeAccesos, compartir as compartirServidor, quitarAcceso as quitarAccesoServidor,
+  dejarDeVer as dejarDeVerServidor,
   pedirComprobante,
 } from "./nucleo/accesos";
 import { renderAcceso } from "./pantallas/Acceso";
@@ -123,8 +125,6 @@ export default function Octavin(){
   const [title,setTitle]     = useState("");
   const [content,setContent] = useState("");
   const [,setDirty]     = useState(false);
-  const [migrando,setMigrando] = useState(false);   // ← NUEVO (Etapa 2)
-  const [migrandoArch,setMigrandoArch] = useState(false);   // ← NUEVO (archivos)
   const [saving,setSaving]   = useState(false);
   const [histOpen,setHist]   = useState(false);
   const [histTab,setHistTab] = useState("Línea de tiempo");  // ← ACTUALIZADO
@@ -247,7 +247,34 @@ export default function Octavin(){
       document.execCommand(cmd, false, cmd==="formatBlock" ? `<${valor}>` : valor);
     }catch(e){ console.error("[octavin] no se pudo aplicar el estilo", cmd, e); }
     setDirty(true);
+    setEstiloAct(leerActivos(document));
   };
+
+  // ← NUEVO (6 nov): qué estilo tiene el texto donde está el cursor,
+  // para que la barra lo ilumine.
+  //
+  // Se escucha `selectionchange` en el documento y no eventos del
+  // editor: el cursor también se mueve con el teclado, con deshacer y
+  // al arrastrar, y colgarse de click y keyup deja la barra mintiendo
+  // la mitad del tiempo. Se desengancha al salir de edición, que es
+  // cuando la barra deja de existir.
+  const [estiloAct,setEstiloAct] = useState({ bloque:"p" });
+  useEffect(()=>{
+    if(!editMode) return;
+    let pedido = 0;
+    const mirar = ()=>{
+      // Una vez por cuadro: `selectionchange` se dispara por cada
+      // tecla, y leer el estado del navegador no es gratis.
+      if(pedido) return;
+      pedido = requestAnimationFrame(()=>{ pedido = 0; setEstiloAct(leerActivos(document)); });
+    };
+    document.addEventListener("selectionchange", mirar);
+    mirar();
+    return ()=>{
+      document.removeEventListener("selectionchange", mirar);
+      if(pedido) cancelAnimationFrame(pedido);
+    };
+  }, [editMode]);
   // ← NUEVO (22 oct): el panel de notificaciones. No guarda nada: lo
   // que enseña se deriva de los documentos ya cargados.
   const [campanaOpen,setCampana] = useState(false);
@@ -409,7 +436,18 @@ export default function Octavin(){
       // ← NUEVO (23 oct): los avisos que esta persona ya quitó de la
       // campana. Van con la cuenta, igual que las carpetas, para que
       // dos personas en el mismo navegador no se mezclen.
-      setDescartes(leerDescartes(account.uid));
+      // ← CAMBIADO (6 nov): lo quitado va en la cuenta. Se pinta ya
+      // con lo del navegador para que la campana no parpadee, y se
+      // funde con lo del perfil en cuanto llega. Lo que hubiera aquí
+      // de antes sube en esa misma fusión: no hace falta migrar nada.
+      const locales = leerLocales(account.uid);
+      setDescartes(locales);
+      const juntos = fundir(locales, profile?.descartes);
+      setDescartes(juntos);
+      guardarLocales(account.uid, juntos);
+      if(JSON.stringify(juntos) !== JSON.stringify(profile?.descartes || {})){
+        saveProfile(account.uid, { descartes: juntos });
+      }
       setUser(profile?.name || account.displayName || "");
       setAcctEmail(account.email || "");
       // ← NUEVO: quien se registro antes de que existieran estos textos,
@@ -569,35 +607,6 @@ export default function Octavin(){
   };
 
   // ← NUEVO: guarda los cambios de configuración en el perfil de Firestore
-  // ← NUEVO (Etapa 2): traslada los documentos del formato viejo al nuevo.
-  // Se puede correr varias veces: lo que ya está migrado se omite.
-  const migrarDatos = async()=>{
-    setMigrando(true);
-    try{
-      const r = await llamar("migrar");
-      await refresh();
-      notify(r.migrados
-        ? `${r.migrados} documento${r.migrados===1?"":"s"} trasladado${r.migrados===1?"":"s"} al formato nuevo ✓`
-        : "No quedaba nada por trasladar");
-      if(r.errores?.length) notify(`${r.errores.length} no se pudieron trasladar`,"err");
-    }catch(e){ console.error(e); notify(errorBackend(e),"err"); }
-    finally{ setMigrando(false); }
-  };
-
-  // ← NUEVO: pasa los archivos que estaban en base64 dentro de Firestore
-  // al almacén de verdad. También se puede correr varias veces.
-  const migrarArchivosDatos = async()=>{
-    setMigrandoArch(true);
-    try{
-      const r = await llamar("migrarArchivos");
-      notify(r.migrados
-        ? `${r.migrados} archivo${r.migrados===1?"":"s"} trasladado${r.migrados===1?"":"s"} al almacén ✓`
-        : "No quedaba ningún archivo por trasladar");
-      if(r.errores?.length) notify(`${r.errores.length} no se pudieron trasladar`,"err");
-    }catch(e){ console.error(e); notify(errorBackend(e),"err"); }
-    finally{ setMigrandoArch(false); }
-  };
-
   const saveSettings = async()=>{
     const patch = {};
     if(mIn.trim() && mIn.trim()!==user) patch.name = mIn.trim();
@@ -696,9 +705,12 @@ export default function Octavin(){
   // la única que ve el contador de la cuenta. Va aquí para el camino sin
   // servidor, donde no hay quién lo asigne, y se calcula del mayor folio
   // que ya hay en la lista.
-  const folioNuevo = () => {
-    const n = siguienteFolio(docs);
-    return { folio: n, numId: folioTexto(n) };
+  // ← ACTUALIZADO (10 nov): el contador es por tipo, así que hay que
+  // decirle de qué tipo va a ser el documento antes de crearlo.
+  const folioNuevo = (parcial) => {
+    const tipo = tipoDeFolio(parcial);
+    const n = siguienteFolio(docs, tipo);
+    return { folio: n, numId: folioConPrefijo(tipo, n), tipoFolio: tipo };
   };
 
   // ← NUEVO (10 oct): el aviso de «¿Es un contrato?» se puede quitar.
@@ -761,7 +773,7 @@ export default function Octavin(){
       : `Creación de documento: ${name}`;
 
     const nd = await crear({
-      id: genId(), ...folioNuevo(), title:name, content:body, folder:mIn2||null,
+      id: genId(), ...folioNuevo({ tplId: formKey }), title:name, content:body, folder:mIn2||null,
       owner:user, ownerUid:uid, ownerEmail:acctEmail,
       tplId: formKey, fields: formKey ? initial : null,
       source: isImport ? (method==="escanear"?"escaneo":"importado") : "nuevo",
@@ -798,7 +810,7 @@ export default function Octavin(){
       const name = mIn.trim();
       if(!name){ notify("Ponle un nombre al contrato","err"); return; }
       const nd = await crear({
-        id: genId(), ...folioNuevo(), title:name, content:"", folder:mIn2||null,
+        id: genId(), ...folioNuevo({ destino:"expediente" }), title:name, content:"", folder:mIn2||null,
         owner:user, ownerUid:uid, ownerEmail:acctEmail,
         tplId:null, fields:null, destino:"expediente",
         source:"nuevo", sourceFile:null, password:null, sharedWith:[],
@@ -1071,7 +1083,7 @@ export default function Octavin(){
     try{
     const name = mIn.trim() || smartRes.titulo;
     const nd = await crear({
-      id: genId(), ...folioNuevo(), title:name, content:smartText, folder:mIn2||null,
+      id: genId(), ...folioNuevo({ kind:"expediente" }), title:name, content:smartText, folder:mIn2||null,
       owner:user, ownerUid:uid, ownerEmail:acctEmail,
       kind:"expediente",                       // ← lo distingue de un documento normal
       tplId:null, fields:null,
@@ -1506,6 +1518,23 @@ export default function Octavin(){
     }catch(e){ console.error(e); notify("No se pudo cambiar el orden de las fases.","err"); }
     finally{ setSaving(false); }
   };
+
+  // ← NUEVO (6 nov): salirse de algo que te compartieron.
+  //
+  // Vuelve al inicio a propósito: acabas de perder el acceso, así que
+  // quedarte en la pantalla del documento sería quedarte mirando algo
+  // que ya no puedes leer, y el primer refresco daría un error feo.
+  const dejarDeVerDoc = (id)=> conEspera("saliendo", async()=>{
+    try{
+      await dejarDeVerServidor(id);
+      setDocs(xs => xs.filter(x => x.id !== id));
+      setModal(null);
+      goHome();
+      notify("Ya no verás este documento. Si lo necesitas, pídeselo otra vez a quien te lo compartió.");
+    }catch(e){
+      console.error(e); notify(errorBackend(e),"err");
+    }
+  });
 
   // ← NUEVO: retirar una solicitud que ya no aplica
   const cancelarSolicitud = async(sid)=>{
@@ -2169,13 +2198,22 @@ export default function Octavin(){
   // computadora; esto no, porque no existe. Ver `nucleo/notificaciones.js`.
   const notis = notificacionesDe(docs, { uid, email: acctEmail, descartes });
 
+  // Se guarda en los dos sitios: en el navegador para que el aviso
+  // desaparezca en el acto, y en la cuenta para que siga quitado en el
+  // teléfono. Si la red falla, el de aquí ya está puesto y la próxima
+  // entrada vuelve a intentar subirlo al fundir.
+  const guardarDescartes = (mapa)=>{
+    setDescartes(mapa);
+    guardarLocales(uid, mapa);
+    saveProfile(uid, { descartes: mapa });
+  };
   const quitarNoti = (n)=>{
-    setDescartes(descartar(uid, n));
+    guardarDescartes(descartar(descartes, n));
     setUltimaQuitada(n);
   };
   const deshacerNoti = ()=>{
     if(!ultimaQuitada) return;
-    setDescartes(recuperar(uid, ultimaQuitada.clave));
+    guardarDescartes(recuperar(descartes, ultimaQuitada.clave));
     setUltimaQuitada(null);
   };
   // Al volver a abrir la campana, el «deshacer» de la vez pasada ya no
@@ -2184,14 +2222,14 @@ export default function Octavin(){
 
   // Todo lo que las pantallas y modales necesitan del estado y los manejadores.
   const ctx = {
-    MAX_IMGS, moveTo, migrarDatos, migrando, migrarArchivosDatos, migrandoArch, acctEmail, addImage, attachEvidence, authBusy, authMode, authStep,
+    MAX_IMGS, moveTo, acctEmail, addImage, attachEvidence, authBusy, authMode, authStep,
     bioBusy, bioCreds, bioOk, cancelarSolicitud, closeCreate, confirmarConversion,
     content, convOculto, copyLink, creando, crearBorrador, createDoc, createExpediente, createStep, d, delDoc, doLogin,
     expTab, setExpTab, tplInfo, setTplInfo, desbloqueando,
     // ← NUEVO (21 oct): secciones apagables y cambio de rol en sitio.
     secciones, setSecciones, cambiarRol, rolBusy,
     carpNueva, setCarpNueva, carpErr, setCarpErr, crearCarpeta,
-    aplicarEstilo,
+    aplicarEstilo, estiloAct,
     docTab, setDocTab,
     // ← NUEVO (22 oct): la campana.
     notis, campanaOpen, setCampana,
@@ -2200,6 +2238,7 @@ export default function Octavin(){
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
     doLogout, doReset, doShare, doSignCode, doSignup, doVerify, docs, dragOver, drop,
     dropFase, dropReq, editMode, email, enrollBio, exportarPaquete, exps, faseSel,
+    dejarDeVerDoc,
     subiendoReq, setFasesEnOrden, carpAbierta, setCarpAbierta,
     orden, setOrden, busca, setBusca,
     fields, filesOpen, filterF, finishAuth, focoDup, folders, getFile, goHome,

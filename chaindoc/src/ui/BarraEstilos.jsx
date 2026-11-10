@@ -19,6 +19,7 @@
 // puede escribir lo que quiera, que no se guarda.
 
 import { Icon } from "./iconos";
+import { estaActivo } from "./estiloActivo";
 
 const TITULOS = [
   { id: "p",  txt: "Normal", ayuda: "Texto normal" },
@@ -35,19 +36,26 @@ const ALINEAR = [
 ];
 
 export function renderBarraEstilos(ctx){
-  const { aplicarEstilo } = ctx;
+  const { aplicarEstilo, estiloAct } = ctx;
 
   // `onMouseDown` con preventDefault y no `onClick`: al pulsar un
   // botón el navegador quita el cursor del texto, y execCommand sin
   // selección no hace nada. Evitando que el botón tome el foco, la
   // selección sigue donde estaba.
-  const boton = (props, dentro)=>(
-    <button type="button" className={props.clase||"be-btn"} key={props.k}
-      title={props.ayuda} aria-label={props.ayuda}
-      onMouseDown={e=>{ e.preventDefault(); aplicarEstilo(props.cmd, props.valor); }}>
-      {dentro}
-    </button>
-  );
+  // ← NUEVO (6 nov): el botón dice si eso YA está puesto donde tienes
+  // el cursor. `aria-pressed` además de la clase: para quien navega
+  // con lector de pantalla, el color no existe.
+  const boton = (props, dentro)=>{
+    const on = estaActivo(estiloAct, props.cmd, props.valor);
+    return (
+      <button type="button" key={props.k} aria-pressed={on}
+        className={`${props.clase||"be-btn"}${on?" on":""}`}
+        title={props.ayuda} aria-label={props.ayuda}
+        onMouseDown={e=>{ e.preventDefault(); aplicarEstilo(props.cmd, props.valor); }}>
+        {dentro}
+      </button>
+    );
+  };
 
   return (
     <div className="be" role="toolbar" aria-label="Estilos del texto">

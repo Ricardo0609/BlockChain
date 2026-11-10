@@ -1718,6 +1718,12 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   font-family:var(--f-p);font-size:14px;line-height:1;
   transition:background .14s,color .14s}
 .be-btn:hover{background:var(--bg-soft);color:var(--negro)}
+/* ← NUEVO (6 nov): lo que YA está puesto donde tienes el cursor.
+   Relleno y no sólo color de letra: en una barra de ocho botones, un
+   tono de gris distinto no se ve, y la mitad de estos son iconos. */
+.be-btn.on{background:var(--negro);color:var(--papel,#fff)}
+.be-btn.on:hover{background:#0b131c}
+.be-btn.on b,.be-btn.on i{color:inherit}
 .be-btn:active{background:var(--gris-100)}
 .be-btn:focus-visible{outline:2px solid var(--negro);outline-offset:-2px}
 .be-txt{font-weight:600}
@@ -1812,6 +1818,16 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 
 /* NUEVO (25 oct): por que un documento no se borra del todo. */
 .del-motivos{margin:0 0 14px;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+/* ← NUEVO (6 nov): los contratos donde esto es evidencia, por su
+   nombre. Sin punto de lista: no son razones, son sitios a los que
+   puedes ir a mirar. */
+.del-exps{list-style:none;margin:-6px 0 14px;padding:0;
+  display:flex;flex-direction:column;gap:7px}
+.del-exps li{display:flex;align-items:center;gap:8px;font-size:13px;
+  color:var(--negro);background:var(--gris-50,rgba(0,0,0,.04));
+  border-radius:9px;padding:8px 11px;overflow-wrap:anywhere}
+.del-exps li span{min-width:0}
+.del-exp-otro{color:var(--gris-300)!important;font-style:italic}
 .del-motivos li{font-size:14.5px;line-height:1.5;color:var(--gris-400)}
 
 /* NUEVO (25 oct): el contrato que todavia se esta redactando. */
