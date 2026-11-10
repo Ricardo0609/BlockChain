@@ -13,7 +13,7 @@ import { renderCuerpo } from "../ui/Cuerpo";
 import { estaVacio, normalizar, ID_PAPEL } from "../nucleo/texto";
 import { esBorradorContrato } from "../nucleo/catalogos";
 import { esComprobante, faltanDatos, sePuedeFirmar, puedeSalir, soloSuDueno,
-         porQueNoSale } from "../nucleo/comprobantes";
+         porQueNoSale, faltaRespaldo } from "../nucleo/comprobantes";
 import { renderExpediente } from "./Expediente";
 import { botonCampana, renderCampana } from "./Campana";
 import { renderMenu } from "./MenuLateral";
@@ -30,7 +30,7 @@ export function renderDocumento(ctx){
     MAX_IMGS, abrirProtegido, acctEmail, addImage, bioBusy, bioCreds, bioOk, convOculto, d, doVerify,
     docs, editMode, exportarPaquete, fields, getFile, goHome, histOpen, histTab, ocupado,
     iniciarConversion, lockInput, menuOpen, modal, notif, openDoc, openExpedientes,
-    ocultarConvertir, puedeConvertir, removeImage, save, saving, setDirty, setEdit, setFields,
+    ocultarConvertir, puedeConvertir, removeImage, renombrar, save, saving, setDirty, setEdit, setFields,
     setHist, setHistTab, setLinkErr, setLinkExp, setLock, setLockInput, setMIn, setMenu,
     setModal, setPass, setShowHashes, setTitle, showHashes, smartBusy, title, uid,
     setEnlaceNuevo, setShareModo, setShareTodo, setShareReqs,
@@ -74,6 +74,10 @@ export function renderDocumento(ctx){
   // Sólo su dueño lo cambia: la firma de abajo dice «yo recibí esto»,
   // y no puede amparar algo que escribió otro.
   const loEdito    = soloSuDueno(d, uid, acctEmail);
+  // ← NUEVO (10 nov): el título de un expediente se edita en su sitio.
+  // `puede("editar")` ya lleva dentro el estado del acuerdo, así que
+  // esto se apaga solo cuando el contrato se manda a firmar.
+  const puedeRenombrar = d.kind === "expediente" && puede("editar");
   const faltan     = faltanDatos(d);
   const puedoFirmar = sePuedeFirmar(d);
   // Llenar → firmar → compartir. Hasta el último paso no sale de aquí.
@@ -241,11 +245,35 @@ export function renderDocumento(ctx){
     </nav>
 
     <div className="page">
+      {/* ← ACTUALIZADO (10 nov): el título de un contrato inteligente
+          se edita aquí mismo.
+
+          Un expediente no tiene «Editar» —no hay cuerpo que escribir—
+          y al quitar ese botón se quedó sin forma de renombrarse. En
+          vez de devolver un botón que promete más de lo que hace, el
+          título es el campo: se escribe encima y se guarda al salir.
+
+          Cuándo se puede lo decide `puede("editar")`, que ya trae el
+          estado del acuerdo dentro: en cuanto el contrato se manda a
+          firmar, esto vuelve a ser un h1. El servidor lo comprueba
+          otra vez, así que esto es comodidad, no la cerradura. */}
       <div className="doc-title-bar">
         {editMode
           ? <input className="doc-title" value={title} placeholder="Título del documento"
               onChange={e=>{setTitle(e.target.value);setDirty(true);}} />
-          : <h1 className="doc-title">{d.title}</h1>}
+          : puedeRenombrar
+            ? <input className="doc-title doc-title-vivo" value={title} disabled={saving}
+                placeholder="Título del contrato" aria-label="Título del contrato"
+                onChange={e=>setTitle(e.target.value)}
+                onBlur={renombrar}
+                onKeyDown={e=>{
+                  if(e.key==="Enter"){ e.preventDefault(); e.currentTarget.blur(); }
+                  // Escape deshace lo tecleado y no guarda: el `blur`
+                  // que viene después se encuentra el título de antes
+                  // y se sale solo por el `===` de `renombrar`.
+                  if(e.key==="Escape"){ setTitle(d.title); e.currentTarget.blur(); }
+                }} />
+            : <h1 className="doc-title">{d.title}</h1>}
       </div>
 
       {/* ── PESTAÑAS (21 oct) ──────────────────────────────────
@@ -492,6 +520,25 @@ export function renderDocumento(ctx){
             <strong>Para poder firmarlo, llena {faltan.length === 1 ? "este dato" : "estos datos"}</strong>
             <div className="falta-datos-s">
               {faltan.map(f => f.etiqueta + (f.motivo === "invalido" ? " (no es un RFC válido)" : "")).join(" · ")}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ← NUEVO (10 nov): y el respaldo, cuando los datos ya están.
+          Sale después y no a la vez que el aviso de arriba: mandar a
+          alguien a buscar una foto mientras el papel sigue a medias es
+          mandarlo a por algo que todavía no va a poder usar. */}
+      {esRecibo && !iSigned && puede("firmar") && faltan.length === 0 && faltaRespaldo(d) && (
+        <div className="falta-datos">
+          <Icon n="attach_file" size={19}/>
+          <div>
+            <strong>Falta el documento original</strong>
+            <div className="falta-datos-s">
+              {d.tplId === "factura"
+                ? "El XML del CFDI, o una foto de la factura que te dieron."
+                : "Una foto del recibo de papel, de la transferencia o del pago."}
+              {" "}Sin esto, el documento sólo dice lo que tú escribiste: adjúntalo
+              abajo y entonces se podrá firmar.
             </div>
           </div>
         </div>

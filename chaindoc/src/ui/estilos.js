@@ -192,6 +192,17 @@ img,svg{max-width:100%}
 .doc-title-bar{display:flex;align-items:center;justify-content:center;padding:8px 0 20px}
 .doc-title{font-family:var(--f-t);font-weight:600;font-size:34px;color:var(--gris-400);text-align:center;border:none;outline:none;background:transparent;font-family:var(--f-t);max-width:900px;width:100%;text-align:center}
 .doc-title::placeholder{color:var(--gris-200)}
+/* ← NUEVO (10 nov): el título de un contrato que todavía se puede
+   renombrar. Un campo que se ve exactamente igual que un h1 no invita
+   a tocarlo, y uno con marco permanente convierte la cabecera en un
+   formulario. El marco aparece al pasar por encima y se queda
+   mientras escribes: la pista está donde se busca —al apuntar al
+   título— y no antes. */
+.doc-title-vivo{border:1px solid transparent;border-radius:9px;padding:2px 10px;cursor:text;
+  transition:border-color .15s ease,background .15s ease}
+.doc-title-vivo:hover{border-color:var(--gris-100)}
+.doc-title-vivo:focus{border-color:var(--bordes);background:var(--bg-soft)}
+.doc-title-vivo:disabled{opacity:.6;cursor:default}
 .paper{background:#fff;border:2px solid var(--bordes);border-radius:12px;box-shadow:var(--sh);min-height:600px;padding:40px 48px;margin-bottom:24px}
 .paper-ta{width:100%;min-height:540px;border:none;outline:none;background:transparent;font-family:var(--f-p);font-size:19px;line-height:1.9;color:var(--negro);resize:none;caret-color:var(--negro)}
 .paper-ta::placeholder{color:var(--gris-200)}

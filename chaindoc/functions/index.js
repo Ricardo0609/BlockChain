@@ -34,7 +34,7 @@ import {
   rolDe, puede, permisoDeEvento, puedeSubirA, sanearRoles, PERMISOS_QUE_CAMBIAN,
   ROLES, ROL_TEXTO, esDueno, debeRegistrarConsulta, LIMITES, leTocaAlDueno,
 } from "./lib/permisos.js";
-import { decidirBorrado, vinculosVivos } from "./lib/borrado.js";
+import { decidirBorrado, usosVivos } from "./lib/borrado.js";
 import {
   sellarSecreto, comprobarSecreto, estadoIntentos, trasIntento,
   verificarAsercion, nuevoReto, retoValido,
@@ -409,6 +409,7 @@ async function puertaDelVinculo(opId, evento, uid, email){
   exigir(exp, uid, email, "ver");
 
   // ← NUEVO (6 nov): UN COMPROBANTE, UN CONTRATO.
+  // ← ACTUALIZADO (10 nov): UN COMPROBANTE, UN USO. Ver abajo.
   //
   // El navegador ya lo impedía; faltaba aquí, y no era un lujo. El
   // motivo de fondo es que el mismo gasto quedaría comprobado dos
@@ -421,18 +422,36 @@ async function puertaDelVinculo(opId, evento, uid, email){
   // permission-denied al abrirlo. Retirarlo del segundo lo dejaba en
   // null y entonces no lo abría nadie.
   //
-  // Otro requisito DEL MISMO contrato sí: eso es un comprobante que
-  // cubre dos obligaciones del mismo acuerdo, y no duplica nada.
+  // Hasta el 9 de noviembre esto dejaba pasar otro requisito DEL
+  // MISMO contrato, con el argumento de que un comprobante puede
+  // cubrir dos obligaciones del mismo acuerdo y ahí no se duplica
+  // nada. Ricardo lo cerró: «sólo se podrá utilizar una vez, tanto
+  // por contrato como en general». Y tiene razón: son dos
+  // obligaciones distintas cobradas con un solo papel, que es la
+  // misma trampa en pequeño.
+  //
+  // Por eso ya no vale `vinculosVivos`, que funde los dos requisitos
+  // de un contrato en un solo expediente y no los sabría distinguir.
   // El bloque VINCULADO se asienta en el DOCUMENTO, no en el
   // expediente, así que `opId` ya es el recibo.
-  const yaEn = vinculosVivos((await db.doc(`${OPS}/${opId}`).get()).data());
-  const otro = yaEn.find((x) => x !== expId);
+  const reqId = evento?.meta?.requisito ?? null;
+  const usos = usosVivos((await db.doc(`${OPS}/${opId}`).get()).data());
+  // El mismo par otra vez no es un uso nuevo: es un reintento, y
+  // rechazarlo dejaría a medias un adjuntar que se cortó al vuelo.
+  const otro = usos.find((u) => u.expId !== expId || u.requisito !== reqId);
   if(otro){
-    const titulo = ((await db.doc(`${OPS}/${otro}`).get()).data() || {}).title;
+    if(otro.expId === expId){
+      const req = (exp.requisitos || []).find((r) => r.id === otro.requisito);
+      throw new HttpsError("failed-precondition",
+        req?.titulo
+          ? `Este documento ya está adjunto en «${req.titulo}», de este mismo contrato. Un comprobante sólo se usa una vez: retíralo de ahí antes de ponerlo aquí.`
+          : "Este documento ya está adjunto en otro requisito de este mismo contrato. Un comprobante sólo se usa una vez: retíralo de ahí antes de ponerlo aquí.");
+    }
+    const titulo = ((await db.doc(`${OPS}/${otro.expId}`).get()).data() || {}).title;
     throw new HttpsError("failed-precondition",
       titulo
-        ? `Este documento ya está adjunto a «${titulo}». Un comprobante sólo puede justificar un contrato: retíralo de ahí antes de adjuntarlo a otro.`
-        : "Este documento ya está adjunto a otro contrato. Un comprobante sólo puede justificar un contrato: retíralo de ahí antes de adjuntarlo a otro.");
+        ? `Este documento ya está adjunto a «${titulo}». Un comprobante sólo se usa una vez: retíralo de ahí antes de adjuntarlo a otro.`
+        : "Este documento ya está adjunto a otro contrato. Un comprobante sólo se usa una vez: retíralo de ahí antes de adjuntarlo a otro.");
   }
 
   return { adjuntoA: expId };

@@ -6,18 +6,28 @@
 import { describe, it, expect } from "vitest";
 import {
   esComprobante, faltanDatos, estaFirmado, sePuedeFirmar, puedeSalir,
-  soloSuDueno, porQueNoSale, REQUERIDOS,
+  soloSuDueno, porQueNoSale, faltaRespaldo, REQUERIDOS,
 } from "../src/nucleo/comprobantes";
 
+// ← ACTUALIZADO (10 nov): todos los comprobantes de estas pruebas
+// nacen CON respaldo. No es decoracion: desde hoy un comprobante sin
+// el documento original detras no se firma, asi que uno sin respaldo
+// no serviria para probar ninguna de las otras reglas —fallaria
+// siempre, y por el motivo equivocado—. Lo que vigila esa regla tiene
+// su propio bloque mas abajo.
+const RESPALDO = [{ path: "u/U1/r1/foto.jpg", nombre: "foto.jpg" }];
+
 const recibo = (fields = {}, extra = {}) => ({
-  id: "r1", tplId: "recibo", ownerUid: "U1", chain: [], fields, ...extra,
+  id: "r1", tplId: "recibo", ownerUid: "U1", chain: [], fields,
+  imagenes: RESPALDO, ...extra,
 });
 const LLENO = {
   fecha: "2026-11-03", recibiDe: "Constructora Solis", cantidad: "5000",
   concepto: "Compra de cemento", recibidoPor: "Pedro Ramirez",
 };
 const factura = (fields = {}, extra = {}) => ({
-  id: "f1", tplId: "factura", ownerUid: "U1", chain: [], fields, ...extra,
+  id: "f1", tplId: "factura", ownerUid: "U1", chain: [], fields,
+  imagenes: RESPALDO, ...extra,
 });
 const FACTURA_LLENA = {
   fecha: "2026-11-03", emisor: "Materiales del Bajio SA de CV",
@@ -177,5 +187,77 @@ describe("lo que se le dice al usuario", () => {
   it("si ya se puede, no hay nada que explicar", () => {
     expect(porQueNoSale(recibo(LLENO, { chain: [firma] }))).toBe(null);
     expect(porQueNoSale({ kind: "documento" })).toBe(null);
+  });
+});
+
+// ── EL RESPALDO (10 nov) ────────────────────────────────────────
+//
+// El agujero que tapa esto, dicho por Ricardo: «es muy facil crear un
+// recibo, llenarlo y adjuntarlo, pero realmente como se comprueba que
+// ese recibo es real».
+//
+// Tenia razon. Un recibo hecho aqui lo escribe quien lo firma, sobre
+// si mismo. La cadena prueba CUANDO se escribio y que nadie lo toco
+// despues; no prueba que el pago ocurriera. El respaldo es lo que ata
+// el papel al mundo.
+describe("el documento original que respalda el papel", () => {
+  it("sin respaldo NO se firma, aunque este todo lleno", () => {
+    // La prueba que importa. Si esta pasa en falso, el producto vuelve
+    // a aceptar recibos que no prueban nada.
+    const sinNada = recibo(LLENO, { imagenes: [] });
+    expect(faltanDatos(sinNada)).toEqual([]);   // el papel esta completo
+    expect(faltaRespaldo(sinNada)).toBe(true);  // y aun asi
+    expect(sePuedeFirmar(sinNada)).toBe(false);
+  });
+
+  it("una foto adjunta basta", () => {
+    expect(faltaRespaldo(recibo(LLENO))).toBe(false);
+    expect(sePuedeFirmar(recibo(LLENO))).toBe(true);
+  });
+
+  it("el original leido tambien vale, sin fotos", () => {
+    // Cuando el comprobante se lleno leyendo el XML del CFDI, el
+    // original ya esta guardado: pedir ademas una foto seria pedir una
+    // prueba peor de algo que ya esta probado mejor.
+    const conXml = factura(FACTURA_LLENA, { imagenes: [], sourceFile: "u/U1/f1/cfdi.xml" });
+    expect(faltaRespaldo(conXml)).toBe(false);
+    expect(sePuedeFirmar(conXml)).toBe(true);
+  });
+
+  it("vale para los dos: recibo y factura", () => {
+    expect(faltaRespaldo(recibo(LLENO, { imagenes: [] }))).toBe(true);
+    expect(faltaRespaldo(factura(FACTURA_LLENA, { imagenes: [] }))).toBe(true);
+  });
+
+  it("y no le pide respaldo a lo que no es un comprobante", () => {
+    // Un contrato o un documento de texto no se respaldan con una
+    // foto. Sin este corte, firmar cualquier cosa dejaria de funcionar.
+    expect(faltaRespaldo({ kind: "documento" })).toBe(false);
+    expect(faltaRespaldo({ kind: "expediente", imagenes: [] })).toBe(false);
+    expect(faltaRespaldo(null)).toBe(false);
+  });
+
+  it("un `imagenes` que no es una lista no cuela", () => {
+    // Si llegara cualquier otra cosa, `.length` podria dar un numero
+    // —una cadena de texto lo da— y colarse como respaldo.
+    expect(faltaRespaldo(recibo(LLENO, { imagenes: "foto.jpg" }))).toBe(true);
+    expect(faltaRespaldo(recibo(LLENO, { imagenes: null }))).toBe(true);
+    expect(faltaRespaldo(recibo(LLENO, { imagenes: undefined }))).toBe(true);
+  });
+
+  it("lo dice en voz alta y manda a buscar lo correcto", () => {
+    const r = porQueNoSale(recibo(LLENO, { imagenes: [] }));
+    expect(r).toMatch(/original/i);
+    expect(r).toMatch(/transferencia|recibo/i);
+
+    const f = porQueNoSale(factura(FACTURA_LLENA, { imagenes: [] }));
+    expect(f).toMatch(/XML|CFDI/);
+
+    // Con el papel a medias, el mensaje sigue siendo el de los datos:
+    // mandar a alguien a por una foto cuando aun no puede usarla es
+    // mandarlo a dar una vuelta en balde.
+    const medias = porQueNoSale(recibo({ ...LLENO, concepto: "" }, { imagenes: [] }));
+    expect(medias).toMatch(/llenar/);
+    expect(medias).not.toMatch(/original/i);
   });
 });

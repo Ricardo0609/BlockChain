@@ -77,8 +77,46 @@ export function faltanDatos(doc) {
 export const estaFirmado = (doc) =>
   (doc?.chain || []).some((b) => b?.action === "FIRMA");
 
-/** Si se puede firmar: sólo cuando no falta ningún dato. */
-export const sePuedeFirmar = (doc) => faltanDatos(doc).length === 0;
+/**
+ * Si le falta el respaldo: el documento original que prueba el pago.
+ *
+ * ← NUEVO (10 nov). El agujero que tapa esto, dicho por Ricardo: «es
+ * muy fácil crear un recibo, llenarlo y adjuntarlo, pero realmente
+ * cómo se comprueba que ese recibo es real».
+ *
+ * Tenía razón. Hasta hoy un recibo hecho aquí era una declaración y
+ * nada más: lo escribe quien lo firma, sobre sí mismo. Toda la
+ * cadena de bloques de debajo prueba CUÁNDO se escribió y que nadie
+ * lo tocó después, que no es poco, pero no prueba que el pago
+ * ocurriera. Firmar un papel que uno mismo acaba de redactar no lo
+ * convierte en prueba de nada.
+ *
+ * El respaldo es lo que ata el papel al mundo: la foto del recibo de
+ * la tienda, el comprobante de la transferencia, el XML del CFDI. A
+ * partir de aquí no se firma sin él, y como sin firma no se adjunta
+ * ni se comparte, no hay forma de que uno sin respaldo llegue a
+ * manos de nadie.
+ *
+ * Mira `imagenes`, que es donde viven los adjuntos de un documento, y
+ * también `sourceFile`, que es donde queda el original cuando el
+ * comprobante se llenó leyéndolo. Cualquiera de los dos vale: lo que
+ * se exige es que exista algo detrás, no de qué forma llegó.
+ */
+export const faltaRespaldo = (doc) => {
+  if (!esComprobante(doc)) return false;
+  const adjuntos = Array.isArray(doc?.imagenes) ? doc.imagenes : [];
+  if (adjuntos.length > 0) return false;
+  return !doc?.sourceFile;
+};
+
+/**
+ * Si se puede firmar: con todos los datos Y con el respaldo detrás.
+ *
+ * Los dos, no uno. Un recibo completo sin respaldo está bien escrito
+ * y no prueba nada; uno con respaldo y sin datos no dice qué prueba.
+ */
+export const sePuedeFirmar = (doc) =>
+  faltanDatos(doc).length === 0 && !faltaRespaldo(doc);
 
 /**
  * Si puede salir de aquí: adjuntarse a un contrato o compartirse.
@@ -118,8 +156,22 @@ export function porQueNoSale(doc) {
   if (!esComprobante(doc) || estaFirmado(doc)) return null;
   const faltan = faltanDatos(doc);
   const que = doc.tplId === "factura" ? "La factura" : "El recibo";
-  return faltan.length
-    ? `${que} todavía no está firmado, y no se puede firmar hasta llenar: `
-      + faltan.map((f) => f.etiqueta.toLowerCase()).join(", ") + "."
-    : `${que} todavía no está firmado. Fírmalo y entonces podrás compartirlo.`;
+  const original = doc.tplId === "factura"
+    ? "el XML del CFDI o una foto de la factura"
+    : "una foto del recibo, la transferencia o el pago";
+
+  // El orden no es casual: primero los datos, que es lo que se arregla
+  // escribiendo, y el respaldo después, que es lo que hay que ir a
+  // buscar. Decirle a alguien que le falta una foto cuando además
+  // tiene el papel a medias lo manda a buscar algo que todavía no va
+  // a poder usar.
+  if (faltan.length) {
+    return `${que} todavía no está firmado, y no se puede firmar hasta llenar: `
+      + faltan.map((f) => f.etiqueta.toLowerCase()).join(", ") + ".";
+  }
+  if (faltaRespaldo(doc)) {
+    return `${que} está completo, pero no se puede firmar sin el documento `
+      + `original que lo respalde. Adjunta ${original}.`;
+  }
+  return `${que} todavía no está firmado. Fírmalo y entonces podrás compartirlo.`;
 }

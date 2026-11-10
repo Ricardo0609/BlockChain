@@ -27,6 +27,44 @@ export function vinculosVivos(doc) {
 }
 
 /**
+ * Dónde está usado este comprobante ahora mismo, requisito a requisito.
+ *
+ * `vinculosVivos` devuelve expedientes y nada más, y para lo suyo está
+ * bien: para decidir si un documento se puede borrar da igual a qué
+ * requisito estuviera atado, lo que importa es que pertenece al
+ * contrato de alguien.
+ *
+ * Para el uso único no da igual. La regla, decidida el 10 de
+ * noviembre: un comprobante «se usa una vez, tanto por contrato como
+ * en general». Dos requisitos del mismo contrato ya son dos usos, y
+ * `vinculosVivos` no los distingue porque mete los dos en el mismo
+ * expediente y el Set los funde en uno.
+ *
+ * El motivo de la regla es el que da nombre al producto: el mismo
+ * gasto comprobado dos veces es exactamente lo que esto existe para
+ * que no pase. Que las dos veces sean en el mismo contrato no lo hace
+ * menos: son dos obligaciones distintas cobradas con un solo papel.
+ *
+ * Una baja levanta sólo SU uso, el de su mismo requisito. Retirar el
+ * recibo del requisito A no puede soltar el del B.
+ */
+export function usosVivos(doc) {
+  const vivos = new Map();
+  for (const b of BLOQUES(doc)) {
+    if (b?.action !== "VINCULADO") continue;
+    const expId = b?.meta?.expId;
+    if (!expId) continue;
+    const requisito = b?.meta?.requisito ?? null;
+    // El \u0000 no aparece en un id, así que no hay forma de que dos
+    // pares distintos se escriban igual al juntarlos.
+    const clave = `${expId}\u0000${requisito ?? ""}`;
+    if (b?.meta?.tipo === "baja") vivos.delete(clave);
+    else vivos.set(clave, { expId, requisito });
+  }
+  return [...vivos.values()];
+}
+
+/**
  * Quién más ha dejado constancia aquí, sin contar al dueño.
  *
  * Mira los TRES sitios donde alguien que no eres tú deja algo que es

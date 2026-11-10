@@ -15,7 +15,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import {
-  decidirBorrado, firmasDeOtros, ocultoPara, vinculosVivos,
+  decidirBorrado, firmasDeOtros, ocultoPara, vinculosVivos, usosVivos,
 } from "../src/nucleo/borrado.js";
 
 const doc = (chain = [], extra = {}) => ({
@@ -241,9 +241,15 @@ describe("donde esta adjunto ahora mismo", () => {
     expect(vinculosVivos({ chain: [vinc("e1"), vinc("e1", "baja")] })).toEqual([]);
   });
 
-  it("dos requisitos del MISMO contrato no son dos contratos", () => {
-    // Es el caso legitimo: un comprobante que cubre dos obligaciones
-    // del mismo acuerdo. No duplica ningun gasto.
+  it("dos requisitos del MISMO contrato son UN contrato", () => {
+    // Para lo que hace esta funcion —decidir si el documento se puede
+    // borrar— da igual a cuantos requisitos este atado: lo que importa
+    // es que pertenece al contrato de alguien. Por eso funde los dos.
+    //
+    // ← OJO (10 nov): esto es tambien por que esta funcion ya NO sirve
+    // para el uso unico. Desde que un comprobante se usa una sola vez
+    // en general, dos requisitos del mismo contrato son dos usos, y
+    // aqui se ven como uno. Esa cuenta la lleva `usosVivos`.
     expect(vinculosVivos({ chain: [vinc("e1"), vinc("e1")] })).toEqual(["e1"]);
   });
 
@@ -262,14 +268,84 @@ describe("donde esta adjunto ahora mismo", () => {
   });
 });
 
+// ── UN COMPROBANTE, UN USO (10 nov) ─────────────────────────────
+//
+// La regla, de Ricardo: «solo se podra utilizar una vez, tanto por
+// contrato como en general». Hasta el 9 de noviembre el servidor
+// dejaba pasar otro requisito DEL MISMO contrato. Es la misma trampa
+// en pequeno: dos obligaciones distintas cobradas con un solo papel.
+describe("donde esta usado este comprobante", () => {
+  const uso = (expId, requisito, tipo) =>
+    ({ action: "VINCULADO", meta: { expId, requisito, ...(tipo ? { tipo } : {}) } });
+
+  it("sin usar, en ningun sitio", () => {
+    expect(usosVivos({ chain: [] })).toEqual([]);
+    expect(usosVivos(null)).toEqual([]);
+  });
+
+  it("LO QUE IMPORTA: dos requisitos del mismo contrato son DOS usos", () => {
+    // La prueba que separa esta funcion de `vinculosVivos`, que aqui
+    // diria uno. Si esta pasa en falso, el mismo recibo vuelve a poder
+    // cubrir dos obligaciones del mismo acuerdo.
+    const dos = usosVivos({ chain: [uso("e1", "r1"), uso("e1", "r2")] });
+    expect(dos).toHaveLength(2);
+    expect(dos.map((u) => u.requisito).sort()).toEqual(["r1", "r2"]);
+  });
+
+  it("el mismo requisito dos veces sigue siendo UN uso", () => {
+    // Un reintento de adjuntar que se corto a medias no puede contar
+    // como un uso mas, o el documento se quedaria bloqueado para
+    // siempre por un fallo de red.
+    expect(usosVivos({ chain: [uso("e1", "r1"), uso("e1", "r1")] })).toHaveLength(1);
+  });
+
+  it("una baja levanta su uso y solo el suyo", () => {
+    const tras = usosVivos({ chain: [uso("e1", "r1"), uso("e1", "r2"), uso("e1", "r1", "baja")] });
+    expect(tras).toEqual([{ expId: "e1", requisito: "r2" }]);
+  });
+
+  it("retirado de todo, vuelve a estar libre", () => {
+    expect(usosVivos({ chain: [uso("e1", "r1"), uso("e1", "r1", "baja")] })).toEqual([]);
+  });
+
+  it("contratos distintos tambien se ven como dos", () => {
+    expect(usosVivos({ chain: [uso("e1", "r1"), uso("e2", "r1")] })).toHaveLength(2);
+  });
+
+  it("un bloque viejo sin requisito no revienta ni se pierde", () => {
+    // Los primeros VINCULADO no llevaban `requisito`. Tienen que
+    // seguir contando como un uso: si no, un recibo de antes de esto
+    // se podria reusar libremente.
+    const viejo = usosVivos({ chain: [{ action: "VINCULADO", meta: { expId: "e1" } }] });
+    expect(viejo).toEqual([{ expId: "e1", requisito: null }]);
+  });
+
+  it("sin expId no cuenta: no se sabe donde", () => {
+    expect(usosVivos({ chain: [{ action: "VINCULADO", meta: { requisito: "r1" } }] })).toEqual([]);
+  });
+
+  it("y los bloques que no son vinculos no estorban", () => {
+    expect(usosVivos({ chain: [{ action: "FIRMA" }, uso("e1", "r1"), { action: "EDICIÓN" }] }))
+      .toHaveLength(1);
+  });
+});
+
 describe("la puerta del servidor esta puesta", () => {
   it("agregarBloque lo comprueba antes de asentar", () => {
     const cuerpo = readFileSync(new URL("../functions/index.js", import.meta.url), "utf8");
     const i = cuerpo.indexOf("async function puertaDelVinculo");
     expect(i).toBeGreaterThan(-1);
     const dentro = cuerpo.slice(i, cuerpo.indexOf("\n}", i));
-    expect(dentro).toMatch(/vinculosVivos\(/);
-    expect(dentro).toMatch(/yaEn\.find\(\(x\) => x !== expId\)/);
+    // Que mire los USOS y no los vinculos: con `vinculosVivos` esta
+    // puerta dejaria pasar el segundo requisito del mismo contrato.
+    expect(dentro).toMatch(/usosVivos\(/);
+    expect(dentro).not.toMatch(/vinculosVivos\(/);
+    expect(dentro).toMatch(/u\.expId !== expId \|\| u\.requisito !== reqId/);
     expect(dentro).toMatch(/failed-precondition/);
+  });
+
+  it("y el servidor no se quedo importando la funcion que ya no usa", () => {
+    const cuerpo = readFileSync(new URL("../functions/index.js", import.meta.url), "utf8");
+    expect(cuerpo).toMatch(/import \{ decidirBorrado, usosVivos \} from "\.\/lib\/borrado\.js"/);
   });
 });

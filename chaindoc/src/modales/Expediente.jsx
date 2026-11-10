@@ -127,10 +127,15 @@ export function modalExpediente(ctx){
                 <Icon n="block" size={20}/>
                 <strong>{que} ya está adjuntado a un contrato</strong>
               </div>
+              {/* ← ACTUALIZADO (10 nov): «una vez», no «un contrato».
+                  Antes esto dejaba la puerta abierta a otro requisito
+                  del mismo contrato, y ahí la trampa es la misma en
+                  pequeño: dos obligaciones distintas cobradas con un
+                  solo papel. */}
               <p>
-                Un comprobante sólo puede justificar un contrato. Si lo adjuntaras a otro,
-                el mismo gasto quedaría comprobado dos veces. Para moverlo, primero
-                retíralo de donde está.
+                Un comprobante sólo se usa una vez. Si lo adjuntaras otra vez —a otro
+                contrato o a otro requisito de este mismo— el mismo gasto quedaría
+                comprobado dos veces. Para moverlo, primero retíralo de donde está.
               </p>
               <div className="dup-lugares">
                 {linkSitios.map((x,i)=>(
@@ -146,7 +151,7 @@ export function modalExpediente(ctx){
 
         <p className="sub">
           {linkSitios.length
-            ? "Sólo puedes agregarlo a otro requisito del mismo contrato."
+            ? "Retíralo de donde está y entonces podrás ponerlo en otro sitio."
             : "Elige el contrato inteligente donde este documento servirá como comprobante."}
         </p>
         {exps===null ? (
@@ -160,8 +165,11 @@ export function modalExpediente(ctx){
             {exps.map(x=>{
               const st = expedienteStatus(x);
               const ajeno = x.ownerUid!==uid;
-              // ← NUEVO: con el documento ya adjunto, sólo queda disponible su propio contrato
-              const bloqueado = linkSitios.length>0 && !linkSitios.some(z=>z.expId===x.id);
+              // ← ACTUALIZADO (10 nov): con el documento ya usado, no
+              // queda ninguno disponible. Antes su propio contrato
+              // seguía abierto, para ponerlo en otro requisito; eso es
+              // lo que se cerró.
+              const bloqueado = linkSitios.length>0;
               return (
                 <div key={x.id} className={`link-row ${bloqueado?"bloqueado":""}`}
                   aria-disabled={bloqueado}

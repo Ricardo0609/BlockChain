@@ -946,6 +946,40 @@ export default function Octavin(){
     setSaving(false);
   };
 
+  // ← NUEVO (10 nov): renombrar un contrato inteligente.
+  //
+  // Un expediente no tiene «Editar» —no hay cuerpo que escribir, lo
+  // que se ve son requisitos y comprobantes— y al quitar ese botón se
+  // quedó también sin forma de cambiarle el título. Aquí el título se
+  // edita en su sitio y se guarda al salir del campo.
+  //
+  // La regla de CUÁNDO se puede no está aquí. `puedo("editar")` ya la
+  // trae y el servidor la vuelve a comprobar: en cuanto el contrato
+  // se manda a firmar deja de poder editarse, y vuelve a poder si lo
+  // rechazan. Un contrato en firma no se renombra ni por su dueño, y
+  // eso es lo que hace que la firma signifique algo.
+  //
+  // No reusa `save`: aquel manda también el cuerpo, que lo saca del
+  // editor, y en un expediente no hay editor en pantalla. Habría
+  // guardado el contenido en blanco.
+  const renombrar = async()=>{
+    const limpio = title.trim();
+    if(!d || limpio === d.title) return;
+    if(!limpio){
+      setTitle(d.title);
+      notify("El título no puede quedar vacío","err");
+      return;
+    }
+    setSaving(true);
+    const up = await aplicar(d,
+      { accion:"EDICIÓN", contenido:`Se renombró a «${limpio}»` },
+      { title: limpio },
+      { autor:user, autorUid:uid });
+    if(up){ setD(up); setTitle(up.title); notify("Título actualizado ✓"); }
+    else { setTitle(d.title); notify("Error al guardar","err"); }
+    setSaving(false);
+  };
+
   // ← ACTUALIZADO (Etapa 3): el código viaja al servidor, que lo compara
   // contra un hash lento con sal y bloquea tras varios fallos. Antes se
   // comparaba aquí mismo, así que bastaba con alterar esta función.
@@ -1804,9 +1838,19 @@ export default function Octavin(){
     // ← NUEVO: regla dura. Un comprobante justifica UN solo contrato.
     // Se valida aquí además de en la interfaz, para que no dependa de
     // que el botón esté deshabilitado.
-    const enOtro = dondeEstaAdjunto(d.id, exps||[]).filter(x=>x.expId!==exp.id);
-    if(enOtro.length){
-      setLinkErr(`Ya está adjuntado a «${enOtro[0].expTitulo}». Retíralo de ahí antes de adjuntarlo a otro contrato.`);
+    //
+    // ← ACTUALIZADO (10 nov): y un solo REQUISITO. Antes esto dejaba
+    // pasar otro requisito del mismo contrato; Ricardo lo cerró, y con
+    // razón: son dos obligaciones distintas cobradas con un solo
+    // papel. Esto es comodidad —el servidor lo vuelve a comprobar en
+    // `puertaDelVinculo`—, pero es donde se lee el motivo a tiempo.
+    const yaUsado = dondeEstaAdjunto(d.id, exps||[])
+      .filter(x=> !(x.expId===exp.id && x.reqId===reqId));
+    if(yaUsado.length){
+      const u = yaUsado[0];
+      setLinkErr(u.expId===exp.id
+        ? `Ya está adjuntado en «${u.reqTitulo}», de este mismo contrato. Un comprobante sólo se usa una vez: retíralo de ahí antes de ponerlo aquí.`
+        : `Ya está adjuntado a «${u.expTitulo}». Un comprobante sólo se usa una vez: retíralo de ahí antes de adjuntarlo a otro contrato.`);
       return;
     }
     setLinkBusy(true);
@@ -2336,6 +2380,7 @@ export default function Octavin(){
     setHistTab, setLinkErr, setLinkExp, setLock, setLockInput, setMIn, setMIn2, setMenu,
     setMethod, setModal, setMontoReq, setOpenSec, setPass, setShareErr, setShareFound,
     setShowHashes, setSmartErr, setSmartRes, setSmartText, setSolMsg,
+    renombrar,
     setTitle, setTpl, setUnlocked, setView, shareBusy, shareErr, shareFound,
     showHashes, signWithBio, smartBusy, smartErr, smartMsg, smartRes, smartText,
     solMsg, switchAuth, tieneCodigo, title, tpl, trySign, uid,
