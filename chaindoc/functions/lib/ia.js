@@ -224,7 +224,7 @@ export function normalizar(raw){
   const porTitulo = new Map(fases.map((f) => [llaveTexto(f.titulo), f.id]));
   return {
     fases,
-    titulo:      String(raw.titulo || "").trim() || "Contrato inteligente",
+    titulo:      String(raw.titulo || "").trim() || "Expediente",
     resumen:     String(raw.resumen || "").trim(),
     fechaLimite: esFecha(raw.fechaLimite) ? raw.fechaLimite : null,
     montoTotal:  typeof raw.montoTotal === "number" ? raw.montoTotal : null,

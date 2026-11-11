@@ -33,8 +33,12 @@ export const TEMPLATES = [
        + "lo que necesites y fírmalo.\n\n"
        + "Cada cambio queda registrado con su fecha y su autor, así que después puedes "
        + "probar qué decía el documento y desde cuándo.\n\n"
-       + "Si mientras lo escribes resulta que sí es un contrato con entregas y pagos, lo "
-       + "puedes convertir en contrato inteligente sin perder su historial, sus firmas ni su ID." },
+       + "ESTE es el bueno para un contrato que sólo necesita firmarse: un arrendamiento, "
+       + "una prestación de servicios, un acuerdo de confidencialidad. Si lo único que hay "
+       + "que probar es qué se firmó y cuándo, no hace falta nada más.\n\n"
+       + "Si mientras lo escribes resulta que hay entregas, pagos o fotos que habrá que "
+       + "reunir, lo puedes convertir en expediente sin perder su historial, sus firmas ni "
+       + "su ID." },
 
   { id:"factura",     ico:"receipt_long", name:"Factura",  form:"factura", body:"",
     info:"Para guardar una factura que YA existe: la que te emitieron o la que emitiste.\n\n"
@@ -54,7 +58,7 @@ export const TEMPLATES = [
        + "Si el pago sí tiene factura, usa Factura: comprueba mucho más." },
 
   // No crea un documento: crea un expediente con lista de comprobantes.
-  { id:"inteligente", ico:"rule",         name:"Contrato inteligente", smart:true, body:"",
+  { id:"inteligente", ico:"rule",         name:"Expediente", smart:true, body:"",
     destacado:"Lo que nos distingue",
     info:"Pega el contrato y la IA lee qué se prometió: las partes, los montos, las fechas "
        + "límite y la lista de comprobantes que habrá que reunir para demostrar que se cumplió.\n\n"
@@ -64,7 +68,11 @@ export const TEMPLATES = [
        + "usó dos veces en dos contratos distintos.\n\n"
        + "Al final exportas un paquete que un tercero puede verificar por su cuenta, sin "
        + "entrar aquí y sin internet.\n\n"
-       + "Un contrato dice lo que se prometió. Esto prueba lo que se cumplió." },
+       + "ELÍGELO cuando haya evidencia que reunir: fotos de un avance, facturas de lo que "
+       + "se compró, entregas por etapas, pagos contra entrega. Si el contrato sólo se firma y ya "
+       + "—un arrendamiento, por ejemplo— usa Documento de texto: es más simple y hace lo "
+       + "que necesitas.\n\n"
+       + "Un contrato dice lo que se prometió. OCTAVIN prueba lo que se cumplió." },
 ];
 
 // ← NUEVO: paso 2 del flujo de creación.
@@ -119,7 +127,7 @@ export const TIPOS_DOC = {
   texto:   { nombre: "Documento de texto",   color: "azul" },
   factura: { nombre: "Factura",              color: "verde" },
   recibo:  { nombre: "Recibo",               color: "morado" },
-  smart:   { nombre: "Contrato inteligente", color: "amarillo" },
+  smart:   { nombre: "Expediente",            color: "amarillo" },
 };
 
 /**

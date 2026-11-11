@@ -289,7 +289,7 @@ function normalize(raw) {
     // lo sean hay que decirlo, y así un contrato sin el campo no cambia
     // de significado.
     fasesEnOrden: raw.fasesEnOrden !== false,
-    titulo:      String(raw.titulo || "").trim() || "Contrato inteligente",
+    titulo:      String(raw.titulo || "").trim() || "Expediente",
     resumen:     String(raw.resumen || "").trim(),
     fechaLimite: isDate(raw.fechaLimite) ? raw.fechaLimite : null,
     montoTotal:  typeof raw.montoTotal === "number" ? raw.montoTotal : null,

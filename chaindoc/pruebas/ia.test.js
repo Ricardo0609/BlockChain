@@ -98,7 +98,11 @@ describe("normalización del análisis", () => {
     const r = normalizar({});
     expect(r.requisitos).toEqual([]);
     expect(r.fases).toEqual([]);
-    expect(r.titulo).toBe("Contrato inteligente");
+    // ← ACTUALIZADO (11 nov): el titulo de respaldo cambio junto con
+    // el nombre del tipo. Si el modelo no devuelve titulo, lo que se
+    // ve es este, asi que tenia que cambiar en los dos lados: aqui y
+    // en `src/smartContract.js`, que es su gemelo del navegador.
+    expect(r.titulo).toBe("Expediente");
   });
 });
 

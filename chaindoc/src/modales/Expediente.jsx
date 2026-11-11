@@ -23,7 +23,7 @@ export function modalExpediente(ctx){
   // ← NUEVO: revisar lo que propone la IA antes de convertir el documento
   if(modal.t==="convertir") return (
     <div className="ov" onClick={()=>{if(!smartBusy&&!saving)setModal(null);}}><div className="modal wide" onClick={e=>e.stopPropagation()}>
-      <h2>Convertir a contrato inteligente</h2>
+      <h2>Convertir en expediente</h2>
       <p className="sub">
         La IA lee <strong>{title||d.title}</strong> y propone los comprobantes que habrá que
         reunir. Revísalos antes de confirmar: estos requisitos regirán el expediente.
@@ -152,13 +152,13 @@ export function modalExpediente(ctx){
         <p className="sub">
           {linkSitios.length
             ? "Retíralo de donde está y entonces podrás ponerlo en otro sitio."
-            : "Elige el contrato inteligente donde este documento servirá como comprobante."}
+            : "Elige el expediente donde este documento servirá como comprobante."}
         </p>
         {exps===null ? (
           <div className="imp-msg"><span className="mini-spin"/>Buscando expedientes…</div>
         ) : exps.length===0 ? (
           <p className="adj-empty">
-            Todavía no tienes contratos inteligentes. Crea uno desde «Crear documento» → «Contrato inteligente».
+            Todavía no tienes expedientes. Crea uno desde «Crear documento» → «Expediente».
           </p>
         ) : (
           <div className="link-list">

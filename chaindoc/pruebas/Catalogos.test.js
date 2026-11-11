@@ -9,14 +9,14 @@
 // obliga a decidirlo a propósito.
 
 import { describe, expect, it } from "vitest";
-import { aceptaEfirma, METHODS, TEMPLATES } from "../src/nucleo/catalogos.js";
+import { aceptaEfirma, METHODS, TEMPLATES, TIPOS_DOC } from "../src/nucleo/catalogos.js";
 
 describe("tipos de documento (paso 1)", () => {
   it("son exactamente cuatro", () => {
     expect(TEMPLATES).toHaveLength(4);
   });
 
-  it("son contrato, factura, recibo y contrato inteligente", () => {
+  it("son contrato, factura, recibo y expediente", () => {
     expect(TEMPLATES.map((t) => t.id))
       .toEqual(["contrato", "factura", "recibo", "inteligente"]);
   });
@@ -44,7 +44,7 @@ describe("tipos de documento (paso 1)", () => {
     expect(TEMPLATES.find((t) => t.id === "recibo").body).toBe("");
   });
 
-  it("el contrato inteligente sigue marcado como tal", () => {
+  it("el expediente sigue marcado como tal", () => {
     expect(TEMPLATES.find((t) => t.id === "inteligente").smart).toBe(true);
   });
 });
@@ -112,6 +112,69 @@ describe("a quien se le ofrece la e.firma", () => {
 // Cuatro tarjetas con un ícono y un nombre no dicen cuál conviene. El
 // texto de cada una está detrás de una ⓘ, y estas pruebas existen para
 // que el día que se agregue un quinto tipo no se quede sin él.
+// ── EL NOMBRE Y EL «CUAL ELIJO» (11 nov) ───────────────────────
+//
+// Dos decisiones de Ricardo del 11 de noviembre.
+//
+// EL NOMBRE. «Contrato inteligente» se confundia con los smart
+// contracts de blockchain, que son otra cosa y de otro mundo. Por
+// dentro el codigo ya lo llamaba `expediente` en todas partes
+// -`kind:"expediente"`, `estadoFases(exp)`, `expedienteStatus`-, asi
+// que el nombre nuevo no es un invento: es el que ya tenia, puesto
+// tambien donde se lee.
+//
+// EL «CUAL ELIJO». La pantalla de crear ofrece cuatro tarjetas, y la
+// que mas se va a elegir mal es entre un documento de texto y un
+// expediente: los dos sirven para un contrato. La diferencia es si hay
+// evidencia que reunir despues de firmarlo. Si la ⓘ no lo dice, la
+// eleccion se hace a ciegas y se descubre tarde.
+describe("como se llama y cuando se elige", () => {
+  const texto = () => TEMPLATES.find((t) => t.id === "contrato");
+  const exped = () => TEMPLATES.find((t) => t.id === "inteligente");
+
+  it("ya no se llama «contrato inteligente» en ningun sitio visible", () => {
+    // La confusion que se queria quitar. Si vuelve a aparecer en una
+    // etiqueta o en un texto de ayuda, esto lo caza.
+    expect(exped().name).toBe("Expediente");
+    expect(TIPOS_DOC.smart.nombre).toBe("Expediente");
+    for (const t of TEMPLATES) {
+      expect(t.name.toLowerCase(), `nombre de «${t.id}»`).not.toContain("inteligente");
+      expect(t.info.toLowerCase(), `texto de «${t.id}»`).not.toContain("inteligente");
+    }
+  });
+
+  it("el documento de texto dice que sirve para un contrato que solo se firma", () => {
+    // El caso del arrendamiento: dos firmas, una fecha, y nada que
+    // adjuntar. Hoy alguien elegiria el expediente por el nombre y se
+    // encontraria pidiendo comprobantes que nadie va a subir.
+    expect(texto().info).toMatch(/arrendamiento/i);
+    expect(texto().info).toMatch(/firmarse|firma/i);
+  });
+
+  it("y el expediente dice que es para cuando hay evidencia que reunir", () => {
+    expect(exped().info).toMatch(/evidencia que reunir/i);
+    // Y manda al otro cuando no la hay, que es la mitad util del aviso:
+    // decir para que sirve sin decir cuando NO usarlo no desempata nada.
+    expect(exped().info).toMatch(/Documento de texto/);
+  });
+
+  it("los dos se mandan el uno al otro, no solo uno", () => {
+    // Quien entra por la tarjeta equivocada tiene que encontrar la
+    // salida este donde este.
+    expect(texto().info).toMatch(/expediente/i);
+    expect(exped().info).toMatch(/Documento de texto/);
+  });
+
+  it("sin nombrar un sector, como el resto", () => {
+    // La misma regla de arriba, dicha otra vez para los textos nuevos:
+    // el nicho vive en el discurso, no en la pantalla.
+    for (const t of [texto(), exped()]) {
+      expect(t.info.toLowerCase()).not.toContain("constructora");
+      expect(t.info.toLowerCase()).not.toContain("obra civil");
+    }
+  });
+});
+
 describe("la recomendación de cada tipo", () => {
   it("todos los tipos tienen una, y no es un relleno", () => {
     for(const t of TEMPLATES){
@@ -131,14 +194,14 @@ describe("la recomendación de cada tipo", () => {
     }
   });
 
-  it("sólo el contrato inteligente va destacado", () => {
+  it("sólo el expediente va destacado", () => {
     const destacados = TEMPLATES.filter(t => t.destacado);
     expect(destacados).toHaveLength(1);
     expect(destacados[0].id).toBe("inteligente");
     expect(destacados[0].smart).toBe(true);
   });
 
-  it("el texto del contrato inteligente cierra con la tesis", () => {
+  it("el texto del expediente cierra con la tesis", () => {
     const smart = TEMPLATES.find(t => t.id === "inteligente");
     expect(smart.info).toContain("prueba lo que se cumplió");
   });

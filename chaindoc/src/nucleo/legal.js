@@ -124,7 +124,7 @@ export const AVISO = {
         "Los datos se almacenan en servidores de Google, incluidos servidores fuera de " +
         "México.",
         "**Google (Gemini)** — análisis del contenido de los contratos que decidas " +
-        "analizar con la función de contrato inteligente. Sólo se envía el texto del " +
+        "analizar con la función de expediente. Sólo se envía el texto del " +
         "contrato que tú mandas analizar.",
         "**Servicio de Administración Tributaria (SAT)** — se consulta el estatus de " +
         "los comprobantes fiscales. Se envían únicamente los datos que el propio " +

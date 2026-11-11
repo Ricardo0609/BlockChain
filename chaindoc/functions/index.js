@@ -1529,7 +1529,7 @@ export const ponerEnFirme = onCall(OPCIONES, async (req) => {
   const op = (await db.doc(`${OPS}/${opId}`).get()).data();
   if(!op) throw new HttpsError("not-found", "La operación no existe.");
   if(op.kind !== "expediente"){
-    throw new HttpsError("failed-precondition", "Sólo un contrato inteligente se manda a firmar.");
+    throw new HttpsError("failed-precondition", "Sólo un expediente se manda a firmar.");
   }
   if(!(op.requisitos || []).length){
     throw new HttpsError("failed-precondition", "El contrato no tiene ningún punto que cumplir.");

@@ -1155,7 +1155,7 @@ export default function Octavin(){
 
       const up = await aplicar(base, {
         accion:"CONVERSIÓN",
-        contenido:`Convertido en contrato inteligente con ${smartRes.requisitos.length} requisitos`,
+        contenido:`Convertido en expediente con ${smartRes.requisitos.length} requisitos`,
         meta:{ tipo:"expediente", requisitos:smartRes.requisitos.length,
                fases:(smartRes.fases||[]).length, modelo:smartRes.modelo },
       }, {
@@ -1177,7 +1177,7 @@ export default function Octavin(){
         setD(up); setTitle(up.title); setContent(cuerpo);
         setEdit(false); setDirty(false); setModal(null); setSmartRes(null);
         refresh();
-        notify(`Contrato inteligente con ${up.requisitos.length} requisitos ✓`);
+        notify(`Expediente con ${up.requisitos.length} requisitos ✓`);
       } else notify("No se pudo convertir","err");
     }catch(e){ console.error(e); notify("No se pudo convertir","err"); }
     finally{ setSaving(false); }

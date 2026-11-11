@@ -162,6 +162,63 @@ describe("la lista entera", () => {
   });
 });
 
+// ── COMO SE LEE EL FIN DE UN CONTRATO (11 nov) ──────────────────
+describe("el aviso de que un contrato se acaba", () => {
+  const fin = (extra) => ({
+    tipo: "contrato-por-terminar", titulo: "Arrendamiento Av. Juarez 120",
+    fecha: "2026-11-25", faltan: 14, sinRequisitos: true, ...extra,
+  });
+
+  it("sin requisitos habla de renovar, no de entregar", () => {
+    // Un arrendamiento no se «entrega»: se acaba. Decirle a alguien
+    // que «le falta por entregar» en un alquiler es ruido.
+    const t = TEXTO_AVISO(fin());
+    expect(t).toMatch(/renovarlo/);
+    expect(t).not.toMatch(/entregar/);
+  });
+
+  it("con requisitos si habla de lo que falta", () => {
+    const t = TEXTO_AVISO(fin({ sinRequisitos: false }));
+    expect(t).toMatch(/falta por entregar/);
+    expect(t).not.toMatch(/renovarlo/);
+  });
+
+  it("dice en cuanto, no solo la fecha", () => {
+    // Una fecha sola obliga a contar con los dedos, y esa cuenta es
+    // justo lo que decide si corre prisa.
+    expect(TEXTO_AVISO(fin({ faltan: 14 }))).toMatch(/en dos semanas/);
+    expect(TEXTO_AVISO(fin({ faltan: 7 }))).toMatch(/en una semana/);
+    expect(TEXTO_AVISO(fin({ faltan: 3 }))).toMatch(/en 3 d[ií]as/);
+    expect(TEXTO_AVISO(fin({ faltan: 1 }))).toMatch(/mañana/);
+    expect(TEXTO_AVISO(fin({ faltan: 0 }))).toMatch(/hoy/);
+  });
+
+  it("uno ya terminado se dice en pasado y pesa como lo vencido", () => {
+    const t = TEXTO_AVISO({ ...fin(), tipo: "contrato-terminado" });
+    expect(t).toMatch(/termin[óo]/);
+    expect(esGrave({ tipo: "contrato-terminado" })).toBe(true);
+    // El de dos semanas no es grave: si lo fuera, taparia lo de manana.
+    expect(esGrave({ tipo: "contrato-por-terminar" })).toBe(false);
+  });
+
+  it("y se ordena donde toca: lo terminado arriba, lo que viene al final", () => {
+    const lista = [
+      { tipo: "contrato-por-terminar" }, { tipo: "requisito-vencido" },
+      { tipo: "contrato-terminado" }, { tipo: "factura-cancelada" },
+    ];
+    expect(ordenar(lista).map((x) => x.tipo)).toEqual([
+      "factura-cancelada", "contrato-terminado", "requisito-vencido", "contrato-por-terminar",
+    ]);
+  });
+
+  it("ninguno cae en el texto de reserva", () => {
+    // El `default` dice «hay algo que revisar», que no sirve de nada.
+    for(const tipo of ["contrato-por-terminar", "contrato-terminado"]){
+      expect(TEXTO_AVISO({ ...fin(), tipo })).not.toMatch(/algo que revisar/);
+    }
+  });
+});
+
 describe("lo que ya hacia antes sigue igual", () => {
   it("cada aviso se lee sin contexto", () => {
     expect(TEXTO_AVISO(avisoReq()))

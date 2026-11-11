@@ -319,7 +319,7 @@ export function renderDocumento(ctx){
             <div>
               <strong>¿Es un contrato?</strong>
               <span>
-                Conviértelo en contrato inteligente: la IA extrae los comprobantes que habrá que
+                Conviértelo en expediente: la IA extrae los comprobantes que habrá que
                 reunir y el documento conserva su historial, firmas e ID.
               </span>
             </div>
@@ -330,7 +330,7 @@ export function renderDocumento(ctx){
           <div className="convertir-acc">
             <button className="btn btn-primary" onClick={iniciarConversion}
               disabled={smartBusy || saving || !aiConfigured()}>
-              Convertir a contrato inteligente
+              Convertir en expediente
             </button>
             <button className="convertir-x" title="Quitar este aviso"
               aria-label="Quitar este aviso"

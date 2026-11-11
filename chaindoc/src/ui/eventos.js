@@ -76,7 +76,7 @@ export const EVENTOS = {
   // ← NUEVO: un documento normal que pasó a ser contrato inteligente
   "CONVERSIÓN": {
     ico:"rule", tono:"inicio",
-    titulo:()=> "Convertido en contrato inteligente",
+    titulo:()=> "Convertido en expediente",
   },
   "EXPORTACIÓN": {
     ico:"download", tono:"neutro",

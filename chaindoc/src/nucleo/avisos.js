@@ -25,6 +25,19 @@ export async function leerAvisos(uid){
   }
 }
 
+/**
+ * «, en dos semanas». Una fecha sola obliga a contar con los dedos, y
+ * la cuenta es justo lo que decide si esto corre prisa.
+ */
+function enCuanto(dias){
+  if(dias == null) return "";
+  if(dias <= 0) return ", hoy";
+  if(dias === 1) return ", mañana";
+  if(dias === 7) return ", en una semana";
+  if(dias === 14) return ", en dos semanas";
+  return `, en ${dias} días`;
+}
+
 /** Cada aviso, en una frase que se entienda sin contexto. */
 export function TEXTO_AVISO(a){
   switch(a.tipo){
@@ -40,6 +53,21 @@ export function TEXTO_AVISO(a){
       return `«${a.requisito}» de «${a.titulo}» venció el ${a.fecha} y sigue pendiente.`;
     case "requisito-por-vencer":
       return `«${a.requisito}» de «${a.titulo}» vence el ${a.fecha}.`;
+    // ← NUEVO (11 nov): el contrato mismo, cuando se acaba.
+    //
+    // Se dice distinto según tenga requisitos o no, porque son dos
+    // situaciones que no se parecen. Con requisitos, la fecha es un
+    // plazo para terminar de entregar. Sin ellos —un arrendamiento,
+    // por ejemplo— no hay nada que entregar: lo que toca decidir es
+    // si se renueva, y eso se habla antes, no el último día.
+    case "contrato-por-terminar":
+      return a.sinRequisitos
+        ? `«${a.titulo}» termina el ${a.fecha}${enCuanto(a.faltan)}. Si hay que renovarlo, es ahora.`
+        : `«${a.titulo}» termina el ${a.fecha}${enCuanto(a.faltan)} y todavía le falta por entregar.`;
+    case "contrato-terminado":
+      return a.sinRequisitos
+        ? `«${a.titulo}» terminó el ${a.fecha}.`
+        : `«${a.titulo}» terminó el ${a.fecha} y quedó sin completar.`;
     default:
       return `Hay algo que revisar en «${a.titulo}».`;
   }
@@ -48,15 +76,22 @@ export function TEXTO_AVISO(a){
 /** Lo urgente primero: lo del SAT, luego lo vencido, luego lo que viene. */
 const PESO = {
   "factura-cancelada": 0, "factura-cambio": 1,
-  "fase-vencida": 2, "requisito-vencido": 3,
-  "fase-por-vencer": 4, "requisito-por-vencer": 5,
+  // Un contrato terminado va con lo vencido: ya no hay nada que hacer
+  // dentro, y si quedó incompleto es lo más grave que hay en la lista.
+  "contrato-terminado": 2,
+  "fase-vencida": 3, "requisito-vencido": 4,
+  "fase-por-vencer": 5, "requisito-por-vencer": 6,
+  // Lo último de lo que viene: catorce días es el aviso menos urgente
+  // de todos, y encabezar la lista con él taparía lo de mañana.
+  "contrato-por-terminar": 7,
 };
 
 export const ordenar = (lista = []) =>
   [...lista].sort((a, b) => (PESO[a.tipo] ?? 9) - (PESO[b.tipo] ?? 9));
 
 export const esGrave = (a) =>
-  ["factura-cancelada", "factura-cambio", "fase-vencida", "requisito-vencido"].includes(a.tipo);
+  ["factura-cancelada", "factura-cambio", "fase-vencida", "requisito-vencido",
+   "contrato-terminado"].includes(a.tipo);
 
 // ── LO QUE YA NO HAY QUE REVISAR (27 oct) ─────────────────────
 //
