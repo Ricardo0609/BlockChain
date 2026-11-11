@@ -39,7 +39,7 @@ import {
   sellarSecreto, comprobarSecreto, estadoIntentos, trasIntento,
   verificarAsercion, nuevoReto, retoValido,
 } from "./lib/identidad.js";
-import { analizar, EXPLICA } from "./lib/ia.js";
+import { analizar, redactar, EXPLICA } from "./lib/ia.js";
 
 initializeApp();
 const db = getFirestore();
@@ -1963,6 +1963,46 @@ export const analizarContrato = onCall(
     }
   });
 
+/**
+ * ← NUEVO (11 nov): AYÚDAME A REDACTAR.
+ *
+ * El objetivo, con palabras de Ricardo: «que se pueda usar incluso si
+ * no eres abogado o no sabes cómo redactarlo correctamente».
+ *
+ * El mínimo es más bajo que el de `analizarContrato` —40 caracteres
+ * contra 80— y es a propósito: aquel necesita obligaciones de las que
+ * sacar requisitos, y éste sólo necesita una idea que ordenar. «Hago
+ * un sitio web, lo entrego el 12 de diciembre, me pagan 30 mil» son
+ * 60 caracteres y es material de sobra.
+ */
+export const redactarBorrador = onCall(
+  { ...OPCIONES, timeoutSeconds: 120, memory: "512MiB", secrets: ["GEMINI_API_KEY"] },
+  async (req) => {
+    quien(req);   // hace falta sesión: redactar cuesta dinero
+
+    const texto = String(req.data?.texto || "");
+    if(texto.trim().length < 40){
+      throw new HttpsError("invalid-argument",
+        "Escribe un poco más para que haya algo que ordenar: qué se hace, para cuándo y quién paga.");
+    }
+    if(texto.length > 60000){
+      throw new HttpsError("invalid-argument", "El texto es demasiado largo. Divídelo en partes.");
+    }
+    if(!process.env.GEMINI_API_KEY){
+      throw new HttpsError("failed-precondition", "La redacción con IA no está configurada en el servidor.");
+    }
+
+    try{
+      return await redactar(texto);
+    }catch(e){
+      const motivo = String(e?.message || "");
+      console.error("redactarBorrador:", motivo);
+      const mensaje = EXPLICA[motivo] || "No se pudo redactar el borrador. Inténtalo de nuevo.";
+      const codigo = ["cuota", "saturado", "conexion"].includes(motivo) ? "unavailable" : "internal";
+      throw new HttpsError(codigo, mensaje);
+    }
+  });
+
 // ══════════════════════════════════════════════════════════════
 // VERIFICACIÓN FISCAL (Etapa 4)
 //
@@ -2943,12 +2983,35 @@ export const refrescarRaicesSAT = onCall(
   });
 
 /**
+ * ← NUEVO (11 nov): EL INTERRUPTOR DE LA E.FIRMA. Apagada para el MVP.
+ *
+ * El gemelo de `EFIRMA_ENCENDIDA` en `src/nucleo/catalogos.js`. Los
+ * DOS se cambian a la vez, y `pruebas/efirma-apagada.test.js` falla si
+ * no coinciden.
+ *
+ * Esta mitad es la que importa. La del navegador sólo esconde la
+ * opción, y esconder un botón no cierra nada: quien sepa llamar la
+ * función la puede llamar igual. Aquí es donde se rechaza de verdad.
+ *
+ * Nada de lo de abajo se borra. El día que se encienda, se enciende.
+ */
+const EFIRMA_ENCENDIDA = false;
+
+function efirmaEncendida(){
+  if(!EFIRMA_ENCENDIDA){
+    throw new HttpsError("failed-precondition",
+      "La firma con e.firma no está disponible por ahora. Firma con tu código o con tu huella.");
+  }
+}
+
+/**
  * Paso 1 — el servidor dice qué hay que firmar.
  *
  * Devuelve el hash y, en palabras, sobre qué documento es, para que la
  * pantalla pueda enseñarlo antes de pedir la contraseña de la llave.
  */
 export const retoEfirma = onCall(OPCIONES, async (req) => {
+  efirmaEncendida();
   const { uid, email } = quien(req);
   const opId = String(req.data?.opId || "");
   if(!opId) throw new HttpsError("invalid-argument", "Falta el identificador de la operación.");
@@ -2981,6 +3044,7 @@ export const retoEfirma = onCall(OPCIONES, async (req) => {
 export const firmarConEfirma = onCall(
   { ...OPCIONES, timeoutSeconds: 120, memory: "512MiB" },
   async (req) => {
+    efirmaEncendida();
     const { uid, email } = quien(req);
     const { opId, certificado, firma } = req.data || {};
     if(!opId || !certificado || !firma){

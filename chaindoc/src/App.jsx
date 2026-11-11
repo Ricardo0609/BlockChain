@@ -18,6 +18,7 @@ import {
 import { bioAvailable, bioRegister, bioAssert, bioError, b64uToBytes } from "./biometric";
 import { MIN_CONTRATO,
   analyzeContract,
+  draftContract,
   montoDeDocumento,
   archivosDe,
   aidDe,
@@ -61,7 +62,7 @@ import {
 } from "./nucleo/carpetas";
 import { bloquea, decideAhora, esperaFirmaDe, estadoAcuerdo, firmaDe, parteDe } from "./nucleo/acuerdo";
 import { limpiarSecciones, seccionesDe } from "./nucleo/secciones";
-import { aTextoPlano, normalizar, ID_PAPEL } from "./nucleo/texto";
+import { aTextoPlano, normalizar, estaVacio, ID_PAPEL } from "./nucleo/texto";
 import { notificacionesDe } from "./nucleo/notificaciones";
 import { descartar, fundir, guardarLocales, leerLocales, recuperar } from "./nucleo/descartes";
 import { llamar, errorBackend } from "./nucleo/backend";
@@ -145,6 +146,9 @@ export default function Octavin(){
   const [smartText,setSmartText]   = useState("");    // ← NUEVO: texto del contrato base
   const [smartRes,setSmartRes]     = useState(null);  // ← NUEVO: análisis de la IA
   const [smartBusy,setSmartBusy]   = useState(false);
+  // ← NUEVO (11 nov): «Ayúdame a redactar».
+  const [redBusy,setRedBusy]       = useState(false);
+  const [redRes,setRedRes]         = useState(null);
   const [smartErr,setSmartErr]     = useState("");
   const [smartMsg,setSmartMsg]     = useState("");    // ← NUEVO: estado de reintentos de la IA
   const [filesOpen,setFilesOpen]   = useState(false); // ← NUEVO: adjuntos desbloqueados
@@ -944,6 +948,57 @@ export default function Octavin(){
     if(up){ setD(up); setContent(body); setDirty(false); setEdit(false); notify("Documento actualizado ✓"); }
     else notify("Error al guardar","err");
     setSaving(false);
+  };
+
+  // ← NUEVO (11 nov): «AYÚDAME A REDACTAR».
+  //
+  // El objetivo, con palabras de Ricardo: «que se pueda usar incluso
+  // si no eres abogado o no sabes cómo redactarlo correctamente».
+  // Escribes como te salga y esto lo devuelve en forma de contrato.
+  //
+  // Lo que se le manda es TEXTO PLANO, no el HTML. Al modelo no le
+  // sirven los `<p>` ni los `</strong>`: son tokens pagados que sólo
+  // empeoran lo que entiende. Y lo que devuelve pasa por
+  // `normalizar()` antes de enseñarse, que es el mismo filtro con el
+  // que se guarda todo lo demás. Dos cosas a la vez: un modelo puede
+  // devolver cualquier cosa —incluido un <script>—, y además así lo
+  // que se ve en el borrador es exactamente lo que se va a guardar.
+  const pedirRedaccion = async()=>{
+    const cuerpo = cuerpoDelEditor();
+    // El aviso que pidió él. Sin esto, pulsar con el documento en
+    // blanco daría un error del servidor sobre un texto demasiado
+    // corto, que no dice qué hacer.
+    if(estaVacio(cuerpo)){ setModal({ t:"redactar-vacio" }); return; }
+
+    setRedBusy(true);
+    try{
+      const res = await draftContract(aTextoPlano(cuerpo));
+      setRedRes({ ...res, html: normalizar(res.html) });
+      setModal({ t:"redaccion" });
+    }catch(err){ notify(err.message, "err"); }
+    finally{ setRedBusy(false); }
+  };
+
+  /**
+   * Poner el borrador en el editor. No guarda.
+   *
+   * Es a propósito, y es la vuelta atrás: mientras no le des a
+   * «Guardar», lo que escribiste sigue intacto en el documento y
+   * basta con salir sin guardar para recuperarlo. Guardar aquí
+   * mismo dejaría el texto anterior sólo dentro de la cadena, y
+   * sacarlo de ahí es mucho pedir para un «me arrepentí».
+   */
+  const usarRedaccion = ()=>{
+    if(!redRes) return;
+    const el = elEditor();
+    if(el) el.innerHTML = redRes.html;
+    setContent(redRes.html);
+    setDirty(true);
+    // El título sólo si no había uno: el suyo gana siempre.
+    if(redRes.titulo && !title.trim()) setTitle(redRes.titulo);
+    setModal(null);
+    setRedRes(null);
+    notify("Borrador puesto. Revísalo y dale a Guardar; si no te convence, sal sin guardar.");
   };
 
   // ← NUEVO (10 nov): renombrar un contrato inteligente.
@@ -2380,7 +2435,7 @@ export default function Octavin(){
     setHistTab, setLinkErr, setLinkExp, setLock, setLockInput, setMIn, setMIn2, setMenu,
     setMethod, setModal, setMontoReq, setOpenSec, setPass, setShareErr, setShareFound,
     setShowHashes, setSmartErr, setSmartRes, setSmartText, setSolMsg,
-    renombrar,
+    renombrar, pedirRedaccion, usarRedaccion, redBusy, redRes,
     setTitle, setTpl, setUnlocked, setView, shareBusy, shareErr, shareFound,
     showHashes, signWithBio, smartBusy, smartErr, smartMsg, smartRes, smartText,
     solMsg, switchAuth, tieneCodigo, title, tpl, trySign, uid,

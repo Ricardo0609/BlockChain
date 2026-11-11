@@ -10,6 +10,7 @@ import { modalEfirma } from "./Efirma";
 import { modalExpediente } from "./Expediente";
 import { modalFirma } from "./Firma";
 import { modalLegal } from "./Legal";
+import { modalRedaccion } from "./Redaccion";
 import { modalSalir } from "./Salir";
 
 export function renderModales(ctx){
@@ -21,6 +22,7 @@ export function renderModales(ctx){
     ?? modalEfirma(ctx)
     ?? modalExpediente(ctx)
     ?? modalCompartir(ctx)
+    ?? modalRedaccion(ctx)
     ?? modalAjustes(ctx)
     ?? modalLegal(ctx)
     ?? modalSalir(ctx)

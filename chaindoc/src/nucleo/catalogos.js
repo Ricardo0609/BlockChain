@@ -114,7 +114,35 @@ export const selloUrl = (id) => `/sellos/${id}.png`;
  * paso. Esto es para el contrato, que es lo que alguien puede querer
  * oponer ante un tercero.
  */
-export const aceptaEfirma = (doc) => Boolean(doc) && doc.tplId !== "factura";
+export const leTocaEfirma = (doc) => Boolean(doc) && doc.tplId !== "factura";
+
+/**
+ * ← NUEVO (11 nov): EL INTERRUPTOR. Apagada para el primer MVP.
+ *
+ * Decisión de Ricardo: «lo de poder firmar con la e.firma por ahora
+ * hay que apagarlo, o sea no quitarlo por completo, que siga ahí en
+ * los archivos pero apagado [...] solo prender la opción».
+ *
+ * El motivo no es técnico —funciona, está probada de punta a punta
+ * contra certificados sintéticos— sino de confianza. A quien ve por
+ * primera vez el producto, que le pidan su e.firma le suena a
+ * trámite del SAT y a entregar su llave privada. Nada de eso pasa
+ * —el `.key` nunca sale de su computadora—, pero hay que explicarlo,
+ * y un MVP no se puede permitir una pantalla que necesite
+ * explicación antes de que nadie haya entendido el producto.
+ *
+ * PARA ENCENDERLA: `true` aquí, y lo mismo en `functions/index.js`.
+ * Son los dos sitios, y `pruebas/efirma-apagada.test.js` falla si se
+ * cambia uno y no el otro: media e.firma encendida es una opción en
+ * pantalla que el servidor rechaza.
+ *
+ * NO BORRAR NADA. `src/nucleo/efirma.js`, `asn1.js`, `des.js`, el
+ * panel y las dos funciones del servidor se quedan donde están.
+ */
+export const EFIRMA_ENCENDIDA = false;
+
+/** ¿A este documento se le ofrece firmar con la e.firma del SAT? */
+export const aceptaEfirma = (doc) => EFIRMA_ENCENDIDA && leTocaEfirma(doc);
 
 // ── TIPOS DE DOCUMENTO, PARA RECONOCERLOS DE UN VISTAZO ───────
 //

@@ -1780,6 +1780,49 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .be-btn.on b,.be-btn.on i{color:inherit}
 .be-btn:active{background:var(--gris-100)}
 .be-btn:focus-visible{outline:2px solid var(--negro);outline-offset:-2px}
+/* ← NUEVO (11 nov): «Ayúdame a redactar». Lleva su nombre escrito y no
+   sólo un icono: es el único botón de la barra que cambia lo que el
+   documento DICE, y eso no se pulsa a ciegas. En pantalla estrecha el
+   texto desaparece y queda el icono, porque la barra ya va justa y
+   perder los estilos para ganar una frase sería mal cambio. */
+/* El borrador que devuelve «Ayúdame a redactar».
+   Más ancho porque aquí hay que LEER un contrato, no confirmar
+   algo: en la caja estrecha de los demás, el borrador saldría en
+   renglones de seis palabras y nadie lo leería antes de aceptarlo,
+   que es justo lo que este modal existe para evitar. */
+/* Alto tope y columna: con la lista de lo que falta arriba y un
+   contrato debajo, el modal crecía más que la pantalla y los dos
+   botones de decidir quedaban fuera de vista. En un modal cuyo único
+   trabajo es que elijas antes de que te cambien el texto, eso es el
+   peor sitio posible para esconder la elección. Ahora lo que crece es
+   el borrador, y los botones no se mueven de abajo. */
+.modal-ancho{max-width:720px;max-height:88vh;display:flex;flex-direction:column}
+.modal-ancho .modal-row{margin-top:14px;flex:0 0 auto}
+.red-faltan{border:1px solid var(--ambar-b,#f0d9a8);background:var(--ambar-f,#fdf8ef);
+  border-radius:11px;padding:13px 15px;margin:4px 0 14px;flex:0 0 auto}
+.red-faltan-t{display:flex;align-items:center;gap:7px;margin-bottom:7px;color:#8a5a09}
+.red-faltan ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.red-faltan li{font-size:14px;line-height:1.45}
+.red-faltan-p{margin:9px 0 0;font-size:12.5px;color:var(--gris-700,#6b6b6b);line-height:1.45}
+/* En pantalla corta, seis cosas que faltan se comían el modal entero y
+   del borrador quedaban dos renglones. Las dos cosas hay que poder
+   leerlas, así que aquí la lista también se desplaza. */
+@media(max-height:780px){ .red-faltan{max-height:32vh;overflow:auto} }
+/* El alto mínimo pequeño hace falta de verdad: sin él, un hijo
+   flexible no baja de su alto natural y el modal volvería a crecer
+   por debajo de la pantalla, que es lo que se acaba de arreglar. */
+.red-vista{flex:1 1 auto;min-height:120px;overflow:auto;border:1px solid var(--gris-100);
+  border-radius:11px;padding:18px 20px;background:var(--papel,#fff);font-size:14.5px;line-height:1.6}
+.red-vista h1{font-size:19px;margin:0 0 12px}
+.red-vista h2{font-size:15.5px;margin:17px 0 7px}
+.red-vista p{margin:0 0 9px}
+.red-vista ul,.red-vista ol{margin:0 0 9px;padding-left:22px}
+.red-ejemplo{margin:2px 0 4px;padding:11px 14px;border-left:3px solid var(--gris-100);
+  background:var(--bg-soft);border-radius:0 9px 9px 0;font-size:14px;line-height:1.5;
+  color:var(--gris-700,#6b6b6b);font-style:italic}
+.be-redactar{gap:6px;padding:0 11px;font-size:13px;font-weight:600;white-space:nowrap}
+.be-redactar:disabled{opacity:.55;cursor:default}
+@media(max-width:620px){ .be-redactar span{display:none} .be-redactar{padding:0 7px} }
 .be-txt{font-weight:600}
 .be-h{font-family:var(--f-t)}
 .be-btn b{font-weight:800}

@@ -36,7 +36,7 @@ const ALINEAR = [
 ];
 
 export function renderBarraEstilos(ctx){
-  const { aplicarEstilo, estiloAct } = ctx;
+  const { aplicarEstilo, estiloAct, pedirRedaccion, redBusy } = ctx;
 
   // `onMouseDown` con preventDefault y no `onClick`: al pulsar un
   // botón el navegador quita el cursor del texto, y execCommand sin
@@ -87,6 +87,31 @@ export function renderBarraEstilos(ctx){
         {ALINEAR.map(a=>boton({ k:a.cmd, cmd:a.cmd, ayuda:a.ayuda },
           <Icon n={a.ico} size={19}/>))}
       </div>
+
+      {/* ← NUEVO (11 nov): «Ayúdame a redactar».
+          El objetivo de todo esto, dicho por Ricardo: «que se pueda
+          usar incluso si no eres abogado o no sabes cómo redactarlo
+          correctamente».
+
+          Va al final, separado y con su nombre escrito. Los de la
+          izquierda cambian cómo SE VE lo que escribiste y se deshacen
+          con Ctrl+Z; éste reescribe lo que DICE, y eso no se pone
+          detrás de un icono que haya que adivinar. Por la misma razón
+          no aplica nada solo: enseña el borrador y tú decides.
+
+          `onMouseDown` como los demás, para que no se pierda el
+          cursor, y así el texto que se manda sigue siendo el de este
+          documento. */}
+      <span className="be-sep"/>
+
+      <button type="button" className={`be-btn be-txt be-redactar${redBusy?" esperando":""}`}
+        disabled={redBusy}
+        title="Reescribe lo que llevas en forma de contrato"
+        aria-label="Ayúdame a redactar"
+        onMouseDown={e=>{ e.preventDefault(); if(!redBusy) pedirRedaccion(); }}>
+        <Icon n="edit" size={18}/>
+        <span>{redBusy ? "Redactando…" : "Ayúdame a redactar"}</span>
+      </button>
     </div>
   );
 }

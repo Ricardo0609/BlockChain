@@ -9,7 +9,7 @@
 // obliga a decidirlo a propósito.
 
 import { describe, expect, it } from "vitest";
-import { aceptaEfirma, METHODS, TEMPLATES, TIPOS_DOC } from "../src/nucleo/catalogos.js";
+import { METHODS, TEMPLATES, TIPOS_DOC } from "../src/nucleo/catalogos.js";
 
 describe("tipos de documento (paso 1)", () => {
   it("son exactamente cuatro", () => {
@@ -89,23 +89,12 @@ describe("métodos de creación (paso 2)", () => {
 
 // ── e.firma (Etapa 5) ─────────────────────────────────────────
 
-describe("a quien se le ofrece la e.firma", () => {
-  it("a un contrato si", () => {
-    expect(aceptaEfirma({ tplId: "contrato" })).toBe(true);
-    expect(aceptaEfirma({ tplId: "inteligente" })).toBe(true);
-    expect(aceptaEfirma({ tplId: "recibo" })).toBe(true);
-  });
-
-  // Un CFDI ya viene sellado por quien lo emitio y timbrado por el SAT.
-  it("a una factura no", () => {
-    expect(aceptaEfirma({ tplId: "factura" })).toBe(false);
-  });
-
-  it("a un documento sin plantilla si, y a nada no", () => {
-    expect(aceptaEfirma({ tplId: null })).toBe(true);
-    expect(aceptaEfirma(null)).toBe(false);
-  });
-});
+// ← MOVIDO (11 nov): estas comprobaciones viven ahora en
+// `pruebas/efirma-apagada.test.js`, junto con el interruptor que las
+// explica. La regla de a quien le toca sigue probada alli, sobre
+// `leTocaEfirma`; lo que cambio es que `aceptaEfirma` ahora devuelve
+// false para todos mientras la e.firma este apagada, asi que probarla
+// aqui solo diria que la bandera esta en false.
 
 // ── La recomendación de cada tipo (14 oct) ────────────────────
 //

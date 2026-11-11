@@ -137,7 +137,7 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 const TRANSITORIOS = new Set([429, 500, 502, 503, 504]);
 
 /** Una sola petición a un modelo. */
-async function pedir(model, prompt){
+async function pedir(model, prompt, schema){
   let res;
   try{
     res = await fetch(`${BASE}/models/${model}:generateContent?key=${llave()}`, {
@@ -148,7 +148,18 @@ async function pedir(model, prompt){
         generationConfig: {
           temperature: 0,                   // determinista: mismo contrato, mismo resultado
           responseMimeType: "application/json",
-          responseSchema: SCHEMA,
+          // ← ARREGLADO (11 nov): el esquema llega de fuera.
+          //
+          // Estaba cogido a fuego al de `analizar`, y por eso la
+          // primera llamada de «Ayudame a redactar» fallo: Gemini
+          // devolvia obedientemente la forma del ANALISIS -con
+          // requisitos y fases- cuando se le pedia un contrato, y al
+          // no encontrar `html` el codigo decia «ilegible».
+          //
+          // Es la clase de fallo que no se ve leyendo el codigo
+          // nuevo: estaba escondido dos funciones mas abajo, en una
+          // que llevaba meses funcionando porque solo tenia un uso.
+          responseSchema: schema,
         },
       }),
     });
@@ -161,7 +172,7 @@ async function pedir(model, prompt){
 }
 
 /** Reintenta con espera creciente y, si el modelo sigue fallando, pasa al siguiente. */
-export async function preguntar(prompt){
+export async function preguntar(prompt, schema = SCHEMA){
   const modelos = await modelosCandidatos();
   const ESPERAS = [0, 1000, 2500];
   let ultimo = 0;
@@ -170,7 +181,7 @@ export async function preguntar(prompt){
     for(const espera of ESPERAS){
       if(espera) await esperar(espera);
 
-      const r = await pedir(model, prompt);
+      const r = await pedir(model, prompt, schema);
       if(r.ok){
         if(!r.text) throw new Error("vacio");
         if(model !== resuelto) candidatos = null;    // se reordena: el que funcionó va primero
@@ -264,6 +275,109 @@ export async function analizar(texto){
   if(!r.requisitos.length) throw new Error("sin-requisitos");
 
   return { ...r, modelo: model, analizadoEn: new Date().toISOString() };
+}
+
+// ══════════════════════════════════════════════════════════════
+// AYÚDAME A REDACTAR (11 nov)
+//
+// El objetivo de Ricardo, con sus palabras: «que se pueda usar incluso
+// si no eres abogado o no sabes cómo redactarlo correctamente».
+//
+// Esto es lo contrario de `analizar`. Aquel LEE un contrato y saca la
+// lista de lo que habrá que probar; éste toma lo que alguien escribió
+// como le salió y lo devuelve ordenado y en forma.
+//
+// Y la parte que de verdad sirve no es la prosa. Es `faltan`.
+//
+// Cuando un programador escribe «este es un contrato para crear un
+// sitio web, lo entrego el 12 de diciembre», lo que le falta no es
+// redacción: le falta cuánto le van a pagar, cuándo, de quién es el
+// código al terminar, y qué pasa si entrega tarde. Devolverle eso
+// mismo con mejores palabras lo dejaría igual de desprotegido y con
+// más confianza, que es peor. Por eso el modelo tiene prohibido
+// rellenar esos huecos y obligado a enumerarlos.
+//
+// LO QUE NO SE INVENTA, NUNCA. Ni un monto, ni un nombre, ni una
+// fecha, ni una penalización. Lo que no esté escrito sale como
+// [COMPLETAR: ...] para que lo ponga una persona. Un contrato con un
+// dato inventado es peor que una nota suelta: parece firme.
+// ══════════════════════════════════════════════════════════════
+
+export const PROMPT_REDACCION = `Eres un redactor de contratos en México. Te dan unas notas escritas por alguien que no es abogado, en lenguaje informal, y tu trabajo es devolverlas como un contrato bien estructurado.
+
+REGLA PRINCIPAL, POR ENCIMA DE TODAS: no inventes NADA. Ni montos, ni nombres, ni fechas, ni plazos, ni penalizaciones, ni jurisdicciones, ni obligaciones que no estén en las notas. Si algo no está, NO lo pongas.
+
+Qué sí haces:
+- Reorganizas lo que está escrito en apartados con títulos, en el orden en que se entiende un contrato: de qué se trata, quiénes son las partes, qué se obliga cada una, cuándo, cuánto y cómo se paga, y qué pasa al terminar.
+- Pasas el lenguaje informal a lenguaje claro y formal, sin florituras ni latinajos. "Yo tendré que hacerlo" pasa a "El Prestador se obliga a entregar". Nada de "por medio del presente instrumento".
+- Conservas TODOS los datos de las notas: cada fecha, cada cantidad, cada nombre y cada cosa prometida tiene que seguir ahí.
+
+Los huecos:
+- Donde haga falta un dato que las notas no dan, escribe exactamente [COMPLETAR: qué falta]. Por ejemplo [COMPLETAR: nombre completo del cliente] o [COMPLETAR: monto y forma de pago].
+- Úsalo también para las partes si no están identificadas.
+- No pongas más de 12 huecos. Si faltan más cosas, deja los más importantes.
+
+El campo "faltan": una lista de lo que un contrato de este tipo debería decir y estas notas no dicen, en frases cortas y en lenguaje de todos los días, pensadas para alguien que no es abogado. Máximo 6. Ordénalas de más a menos grave. Si las notas están completas, devuelve una lista vacía.
+
+FORMATO DE SALIDA. Devuelve JSON con esta forma exacta:
+{"titulo": "...", "html": "...", "faltan": ["...", "..."]}
+
+- "titulo": cómo se llamaría el contrato, máximo 10 palabras. Si las notas ya traen un título que sirva, respétalo.
+- "html": el contrato. Usa SÓLO estas etiquetas: <h1> <h2> <p> <ul> <ol> <li> <b> <i>. Nada de atributos, estilos, clases ni tablas. Un <h1> con el título y <h2> para cada apartado.
+- Escribe todo en español de México.
+
+NO eres un abogado y esto no es asesoría legal: produces un borrador ordenado para que una persona lo revise.
+
+NOTAS:
+"""
+{TEXTO}
+"""`;
+
+/**
+ * La forma que tiene que devolver al redactar.
+ *
+ * Hace falta decirsela aparte: `preguntar` usa por defecto la del
+ * analisis, que pide requisitos y fases. Sin esto, Gemini devuelve
+ * aquella forma por mucho que el texto de las instrucciones pida un
+ * contrato -el esquema manda sobre el prompt-, y aqui llegaria un
+ * objeto sin `html`.
+ */
+export const SCHEMA_REDACCION = {
+  type: "object",
+  properties: {
+    titulo: { type: "string" },
+    html:   { type: "string" },
+    faltan: { type: "array", items: { type: "string" } },
+  },
+  required: ["titulo", "html", "faltan"],
+};
+
+/** Lo que el modelo devuelve, dejado en la forma que esperamos. */
+function normalizarRedaccion(crudo){
+  const html = String(crudo?.html || "").trim();
+  if(!html) throw new Error("ilegible");
+  return {
+    titulo: String(crudo?.titulo || "").trim().slice(0, 120),
+    html,
+    faltan: (Array.isArray(crudo?.faltan) ? crudo.faltan : [])
+      .map((x) => String(x || "").trim())
+      .filter(Boolean)
+      .slice(0, 6),
+  };
+}
+
+/** Las notas de alguien, devueltas como un contrato en forma. */
+export async function redactar(texto){
+  const prompt = PROMPT_REDACCION.replace("{TEXTO}", texto.trim().slice(0, 40000));
+
+  const { text: salida, model } = await preguntar(prompt, SCHEMA_REDACCION);
+
+  let crudo;
+  try{ crudo = JSON.parse(salida); }
+  catch{ throw new Error("ilegible"); }
+
+  return { ...normalizarRedaccion(crudo), modelo: model,
+           redactadoEn: new Date().toISOString() };
 }
 
 /** Los motivos de arriba, en español, para enseñárselos a la persona. */

@@ -315,6 +315,35 @@ function normalize(raw) {
 }
 
 /** Lee un contrato y devuelve la estructura del expediente. */
+/**
+ * ← NUEVO (11 nov): «Ayúdame a redactar».
+ *
+ * El objetivo, con palabras de Ricardo: «que se pueda usar incluso si
+ * no eres abogado o no sabes cómo redactarlo correctamente». Tomas
+ * unas notas escritas como salieron y devuelve un contrato ordenado,
+ * más la lista de lo que quedó sin decir.
+ *
+ * SÓLO POR SERVIDOR, a diferencia de `analyzeContract`, que todavía
+ * tiene su camino local. No es un descuido: ese camino local es
+ * precisamente lo que hay pendiente de quitar —nueve guardas y
+ * dieciocho bifurcaciones—, y añadirle una décima sería hacer más
+ * grande el problema que queremos borrar. Esto nació después de esa
+ * decisión, así que nace con un solo camino.
+ */
+export async function draftContract(text) {
+  if (!text || text.trim().length < 40)
+    throw new Error("Escribe un poco más para que haya algo que ordenar: qué se hace, para cuándo y quién paga.");
+
+  if (!enServidor())
+    throw new Error("La redacción con IA necesita el servidor. Enciéndelo con VITE_BACKEND=servidor.");
+
+  try {
+    return await llamar("redactarBorrador", { texto: text.trim() });
+  } catch (e) {
+    throw new Error(errorBackend(e), { cause: e });
+  }
+}
+
 export async function analyzeContract(text, onEstado) {
   if (!text || text.trim().length < 80)
     throw new Error("El contrato es demasiado corto para analizarse. Escribe al menos un párrafo con las obligaciones.");
