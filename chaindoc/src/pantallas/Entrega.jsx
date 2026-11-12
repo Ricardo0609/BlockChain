@@ -49,6 +49,7 @@ export function renderEntrega(ctx){
     abrirEnlace, cerrarEnlace, entregarEnlaceReq,
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
     invNombre, setInvNombre, aceptarInvitacion, invAceptando, invAceptError,
+    invRechazando, setInvRechazando, invMotivo, setInvMotivo, rechazarInvitacion,
   } = ctx;
 
   const Marco = ({ children }) => (<><style>{ESTILOS}</style>
@@ -117,29 +118,105 @@ export function renderEntrega(ctx){
     </div>
   ) : meToca ? (
     <div className="entrega-aceptar">
-      <h2>Para empezar, acepta el contrato</h2>
+      <h2>Léelo y dinos si estás de acuerdo</h2>
       <p className="entrega-aceptar-p">
-        Léelo arriba. Si estás de acuerdo, escribe tu nombre completo y acepta:
-        eso pone el contrato en vigor y queda asentado con la fecha.
+        Escribe tu nombre completo. Si aceptas, el contrato queda en vigor con la
+        fecha de hoy; si no, di por qué y quien lo mandó podrá corregirlo.
       </p>
       <label className="entrega-aceptar-l" htmlFor="inv-nombre">Tu nombre completo</label>
       <input id="inv-nombre" className="inp" value={invNombre} disabled={invAceptando}
         placeholder="Como aparece en tu identificación" autoComplete="name"
         onChange={e=>setInvNombre(e.target.value)}/>
+
+      {/* El motivo aparece sólo al decir que no. Pedirlo de entrada
+          sugiere que la respuesta esperada es el rechazo, y encima
+          llena de campos una pantalla que debería ser una decisión. */}
+      {invRechazando && (
+        <>
+          <label className="entrega-aceptar-l" htmlFor="inv-motivo">¿Por qué no lo aceptas?</label>
+          <input id="inv-motivo" className="inp" value={invMotivo} disabled={invAceptando}
+            placeholder="Ej.: el monto no es el que acordamos"
+            onChange={e=>setInvMotivo(e.target.value)}/>
+        </>
+      )}
+
       {invAceptError && <p className="entrega-aceptar-e">{invAceptError}</p>}
-      <button className={`btn btn-primary ${invAceptando?"esperando":""}`}
-        disabled={invAceptando} onClick={aceptarInvitacion}>
-        {invAceptando ? "Aceptando…" : "Acepto este contrato"}
-      </button>
+
+      <div className="entrega-aceptar-b">
+        {invRechazando ? (
+          <>
+            <button className="btn btn-secondary" disabled={invAceptando}
+              onClick={()=>{ setInvRechazando(false); setInvMotivo(""); }}>
+              Volver
+            </button>
+            {/* La acción de este paso, así que va de principal. No en
+                rojo: no aceptar un contrato no es destruir nada, es
+                una respuesta legítima, y pintarla de alarma empuja a
+                aceptar al que dudaba. */}
+            <button className={`btn btn-primary ${invAceptando?"esperando":""}`}
+              disabled={invAceptando} onClick={rechazarInvitacion}>
+              {invAceptando ? "Enviando…" : "Enviar mi respuesta"}
+            </button>
+          </>
+        ) : (
+          <>
+            {/* Los dos a la vista y sin esconder el «no». Un contrato
+                con una sola salida no es un acuerdo. */}
+            <button className="btn btn-secondary" disabled={invAceptando}
+              onClick={()=>setInvRechazando(true)}>
+              No lo acepto
+            </button>
+            <button className={`btn btn-primary ${invAceptando?"esperando":""}`}
+              disabled={invAceptando} onClick={aceptarInvitacion}>
+              {invAceptando ? "Aceptando…" : "Acepto este contrato"}
+            </button>
+          </>
+        )}
+      </div>
+
       {/* Dicho antes de pulsar, no después. Que no se lleve la idea
           de que esto prueba quién es: prueba que alguien con este
-          enlace aceptó y dio este nombre, que es otra cosa. */}
+          enlace respondió y dio este nombre, que es otra cosa. */}
       <p className="entrega-aceptar-n">
-        Quedará escrito que aceptó quien declara llamarse así, desde el enlace
+        Quedará escrito que respondió quien declara llamarse así, desde el enlace
         enviado a {invitacion.correo || "tu correo"}.
       </p>
     </div>
-  ) : acu && acu.porQueNo === "no-eres-parte" ? null : null;
+  ) : acu && acu.porQueNo ? (
+    // ← NUEVO (12 nov): CUANDO NO SE PUEDE, DECIR POR QUÉ.
+    //
+    // Esto antes era `null`: si no te tocaba aceptar, la pantalla no
+    // enseñaba nada. Ni el botón ni una explicación. Quien abría el
+    // enlace veía el contrato y se quedaba sin saber si le faltaba
+    // algo por hacer, y quien lo mandó tampoco entendía por qué no
+    // pasaba nada.
+    //
+    // Una puerta que se cierra en silencio es peor que una cerrada
+    // con un cartel. Las tres razones son distintas y cada una lleva
+    // a un sitio distinto, así que se dicen distinto.
+    <div className="entrega-nota">
+      <Icon n="info" size={18}/>
+      <div>
+        {acu.porQueNo === "sin-mandar" ? <>
+          <strong>Este contrato todavía no se manda a firmar.</strong>
+          <p>
+            Por ahora es un borrador. Quien lo escribió tiene que mandarlo desde
+            «Compartir», y entonces te llegará para que lo leas y lo aceptes.
+            Mientras tanto puedes leerlo aquí.
+          </p>
+        </> : acu.porQueNo === "no-eres-parte" ? <>
+          <strong>Este enlace es para entregar comprobantes.</strong>
+          <p>
+            El contrato lo firma la otra parte, no tú. Puedes leerlo para saber a
+            qué corresponde lo que subes.
+          </p>
+        </> : <>
+          <strong>Ya no hay nada que responder.</strong>
+          <p>Este contrato ya pasó de esa fase. Puedes leerlo y entregar lo que te toque.</p>
+        </>}
+      </div>
+    </div>
+  ) : null;
 
   return (
     <Marco>
@@ -168,6 +245,17 @@ export function renderEntrega(ctx){
 
       {contrato}
       {aceptar}
+
+      {/* ← NUEVO (12 nov): MIENTRAS NO HAYA RESPONDIDO, NADA MÁS.
+          Lo pidió Ricardo, y es el mismo orden que tiene quien sí
+          tiene cuenta: primero lees y decides, y sólo entonces se
+          abre el resto.
+          No es cosmético. Una lista de «Subir» debajo de un contrato
+          sin aceptar invita a hacer el trabajo antes de decir que
+          sí, y quien sube primero ya no decide libre: decide con el
+          esfuerzo hecho. Y si acaba rechazándolo, habrá entregado
+          evidencia a un contrato que no existe. */}
+      {meToca ? null : <>
 
       <div className="entrega-lista">
         {reqs.map(r=>{
@@ -284,6 +372,8 @@ export function renderEntrega(ctx){
           </a>
         </div>
       </div>
+
+      </>}
     </Marco>
   );
 }

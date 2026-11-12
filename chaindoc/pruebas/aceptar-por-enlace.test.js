@@ -199,6 +199,280 @@ describe("el nombre que se escribe", () => {
   });
 });
 
+// ── PRIMERO DECIDIR, DESPUES ENTREGAR (12 nov) ──────────────────
+//
+// Segunda pasada de Ricardo sobre lo mismo: «si se entra por primera
+// vez se debe aceptar primero». Tiene razon, y no es cosmetico.
+//
+// Una lista de «Subir» debajo de un contrato sin aceptar invita a
+// hacer el trabajo antes de decir que si. Quien sube primero ya no
+// decide libre: decide con el esfuerzo hecho. Y si acaba
+// rechazandolo, habra entregado evidencia a un contrato que no
+// existe.
+describe("mientras no haya respondido, no se ve nada mas", () => {
+  const pant = () => leer("src/pantallas/Entrega.jsx");
+
+  it("la lista de entregar queda detras de la decision", () => {
+    // El guardia. Si desaparece, vuelve el orden de antes.
+    expect(pant()).toMatch(/\{meToca \? null : <>/);
+  });
+
+  it("y lo que tapa incluye la lista, el pie y la invitacion a OCTAVIN", () => {
+    // Que el guardia abarque hasta el final y no solo el primer
+    // bloque: lo de media pantalla tapada es peor que nada.
+    const s = pant();
+    const abre = s.indexOf("{meToca ? null : <>");
+    // Buscado DESDE la apertura, no desde el principio del archivo:
+    // el texto `</>}` aparece tambien en los carteles de «no te
+    // toca», que estan mas arriba, y la primera version de esta
+    // prueba se quedaba con aquel y fallaba sin motivo.
+    const cierra = s.indexOf("      </>}", abre);
+    expect(abre).toBeGreaterThan(-1);
+    expect(cierra).toBeGreaterThan(abre);
+    const dentro = s.slice(abre, cierra);
+    expect(dentro).toContain('className="entrega-lista"');
+    expect(dentro).toContain('className="entrega-cta"');
+  });
+
+  it("pero el contrato SI se ve: es lo que hay que leer para decidir", () => {
+    const s = pant();
+    expect(s.indexOf("{contrato}")).toBeLessThan(s.indexOf("{meToca ? null : <>"));
+  });
+});
+
+describe("decir que no", () => {
+  const srv = () => {
+    const s = leer("functions/index.js");
+    const i = s.indexOf("export const rechazarPorInvitacion");
+    expect(i).toBeGreaterThan(-1);
+    return s.slice(i, i + 3500);
+  };
+
+  it("existe: un contrato con una sola salida no es un acuerdo", () => {
+    expect(srv()).toMatch(/onCall/);
+    expect(leer("src/nucleo/invitaciones.js")).toMatch(/rechazarPorInvitacion/);
+  });
+
+  it("pide el motivo, igual que a quien tiene cuenta", () => {
+    // Un «no» sin razon deja a la otra parte sin saber que arreglar y
+    // el contrato atascado.
+    expect(srv()).toMatch(/if\(!motivo\)/);
+    expect(srv()).toMatch(/Di por qué no lo aceptas/);
+  });
+
+  it("y el nombre, con la misma honestidad que al aceptar", () => {
+    expect(srv()).toMatch(/declara llamarse \$\{nombre\}/);
+    expect(srv()).toMatch(/fuerza: "enlace"/);
+  });
+
+  it("vuelve a comprobar que es parte y que el estado lo permite", () => {
+    expect(srv()).toMatch(/porQueNo === "no-eres-parte"/);
+    expect(srv()).toMatch(/permiteEstado\(puerta\.estado, "rechazar"\)/);
+  });
+
+  it("no borra nada: queda asentado el rechazo con su fecha", () => {
+    expect(srv()).toMatch(/rechazo: \{/);
+    expect(srv()).toMatch(/tipo: "rechazado"/);
+  });
+
+  it("la pantalla ofrece las dos salidas sin esconder el no", () => {
+    const s = leer("src/pantallas/Entrega.jsx");
+    expect(s).toMatch(/No lo acepto/);
+    expect(s).toMatch(/Acepto este contrato/);
+    // Del mismo ancho: en cuanto una es mas grande, la pantalla
+    // empuja.
+    expect(leer("src/ui/estilos.js")).toMatch(/\.entrega-aceptar-b \.btn\{flex:1\}/);
+  });
+
+  it("el motivo sale solo al decir que no, no de entrada", () => {
+    // Pedirlo antes sugiere que la respuesta esperada es el rechazo.
+    expect(leer("src/pantallas/Entrega.jsx")).toMatch(/\{invRechazando && \(/);
+  });
+});
+
+// ── LA PUERTA QUE FALTABA (12 nov) ──────────────────────────────
+//
+// Tercera pasada de Ricardo sobre lo mismo, y la que da con el fondo:
+// «sigo sin poder aceptar desde un link sin cuenta, me aparece igual
+// que antes».
+//
+// No era el codigo de aceptar, que estaba bien. Era que NADIE creaba
+// un enlace que sirviera para eso. «Mandar a firmar» le daba acceso
+// al correo del destinatario -acceso DENTRO de la aplicacion, que
+// sin cuenta no lleva a ningun sitio- y no generaba enlace. Y el
+// enlace de pedir comprobantes nace con `correo: null`, asi que
+// `acuerdoParaInvitado` decia, correctamente, que esa persona no es
+// parte del acuerdo.
+//
+// La capacidad existia y era inalcanzable. Esto vigila la puerta.
+describe("mandar a firmar entrega el enlace", () => {
+  const trozo = () => {
+    const s = leer("functions/index.js");
+    const i = s.indexOf("export const ponerEnFirme");
+    expect(i).toBeGreaterThan(-1);
+    return s.slice(i, s.indexOf("\n});", i));
+  };
+
+  it("LA QUE IMPORTA: se crea un enlace al poner el contrato en firme", () => {
+    expect(trozo()).toMatch(/armarInvitacion\(\{/);
+    expect(trozo()).toMatch(/return \{ doc, enlace \}/);
+  });
+
+  it("y va a nombre del DESTINATARIO, que es lo que lo hace servir", () => {
+    // Si naciera sin correo -como los de pedir comprobantes- la
+    // pantalla del enlace no ofreceria aceptar nada, que es
+    // exactamente el fallo que esto arregla.
+    expect(trozo()).toMatch(/reqIds: pendientes, correo,/);
+  });
+
+  it("cubre lo que falta por entregar, para que sirva despues tambien", () => {
+    expect(trozo()).toMatch(/\.filter\(\(r\) => r\.estado !== "cumplido"\)/);
+  });
+
+  it("dura mas que un enlace de comprobantes", () => {
+    // Esto no es un recado: es el contrato. Quien lo recibe puede
+    // querer ensenarselo a alguien antes de aceptar.
+    expect(trozo()).toMatch(/dias: 30,/);
+  });
+
+  it("y si falla el enlace, el contrato queda igual de mandado", () => {
+    // El contrato YA se asento. Caerse por no poder crear una
+    // comodidad seria perder lo importante por lo accesorio.
+    expect(trozo()).toMatch(/\}catch\(e\)\{/);
+    expect(trozo()).toMatch(/no se pudo crear el enlace/);
+    expect(trozo()).toMatch(/let enlace = null;/);
+  });
+
+  it("la pantalla lo ensena en vez de cerrarse sin mas", () => {
+    const app = leer("src/App.jsx");
+    expect(app).toMatch(/if\(r\.enlace\)\{/);
+    expect(app).toMatch(/paraFirmar: true, correo,/);
+  });
+
+  it("y el texto dice que primero se lee y se decide", () => {
+    // El mismo modal sirve para los dos enlaces y no dicen lo mismo.
+    const m = leer("src/modales/Compartir.jsx");
+    expect(m).toMatch(/enlaceNuevo\.paraFirmar/);
+    expect(m).toMatch(/aceptarlo o no aceptarlo/);
+    expect(m).toMatch(/Hasta que lo acepte no verá lo que hay que entregar/);
+  });
+});
+
+// ── NO ES UNA OPCION, ES LO QUE PASA (12 nov, por la tarde) ─────
+//
+// Por la manana convertí «mandárselo para que lo firme» en una
+// tercera opcion del modal, porque Ricardo no encontraba por donde
+// mandar un contrato. La quito en cuanto la vio:
+//
+//   «no debe ser una opcion, porque es algo que si o si se debe
+//    hacer, es algo que esta integrado»
+//
+// Tenia razon y yo me equivoque de solucion. Mandar a firmar no es
+// una forma de compartir entre varias: es lo que pasa cuando
+// compartes un contrato con la otra parte. Una opcion para algo que
+// ya ocurre solo le da a elegir a la gente sobre algo que no se
+// elige.
+//
+// Lo que si se queda de aquella tanda: el enlace que sale al
+// mandarlo, y el texto corregido de la segunda opcion.
+describe("compartir tiene DOS opciones, no tres", () => {
+  const m = () => leer("src/modales/Compartir.jsx");
+
+  it("la tercera no esta", () => {
+    expect(m()).not.toMatch(/Mandárselo para que lo firme/);
+    expect(m()).not.toMatch(/modo==="firmar"/);
+  });
+
+  it("mandar a firmar cuelga del rol, que es donde vive", () => {
+    // «Involucrado» ES la otra parte. Darle acceso es mandarselo a
+    // firmar, sin preguntar.
+    expect(m()).toMatch(/const mandaAFirmar = modo==="completo" && rol==="involucrado"/);
+  });
+
+  it("y el enlace sin cuenta sigue saliendo al mandarlo", () => {
+    // Esto es lo que de verdad faltaba, y se queda.
+    const srv = leer("functions/index.js");
+    const i = srv.indexOf("export const ponerEnFirme");
+    expect(srv.slice(i, srv.indexOf("\n});", i))).toMatch(/return \{ doc, enlace \}/);
+    expect(leer("src/App.jsx")).toMatch(/paraFirmar: true, correo,/);
+  });
+});
+
+describe("lo que se promete al compartir es verdad", () => {
+  it("«solo pedirle comprobantes» ya NO dice que no vera el contrato", () => {
+    // Desde el 12 de noviembre quien abre un enlace SI lee el
+    // contrato. El texto viejo —«no ve el contenido, ni los montos»—
+    // le prometia a quien comparte una privacidad que el producto ya
+    // no da. Un texto obsoleto en una pantalla de permisos no es un
+    // detalle: es una promesa falsa.
+    const m = leer("src/modales/Compartir.jsx");
+    expect(m).not.toMatch(/No ve el contenido,\s*\n?\s*ni los montos/);
+    expect(m).toMatch(/Lee el contrato y sube lo que le toca/);
+  });
+
+  it("y dice lo que si sigue sin ver", () => {
+    const m = leer("src/modales/Compartir.jsx");
+    expect(m).toMatch(/No ve la historia\s*\n?\s*del documento ni lo que subieron los demás/);
+    expect(m).toMatch(/No firma\s*\n?\s*nada/);
+  });
+});
+
+// ── UNA PUERTA CERRADA EN SILENCIO (12 nov) ─────────────────────
+//
+// Quinta pasada. El diagnostico dijo que Ricardo tenia los once
+// guiones corridos y las funciones desplegadas, asi que la causa no
+// era esa. Al descartarla aparecio la de verdad, y era de diseno:
+//
+//     const meToca = Boolean(acu?.puedeAceptar) && !acu?.yaRespondido;
+//     ... : null;
+//
+// Si no te tocaba aceptar, la pantalla no ensenaba NADA. Ni el boton
+// ni una explicacion. Quien abria el enlace veia el contrato y se
+// quedaba sin saber si le faltaba algo por hacer; y quien lo mando
+// tampoco entendia por que no pasaba nada. Eso es lo que Ricardo
+// describio cuatro veces como «sigue igual que antes».
+//
+// Una puerta que se cierra en silencio es peor que una cerrada con
+// un cartel: la primera parece rota, la segunda se entiende.
+describe("cuando no se puede aceptar, se dice por que", () => {
+  const pant = () => leer("src/pantallas/Entrega.jsx");
+  const srv = () => leer("functions/index.js");
+
+  it("LA QUE IMPORTA: ya no se queda en blanco", () => {
+    // Si esto vuelve a ser `: null`, vuelve el silencio.
+    expect(pant()).toMatch(/\) : acu && acu\.porQueNo \? \(/);
+    expect(pant()).toMatch(/entrega-nota/);
+  });
+
+  it("un borrador contesta en vez de devolver null", () => {
+    // Antes `!op.acuerdo` salia por null y la pantalla no tenia nada
+    // con que explicarse. Un borrador no es un error: es una fase.
+    expect(srv()).toMatch(/if\(!op\.acuerdo\)\{/);
+    expect(srv()).toMatch(/porQueNo: "sin-mandar"/);
+  });
+
+  it("las tres razones se dicen distinto, porque llevan a sitios distintos", () => {
+    const s = pant();
+    expect(s).toMatch(/todavía no se manda a firmar/);   // borrador
+    expect(s).toMatch(/es para entregar comprobantes/);  // no es parte
+    expect(s).toMatch(/Ya no hay nada que responder/);   // fase pasada
+  });
+
+  it("y cada una dice que SI se puede hacer", () => {
+    // Un cartel que solo dice «no» deja a la persona igual de parada.
+    const s = pant();
+    expect(s).toMatch(/Mientras tanto puedes leerlo aquí/);
+    expect(s).toMatch(/Puedes leerlo para saber a/);
+  });
+
+  it("el contrato se sigue viendo en los tres casos", () => {
+    // Leer no depende de poder responder: el contrato va fuera del
+    // bloque de la decision.
+    const s = pant();
+    expect(s.indexOf("{contrato}")).toBeLessThan(s.indexOf("{aceptar}"));
+  });
+});
+
 describe("la pantalla del enlace", () => {
   const pant = () => leer("src/pantallas/Entrega.jsx");
 

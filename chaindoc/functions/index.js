@@ -1578,7 +1578,53 @@ export const ponerEnFirme = onCall(OPCIONES, async (req) => {
     },
     camposServidor: { acuerdo },
   });
-  return { doc };
+
+  // ← NUEVO (12 nov): Y SU ENLACE, PARA QUIEN NO TIENE CUENTA.
+  //
+  // Esto es la puerta que faltaba. Hasta hoy, mandar un contrato a
+  // firmar le daba acceso al correo del destinatario — acceso DENTRO
+  // de la aplicación, que sólo sirve si tiene cuenta. A quien no la
+  // tiene no le llegaba nada: no habia forma de que leyera el
+  // contrato, ni de que lo aceptara.
+  //
+  // Lo encontró Ricardo probando dos veces seguidas. La segunda lo
+  // dijo exacto: «al compartir el expediente, ya sea por la misma
+  // plataforma o mediante un link, en ambos lo primero que aparece
+  // es el contrato».
+  //
+  // El enlace se crea SIEMPRE, tenga cuenta o no. Branchear aqui
+  // seria pedirle a quien manda que sepa algo que no tiene por que
+  // saber, y el enlace no estorba: si la otra parte tiene cuenta, lo
+  // vera igual al entrar.
+  //
+  // Y va a nombre del DESTINATARIO, que es lo que hace que la
+  // pantalla del enlace le ofrezca aceptar: `acuerdoParaInvitado`
+  // exige que el correo del enlace sea el mismo que el del acuerdo.
+  // Un enlace sin correo —como los de pedir comprobantes— no acepta
+  // nada, y eso sigue igual de bien.
+  let enlace = null;
+  try{
+    const pendientes = (doc.requisitos || [])
+      .filter((r) => r.estado !== "cumplido").map((r) => r.id);
+
+    const { testigo, registro } = armarInvitacion({
+      opId, reqIds: pendientes, correo,
+      creadaPor: autor, creadaPorUid: uid,
+      // Más largo que los 7 de pedir un comprobante: esto no es un
+      // recado, es el contrato. Quien lo recibe puede querer
+      // enseñárselo a alguien antes de aceptar.
+      dias: 30,
+    });
+    await refInv(registro.huella).set(registro);
+    enlace = { testigo, expiraEn: registro.expiraEn };
+  }catch(e){
+    // Que no se caiga el envío por esto. El contrato YA quedó en
+    // firme y asentado; el enlace es una comodidad, y si falla
+    // siempre se puede crear a mano desde «compartir».
+    console.error("ponerEnFirme: no se pudo crear el enlace", e);
+  }
+
+  return { doc, enlace };
 });
 
 /** Los plazos que pide el cliente, saneados; los de arranque si no vienen. */
@@ -1958,7 +2004,10 @@ export const analizarContrato = onCall(
       const motivo = String(e?.message || "");
       console.error("analizarContrato:", motivo);
       const mensaje = EXPLICA[motivo] || "No se pudo analizar el contrato. Inténtalo de nuevo.";
-      const codigo = ["cuota", "saturado", "conexion"].includes(motivo) ? "unavailable" : "internal";
+      // «lento» va con los de «vuelve a intentarlo»: no está roto
+      // nada, el servicio tardó más de lo que esperamos.
+      const codigo = ["cuota", "saturado", "conexion", "lento"].includes(motivo)
+        ? "unavailable" : "internal";
       throw new HttpsError(codigo, mensaje);
     }
   });
@@ -1998,7 +2047,10 @@ export const redactarBorrador = onCall(
       const motivo = String(e?.message || "");
       console.error("redactarBorrador:", motivo);
       const mensaje = EXPLICA[motivo] || "No se pudo redactar el borrador. Inténtalo de nuevo.";
-      const codigo = ["cuota", "saturado", "conexion"].includes(motivo) ? "unavailable" : "internal";
+      // «lento» va con los de «vuelve a intentarlo»: no está roto
+      // nada, el servicio tardó más de lo que esperamos.
+      const codigo = ["cuota", "saturado", "conexion", "lento"].includes(motivo)
+        ? "unavailable" : "internal";
       throw new HttpsError(codigo, mensaje);
     }
   });
@@ -2433,7 +2485,22 @@ export const verInvitacion = onCall(OPCIONES, async (req) => {
  * comprobante podría poner en vigor el contrato entero.
  */
 function acuerdoParaInvitado(registro, op){
-  if(op?.kind !== "expediente" || !op?.acuerdo) return null;
+  if(op?.kind !== "expediente") return null;
+
+  // ← NUEVO (12 nov): un borrador también contesta, diciendo que no.
+  //
+  // Antes esto devolvía null y la pantalla no enseñaba nada: ni el
+  // botón de aceptar ni una explicación. Quien abría el enlace veía
+  // el contrato y punto, sin saber por qué no podía responder, y
+  // quien lo mandó tampoco.
+  //
+  // Un contrato en borrador no tiene `acuerdo` porque nadie lo ha
+  // mandado a firmar todavía. Eso no es un error: es una fase. Pero
+  // hay que decirlo.
+  if(!op.acuerdo){
+    return { estado: "borrador", porQueNo: "sin-mandar",
+             puedeAceptar: false, puedeRechazar: false, yaRespondido: false };
+  }
 
   const { estado } = estadoAcuerdo(op);
   const esParte = esDestinatario(op, registro.correo);
@@ -2448,6 +2515,9 @@ function acuerdoParaInvitado(registro, op){
     porQueNo: !esParte ? "no-eres-parte"
       : (!permiteEstado(estado, "aceptar") ? "ya-no-toca" : null),
     puedeAceptar: esParte && permiteEstado(estado, "aceptar"),
+    // Si se puede aceptar hay que poder no aceptar: un contrato con
+    // una sola salida no es un acuerdo.
+    puedeRechazar: esParte && permiteEstado(estado, "rechazar"),
     yaRespondido: Boolean(firma),
     aceptadoPor: firma ? { nombre: firma.nombre, fecha: firma.fecha } : null,
   };
@@ -2534,6 +2604,86 @@ export const aceptarPorInvitacion = onCall(OPCIONES, async (req) => {
         : `Aceptado por quien declara llamarse ${nombre}, desde un enlace de invitación`,
       meta: { tipo: "aceptado", fuerza: "enlace", metodo: "nombre-escrito",
               nombreDeclarado: nombre, correo, porInvitacion: true },
+    },
+    camposServidor: { acuerdo },
+  });
+
+  await refInv(huella).set({ ultimoUso: new Date().toISOString() }, { merge: true });
+  return { ok: true, estado: estadoAcuerdo(doc).estado };
+});
+
+/**
+ * ← NUEVO (12 nov): NO ACEPTARLO, desde el enlace.
+ *
+ * Si se puede aceptar hay que poder no aceptar. Un contrato con una
+ * sola salida no es un acuerdo, es un trámite, y quien llega sin
+ * cuenta es justo el que menos margen tiene para decir que no: no
+ * tiene dónde quejarse ni a quién escribirle dentro del producto.
+ *
+ * No destruye nada. Queda asentado que lo leyó y no lo aceptó, con
+ * la fecha y el motivo, y quien lo mandó puede corregir y volver a
+ * mandarlo.
+ *
+ * El motivo es obligatorio, igual que para quien tiene cuenta. Un
+ * «no» sin razón deja a la otra parte sin saber qué arreglar, y el
+ * contrato atascado.
+ */
+export const rechazarPorInvitacion = onCall(OPCIONES, async (req) => {
+  const { registro, huella } = await abrirInvitacion(req.data?.testigo);
+  const nombre = String(req.data?.nombre || "").trim().replace(/\s+/g, " ");
+  const motivo = String(req.data?.motivo || "").trim();
+
+  if(nombre.length < 5 || !nombre.includes(" ")){
+    throw new HttpsError("invalid-argument",
+      "Escribe tu nombre completo, como aparece en tu identificación.");
+  }
+  if(!motivo){
+    throw new HttpsError("invalid-argument",
+      "Di por qué no lo aceptas, para que puedan corregirlo.");
+  }
+
+  const op = await leerOperacion(registro.opId);
+  if(!op) throw new HttpsError("not-found", "El documento ya no existe.");
+
+  const puerta = acuerdoParaInvitado(registro, op);
+  if(!puerta) throw new HttpsError("failed-precondition", "Este documento no es un contrato.");
+  if(puerta.porQueNo === "no-eres-parte"){
+    throw new HttpsError("permission-denied",
+      "Este enlace es para entregar comprobantes. El contrato lo responde la otra parte.");
+  }
+  if(!permiteEstado(puerta.estado, "rechazar")){
+    throw new HttpsError("failed-precondition", motivoBloqueo(puerta.estado, "rechazar"));
+  }
+
+  const correo = (registro.correo || "").toLowerCase() || null;
+  // La misma honestidad que al aceptar: se dice quién DECLARA ser, y
+  // desde dónde. Un rechazo entra en la cadena igual que una firma.
+  const autor = correo
+    ? `${nombre} (declarado, desde el enlace enviado a ${correo})`
+    : `${nombre} (declarado, desde un enlace de invitación)`;
+
+  const acuerdo = {
+    ...op.acuerdo,
+    rechazo: {
+      motivo: motivo.slice(0, 80),
+      detalle: String(req.data?.detalle || "").trim().slice(0, 600) || null,
+      fecha: new Date().toISOString(),
+      porEmail: correo,
+      porNombre: nombre,
+      fuerza: "enlace",
+    },
+  };
+
+  const { doc } = await asentar({
+    opId: registro.opId, uid: op.ownerUid, email: op.ownerEmail, autor,
+    exigirAcceso: false,
+    evento: {
+      accion: "ACUERDO",
+      contenido: correo
+        ? `Quien declara llamarse ${nombre}, desde el enlace enviado a ${correo}, no aceptó el contrato: ${acuerdo.rechazo.motivo}`
+        : `Quien declara llamarse ${nombre} no aceptó el contrato: ${acuerdo.rechazo.motivo}`,
+      meta: { tipo: "rechazado", motivo: acuerdo.rechazo.motivo,
+              fuerza: "enlace", nombreDeclarado: nombre, correo, porInvitacion: true },
     },
     camposServidor: { acuerdo },
   });

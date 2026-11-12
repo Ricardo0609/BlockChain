@@ -24,9 +24,52 @@ const PREFER = [
 let resuelto = null;
 let candidatos = null;
 
+// ── LOS PLAZOS (12 nov) ───────────────────────────────────────
+//
+// El fallo que tapan, dicho por el registro de Cloud Run:
+//
+//     E analizarcontrato: The request has been terminated because
+//     it has reached the maximum request timeout.
+//
+// Y ni una línea con un motivo nuestro, porque la función moría
+// antes de llegar a su propio `catch`. `fetch` no trae plazo: si
+// Gemini acepta la conexión y luego no contesta, se espera para
+// siempre. Y aquí encima hay tres intentos por modelo y varios
+// modelos, así que la espera se multiplica.
+//
+// Dos relojes, no uno:
+//
+// POR INTENTO, para que ninguna llamada suelta cuelgue. Veinticinco
+// segundos es largo de sobra para un `flash` —lo normal son dos o
+// tres— y corto para no comerse el presupuesto de un bocado.
+//
+// EN TOTAL, porque limitar cada intento no limita la suma. Sin esto,
+// cuatro modelos a tres intentos de 25s son cinco minutos. El
+// presupuesto se mira ANTES de cada intento, así que lo que se gasta
+// de más es como mucho un intento.
+//
+// 95 s contra los 120 que da Cloud Run: el margen es para que el
+// error salga por nuestro camino, con su motivo escrito y un mensaje
+// que se entienda, en vez de morir de golpe y que el navegador lo
+// cuente como un fallo de CORS, que fue lo que despistó medio día.
+const LIMITE_PETICION = 25000;
+const LIMITE_LISTADO  = 10000;
+const PRESUPUESTO     = 95000;
+
+/** Un `fetch` que se rinde solo. */
+async function fetchConPlazo(url, opciones, ms){
+  const corte = new AbortController();
+  const reloj = setTimeout(() => corte.abort(), ms);
+  try{
+    return await fetch(url, { ...opciones, signal: corte.signal });
+  }finally{
+    clearTimeout(reloj);
+  }
+}
+
 /** Modelos que esta llave puede usar. */
 export async function listarModelos(){
-  const res = await fetch(`${BASE}/models?key=${llave()}`);
+  const res = await fetchConPlazo(`${BASE}/models?key=${llave()}`, {}, LIMITE_LISTADO);
   if(!res.ok){
     if(res.status === 400 || res.status === 403) throw new Error("llave");
     throw new Error(`modelos-${res.status}`);
@@ -140,7 +183,7 @@ const TRANSITORIOS = new Set([429, 500, 502, 503, 504]);
 async function pedir(model, prompt, schema){
   let res;
   try{
-    res = await fetch(`${BASE}/models/${model}:generateContent?key=${llave()}`, {
+    res = await fetchConPlazo(`${BASE}/models/${model}:generateContent?key=${llave()}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -162,9 +205,14 @@ async function pedir(model, prompt, schema){
           responseSchema: schema,
         },
       }),
-    });
+    }, LIMITE_PETICION);
   }catch{
-    return { ok: false, status: 0, cuerpo: "" };     // sin conexión
+    // Aquí caen las dos cosas y da igual cuál sea: no hay respuesta.
+    // Sin conexión, o Gemini que aceptó la llamada y se quedó
+    // callado más de lo que estamos dispuestos a esperar. Las dos se
+    // reintentan igual, y las dos acaban en «conexion» si no hay
+    // forma.
+    return { ok: false, status: 0, cuerpo: "" };
   }
   if(!res.ok) return { ok: false, status: res.status, cuerpo: await res.text() };
   const data = await res.json();
@@ -173,12 +221,17 @@ async function pedir(model, prompt, schema){
 
 /** Reintenta con espera creciente y, si el modelo sigue fallando, pasa al siguiente. */
 export async function preguntar(prompt, schema = SCHEMA){
+  const hasta = Date.now() + PRESUPUESTO;
   const modelos = await modelosCandidatos();
   const ESPERAS = [0, 1000, 2500];
   let ultimo = 0;
+  let agotado = false;
 
   for(const model of modelos){
     for(const espera of ESPERAS){
+      // Antes de gastar, no después: preguntar si queda tiempo
+      // cuando ya se acabó no sirve de nada.
+      if(Date.now() + LIMITE_PETICION > hasta){ agotado = true; break; }
       if(espera) await esperar(espera);
 
       const r = await pedir(model, prompt, schema);
@@ -196,8 +249,12 @@ export async function preguntar(prompt, schema = SCHEMA){
       if(r.status === 400) break;
       if(!TRANSITORIOS.has(r.status) && r.status !== 0) break;
     }
+    if(agotado) break;
   }
 
+  // Antes que los demás: si se acabó el tiempo, el último código que
+  // vimos puede ser de hace tres intentos y contaría otra historia.
+  if(agotado) throw new Error("lento");
   if(ultimo === 429) throw new Error("cuota");
   if(ultimo === 0) throw new Error("conexion");
   if(ultimo >= 500) throw new Error("saturado");
@@ -388,6 +445,10 @@ export const EXPLICA = {
   "cuota":         "Se agotó la cuota de análisis por ahora. Espera un minuto e inténtalo de nuevo.",
   "conexion":      "El servidor no pudo comunicarse con el servicio de IA.",
   "saturado":      "El servicio de IA está saturado en este momento. Espera un par de minutos.",
+  // ← NUEVO (12 nov). Antes esto no existía porque la función moría
+  // de golpe a los 120 s y el navegador lo contaba como un fallo de
+  // CORS. Ahora sale por aquí, con su nombre.
+  "lento":         "El servicio de IA está tardando demasiado. Espera un minuto e inténtalo de nuevo.",
   "vacio":         "El modelo no devolvió resultados. Prueba con un contrato más detallado.",
   "ilegible":      "El modelo devolvió una respuesta ilegible. Inténtalo de nuevo.",
   "sin-requisitos":"No se identificaron obligaciones concretas. Detalla más el contrato: entregables, pagos y fechas.",

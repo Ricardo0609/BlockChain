@@ -68,7 +68,7 @@ import { descartar, fundir, guardarLocales, leerLocales, recuperar } from "./nuc
 import { llamar, errorBackend } from "./nucleo/backend";
 import { leerAvisos } from "./nucleo/avisos";
 import {
-  testigoDeUrl, verInvitacion, aceptarPorInvitacion,
+  testigoDeUrl, verInvitacion, aceptarPorInvitacion, rechazarPorInvitacion,
   entregarArchivo, entregarEnlace as entregarEnlaceInvitado,
   enlaceDeEntrega,
 } from "./nucleo/invitaciones";
@@ -192,6 +192,8 @@ export default function Octavin(){
   const [invNombre,setInvNombre]     = useState("");
   const [invAceptando,setInvAceptando] = useState(false);
   const [invAceptError,setInvAceptError] = useState("");
+  const [invRechazando,setInvRechazando] = useState(false);
+  const [invMotivo,setInvMotivo]     = useState("");
   const [invSubiendo,setInvSubiendo] = useState(null);
   const [entregas,setEntregas]       = useState({});
   const [enlaces,setEnlaces]         = useState(null);
@@ -512,6 +514,33 @@ export default function Octavin(){
       await aceptarPorInvitacion(testigo, nombre);
       setInvitacion(await verInvitacion(testigo));
       notify("Contrato aceptado \u2713");
+    }catch(e){ setInvAceptError(errorBackend(e)); }
+    finally{ setInvAceptando(false); }
+  };
+
+  /**
+   * ← NUEVO (12 nov): y no aceptarlo.
+   *
+   * No destruye nada: queda asentado que lo leyó y no lo aceptó, con
+   * la fecha y el motivo. Quien lo mandó corrige y lo vuelve a
+   * mandar.
+   */
+  const rechazarInvitacion = async()=>{
+    const nombre = invNombre.trim().replace(/\s+/g, " ");
+    if(nombre.length < 5 || !nombre.includes(" ")){
+      setInvAceptError("Escribe tu nombre y tus apellidos.");
+      return;
+    }
+    if(!invMotivo.trim()){
+      setInvAceptError("Di por qué no lo aceptas, para que puedan corregirlo.");
+      return;
+    }
+    setInvAceptando(true); setInvAceptError("");
+    try{
+      await rechazarPorInvitacion(testigo, nombre, invMotivo.trim());
+      setInvitacion(await verInvitacion(testigo));
+      setInvRechazando(false); setInvMotivo("");
+      notify("Respuesta enviada");
     }catch(e){ setInvAceptError(errorBackend(e)); }
     finally{ setInvAceptando(false); }
   };
@@ -1820,41 +1849,84 @@ export default function Octavin(){
   // lo que cambia es cómo demuestras que eres tú.
   const mandarAFirmar = async(correoDe=null, nombreDe=null, conBio=false)=>{
     if(!enServidor()){ notify("Esto necesita el servidor activo","err"); return; }
-    const correo = String(correoDe ?? enFirmeCorreo).trim().toLowerCase();
+    // ← NUEVO (12 nov): sólo cuenta si es texto.
+    //
+    // Un `onClick={mandarAFirmar}` mete aquí el evento del clic, y
+    // `String(evento)` da "[object Object]": sin arroba, así que el
+    // modal decía «escribe el correo de la otra parte» con el correo
+    // escrito delante. Pasó de verdad y costó encontrarlo, porque el
+    // mensaje señalaba a un sitio donde no estaba el fallo.
+    const dado = typeof correoDe === "string" ? correoDe : null;
+    const correo = String(dado ?? enFirmeCorreo).trim().toLowerCase();
     if(!correo.includes("@")){ setEnFirmeErr("Escribe el correo de la otra parte."); return; }
     if(correo === (acctEmail||"").toLowerCase()){
       setEnFirmeErr("Ese es tu propio correo."); return;
     }
-    if(conBio && !bioCreds.length){ setEnFirmeErr("No tienes biometría activada."); return; }
-    if(!conBio && pass.trim().length<4){ setEnFirmeErr("Escribe tu código de firma."); return; }
+    // `=== true` y no a secas: lo que llega puede ser un evento, y un
+    // evento es truthy. Quien quiera biometría la pide pasando true.
+    const bio = conBio === true;
+    if(bio && !bioCreds.length){ setEnFirmeErr("No tienes biometría activada."); return; }
+    if(!bio && pass.trim().length<4){ setEnFirmeErr("Escribe tu código de firma."); return; }
     setFirmaBusy(true); setEnFirmeErr("");
     try{
       // El reto se pide DENTRO del try: si el dispositivo no verifica,
       // el fallo se lee igual que cualquier otro y no deja el botón
       // girando.
-      const prueba = conBio
+      const prueba = bio
         ? { asercion: await pedirAsercion("acuerdo", d.id) }
         : { codigo: pass.trim() };
       const r = await llamar("ponerEnFirme", {
-        opId: d.id, correo, nombre: String(nombreDe ?? enFirmeNombre).trim() || null,
+        opId: d.id, correo,
+        nombre: String((typeof nombreDe === "string" ? nombreDe : null) ?? enFirmeNombre).trim() || null,
         ...prueba,
       });
-      setD(r.doc); setModal(null); setPass("");
+      setD(r.doc); setPass("");
       setEnFirmeCorreo(""); setEnFirmeNombre("");
       setMIn(""); setShareErr(""); setShareFound(null); setShareRol("involucrado");
       await refresh();
-      notify(`Contrato mandado a firmar a ${correo} ✓`);
+
+      // ← NUEVO (12 nov): y aquí está su enlace.
+      //
+      // Hasta hoy esto cerraba el modal y ya. Si el destinatario no
+      // tenía cuenta, no le llegaba NADA: el acceso que se le da es
+      // dentro de la aplicación, y sin cuenta no hay dónde entrar.
+      //
+      // Ahora el servidor devuelve el enlace junto con el contrato
+      // puesto en firme, y se enseña en el mismo sitio donde se
+      // enseñan los demás. Se muestra siempre, tenga cuenta o no:
+      // quien manda no tiene por qué saber si la otra parte la
+      // tiene, y el enlace no estorba a quien sí.
+      if(r.enlace){
+        setEnlaceNuevo({
+          url: enlaceDeEntrega(r.enlace.testigo),
+          expiraEn: r.enlace.expiraEn,
+          paraFirmar: true, correo,
+        });
+        setModal({ t:"share" });
+        notify(`Contrato mandado a firmar a ${correo} ✓`);
+      }else{
+        setModal(null);
+        notify(`Contrato mandado a firmar a ${correo} ✓`);
+      }
     }catch(e){ console.error(e); setEnFirmeErr(textoDeFallo(e)); }
     finally{ setFirmaBusy(false); }
   };
 
   const aceptarElContrato = async(conBio=false)=>{
     if(!enServidor()){ notify("Esto necesita el servidor activo","err"); return; }
-    if(conBio && !bioCreds.length){ notify("No tienes biometría activada","err"); return; }
-    if(!conBio && pass.trim().length<4){ notify("Escribe tu código de firma","err"); return; }
+    // ← NUEVO (12 nov): `=== true`, no a secas.
+    //
+    // Este es el que rompió de verdad. El botón estaba puesto como
+    // `onClick={aceptarElContrato}`, así que aquí llegaba el evento
+    // del clic, que es truthy, y la función creía que se le había
+    // pedido biometría. Resultado: te pedía la huella y no miraba tu
+    // código nunca, por mucho que lo escribieras.
+    const bio = conBio === true;
+    if(bio && !bioCreds.length){ notify("No tienes biometría activada","err"); return; }
+    if(!bio && pass.trim().length<4){ notify("Escribe tu código de firma","err"); return; }
     setFirmaBusy(true);
     try{
-      const prueba = conBio
+      const prueba = bio
         ? { asercion: await pedirAsercion("acuerdo", d.id) }
         : { codigo: pass.trim() };
       const r = await llamar("aceptarContrato", { opId: d.id, ...prueba });
@@ -2505,6 +2577,7 @@ export default function Octavin(){
     revisarProveedores, revisando69B, hallazgos69B,
     invitacion, invError, invBusy, invPaso, invSubiendo, entregas, entregar,
     invNombre, setInvNombre, aceptarInvitacion, invAceptando, invAceptError,
+    invRechazando, setInvRechazando, invMotivo, setInvMotivo, rechazarInvitacion,
     crearEnlace, verEnlaces, revocarEnlace, copiarEnlace, enlaces,
     enlaceNuevo, setEnlaceNuevo, invDias, setInvDias, avisos,
     accCaso: accion?.caso || null, accEstado, accCorreo, accError, accBusy,

@@ -77,7 +77,7 @@ export function modalAcuerdo(ctx){
 
         <div className="modal-row">
           <button className={`btn btn-primary ${firmaBusy?"esperando":""}`}
-            disabled={firmaBusy} onClick={mandarAFirmar}>
+            disabled={firmaBusy} onClick={()=>mandarAFirmar()}>
             {firmaBusy ? "Mandando…" : "Firmar y enviar"}
           </button>
           <button className="btn btn-secondary" disabled={firmaBusy}
@@ -86,6 +86,25 @@ export function modalAcuerdo(ctx){
       </div>
     </div>);
   }
+
+  // ← ARREGLADO (12 nov): los botones llaman a mano.
+  //
+  // Estaban como `onClick={aceptarElContrato}`, y React le pasa el
+  // EVENTO del clic como primer argumento. Las dos funciones reciben
+  // ahí una bandera o un correo, así que:
+  //
+  //   aceptarElContrato(evento)  -> conBio = evento = truthy
+  //        y pedía la huella en vez de mirar el código, que es lo que
+  //        Ricardo describió: «no me deja usar el código para firmar».
+  //
+  //   mandarAFirmar(evento)      -> correoDe = evento
+  //        -> String(evento) = "[object Object]" -> sin arroba
+  //        -> «Escribe el correo de la otra parte», con el correo
+  //        escrito delante.
+  //
+  // Esto se arregla aquí Y en App.jsx, donde las funciones ahora
+  // desconfían de lo que les llega. Las dos cosas: aquí porque es el
+  // fallo, y allí porque esto va a volver a pasar.
 
   // ── Aceptar ────────────────────────────────────────────────
   if(modal.t==="aceptar"){
@@ -118,7 +137,7 @@ export function modalAcuerdo(ctx){
 
         <div className="modal-row">
           <button className={`btn btn-primary ${firmaBusy?"esperando":""}`}
-            disabled={firmaBusy} onClick={aceptarElContrato}>
+            disabled={firmaBusy} onClick={()=>aceptarElContrato()}>
             {firmaBusy ? "Firmando…" : "Firmar y aceptar"}
           </button>
           <button className="btn btn-secondary" disabled={firmaBusy}
@@ -161,7 +180,7 @@ export function modalAcuerdo(ctx){
 
         <div className="modal-row">
           <button className={`btn btn-primary ${firmaBusy?"esperando":""}`}
-            disabled={firmaBusy || !rechMotivo} onClick={rechazarElContrato}>
+            disabled={firmaBusy || !rechMotivo} onClick={()=>rechazarElContrato()}>
             {firmaBusy ? "Mandando…" : "Mandar mi respuesta"}
           </button>
           <button className="btn btn-secondary" disabled={firmaBusy}

@@ -235,6 +235,21 @@ img,svg{max-width:100%}
 .ov{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.4);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px;animation:fO .2s ease}
 @keyframes fO{from{opacity:0}to{opacity:1}}
 .modal{background:#fff;border-radius:16px;padding:24px;width:583px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,.2);animation:sU .25s ease;max-height:90vh;overflow-y:auto}
+/* ← NUEVO (12 nov): LA FILA DE BOTONES NO SE VA DE LA PANTALLA.
+   Ricardo abrio el modal de aceptar un contrato, vio el boton de
+   biometria y creyo que no podia firmar con su codigo. El campo del
+   codigo estaba ahi, justo debajo, fuera de la ventana: el modal se
+   desplaza, pero uno cortado por abajo parece completo y nadie busca
+   lo que no sabe que falta.
+   Con la fila pegada abajo siempre se ve que hay un boton de
+   confirmar, y eso dice por si solo que arriba queda algo que
+   rellenar.
+   Sin degradado encima: lo probe y, cuando el modal NO se desborda,
+   lo unico que hace es deslavar la ultima linea de texto. Marcar un
+   corte que no existe es peor que no marcar nada; la franja blanca
+   tapando el contenido al desplazar ya se entiende sola. */
+.modal > .modal-row{position:sticky;bottom:-24px;background:#fff;
+  padding:14px 0 24px;margin-bottom:-24px;z-index:1}
 .modal.wide{width:766px}
 @keyframes sU{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
 .modal h2{font-family:var(--f-t);font-size:24px;font-weight:600;margin-bottom:8px}
@@ -1844,12 +1859,25 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .entrega-aceptar-p{margin:0 0 14px;font-size:14px;line-height:1.5;color:var(--gris-700,#6b6b6b)}
 .entrega-aceptar-l{display:block;font-size:13px;font-weight:600;margin:0 0 6px}
 .entrega-aceptar .inp{width:100%;margin:0 0 12px}
-.entrega-aceptar .btn{width:100%}
+/* Las dos salidas, del mismo ancho y en la misma fila: en cuanto una
+   es más grande que la otra, la pantalla ya está empujando. En
+   teléfono se apilan, con la de aceptar arriba. */
+.entrega-aceptar-b{display:flex;gap:10px}
+.entrega-aceptar-b .btn{flex:1}
+@media(max-width:520px){
+  .entrega-aceptar-b{flex-direction:column-reverse}
+}
 .entrega-aceptar-e{margin:0 0 10px;font-size:13px;color:var(--rojo,#b42318)}
 /* La advertencia va DESPUÉS del botón y en pequeño, pero va. Es lo
    que impide que alguien se lleve la idea de que esto prueba quién
    es: prueba que alguien con este enlace aceptó y dio este nombre. */
 .entrega-aceptar-n{margin:11px 0 0;font-size:12px;line-height:1.45;color:var(--gris-500,#8a8a8a)}
+/* ← NUEVO (12 nov): el cartel de «no te toca, y por esto». En gris y
+   no en ambar: no ha pasado nada malo, sólo hace falta explicar. */
+.entrega-nota{display:flex;gap:10px;padding:14px 16px;margin:0 0 18px;
+  border:1px solid var(--gris-100);background:var(--bg-soft);border-radius:12px}
+.entrega-nota strong{display:block;font-size:14px;margin-bottom:4px}
+.entrega-nota p{margin:0;font-size:13.5px;line-height:1.5;color:var(--gris-700,#6b6b6b)}
 .entrega-aceptado{display:flex;align-items:center;gap:8px;padding:12px 16px;margin:0 0 18px;
   border:1px solid #cfe9d6;background:#f3faf5;border-radius:12px;font-size:14px;color:#1b6b38}
 

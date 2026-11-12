@@ -51,7 +51,6 @@ export function modalCompartir(ctx){
   const otros = (accesos||[]).filter(a=>a.rol!=="propietario");
   const pendientes = (d.requisitos||[]).filter(r=>r.estado!=="cumplido");
   const esExpediente = d.kind==="expediente";
-  const modo = shareModo || "completo";
 
   // ── UNA SOLA PUERTA (20 oct) ───────────────────────────────
   //
@@ -73,8 +72,12 @@ export function modalCompartir(ctx){
     ? (enBorrador ? ROLES_OFRECIDOS : ROLES_OFRECIDOS.filter(r=>r!=="involucrado"))
     : COMPLETOS;
   const rol = rolesCompletos.includes(shareRol) ? shareRol : rolesCompletos[0];
-  const mandaAFirmar = rol==="involucrado";
   const reqs = d.requisitos || [];
+
+  const modo = shareModo || "completo";
+  // Compartir un contrato con la otra parte ES mandárselo a firmar.
+  // No hace falta un modo aparte: el rol lo dice.
+  const mandaAFirmar = modo==="completo" && rol==="involucrado";
 
   const cerrar = ()=>{
     setModal(null); setEnlaceNuevo(null); setMIn("");
@@ -85,12 +88,24 @@ export function modalCompartir(ctx){
   // ── El enlace recién creado: se enseña una sola vez ──
   if(enlaceNuevo) return (
     <div className="ov" onClick={cerrar}><div className="modal wide" onClick={e=>e.stopPropagation()}>
-      <h2>Enlace listo</h2>
+      {/* ← NUEVO (12 nov): el mismo modal sirve para los dos enlaces,
+          pero no dicen lo mismo. Uno pide comprobantes; el otro manda
+          un contrato a firmar, y quien lo recibe tiene que saber que
+          lo primero que va a ver es el contrato y una decisión. */}
+      <h2>{enlaceNuevo.paraFirmar ? "Mándale esto para que lo firme" : "Enlace listo"}</h2>
       <p className="sub">
-        Mándaselo por donde quieras: correo, WhatsApp, lo que uses. Quien lo abra
-        podrá entregar {enlaceNuevo.requisitos?.length === 1
-          ? `«${enlaceNuevo.requisitos[0]}»`
-          : `${enlaceNuevo.requisitos?.length || ""} comprobantes`} sin crear ninguna cuenta.
+        {enlaceNuevo.paraFirmar ? <>
+          Mándaselo por donde quieras: correo, WhatsApp, lo que uses. Quien lo abra
+          leerá el contrato y podrá aceptarlo o no aceptarlo, <b>sin crear ninguna
+          cuenta</b>. Hasta que lo acepte no verá lo que hay que entregar.
+          {enlaceNuevo.correo && <> Sólo sirve para <b>{enlaceNuevo.correo}</b>, que es
+          a quien mandaste el contrato.</>}
+        </> : <>
+          Mándaselo por donde quieras: correo, WhatsApp, lo que uses. Quien lo abra
+          podrá entregar {enlaceNuevo.requisitos?.length === 1
+            ? `«${enlaceNuevo.requisitos[0]}»`
+            : `${enlaceNuevo.requisitos?.length || ""} comprobantes`} sin crear ninguna cuenta.
+        </>}
       </p>
 
       <div className="enl-caja">
@@ -136,7 +151,25 @@ export function modalCompartir(ctx){
           </p>
         ) : (<>
 
-          {/* ── La pregunta que importa ── */}
+          {/* ── La pregunta que importa ──
+              ← REVERTIDO (12 nov, por la tarde): vuelven a ser DOS
+              opciones.
+
+              Por la mañana añadí una tercera, «Mandárselo para que lo
+              firme», porque Ricardo no encontraba por dónde mandar un
+              contrato. Él la quitó en cuanto la vio, y con razón:
+              «no debe ser una opción, porque es algo que sí o sí se
+              debe hacer, es algo que está integrado».
+
+              Tiene razón y yo me equivoqué de solución. Mandar a
+              firmar no es una forma de compartir entre varias: es lo
+              que pasa cuando compartes un contrato con la otra parte.
+              Y eso ya lo hace el rol «Involucrado» de aquí abajo.
+              Añadir una opción para algo que ya ocurre solo es
+              darle a elegir a la gente sobre algo que no se elige.
+
+              Lo que sí se queda de aquella tanda: el enlace que sale
+              al mandarlo, y el texto corregido de la segunda opción. */}
           <div className="rec-lbl">¿Cómo quieres compartirlo?</div>
           <div className="modo-lista">
             <label className={`modo ${modo==="completo"?"on":""}`}>
@@ -153,10 +186,15 @@ export function modalCompartir(ctx){
               <label className={`modo ${modo==="entregar"?"on":""}`}>
                 <input type="radio" name="modo" checked={modo==="entregar"}
                   onChange={()=>setShareModo("entregar")} />
-                <span className="modo-n">Sólo entregar comprobantes</span>
+                <span className="modo-n">Sólo pedirle comprobantes</span>
+                {/* ← CORREGIDO (12 nov): decía «no ve el contenido ni
+                    los montos», y desde ayer eso es FALSO: quien abre
+                    un enlace sí lee el contrato. Dejar el texto viejo
+                    sería prometerle a quien comparte una privacidad
+                    que el producto ya no da. */}
                 <span className="modo-d">
-                  Ve nada más la lista de lo que le toca subir. No ve el contenido,
-                  ni los montos, ni lo que subieron los demás.
+                  Lee el contrato y sube lo que le toca, nada más. No ve la historia
+                  del documento ni lo que subieron los demás. No firma nada.
                 </span>
               </label>
             )}
@@ -326,7 +364,7 @@ export function modalCompartir(ctx){
           {modo==="completo" && (
             <div className="enl-nota">
               {mandaAFirmar
-                ? "Le va a llegar el contrato para leerlo entero y aceptarlo o no. Hasta que lo acepte no entra al expediente, y mientras tanto el contrato no cambia."
+                ? "Al mandarlo te damos un enlace para esa persona. Lo abre sin cuenta, lee el contrato entero y lo acepta o no lo acepta; hasta que lo acepte no ve lo que hay que entregar, y mientras tanto el contrato no cambia."
                 : "Para acceso completo hace falta cuenta y correo confirmado. Un enlace que deje leer todo sin identificar a nadie se reenvía y acaba donde no debía."}
             </div>
           )}

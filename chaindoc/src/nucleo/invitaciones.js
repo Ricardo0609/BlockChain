@@ -74,6 +74,10 @@ export const verInvitacion = (testigo) => llamar("verInvitacion", { testigo });
 export const aceptarPorInvitacion = (testigo, nombre) =>
   llamar("aceptarPorInvitacion", { testigo, nombre });
 
+/** Y no aceptarlo, con el motivo. Si hay una salida, hay dos. */
+export const rechazarPorInvitacion = (testigo, nombre, motivo) =>
+  llamar("rechazarPorInvitacion", { testigo, nombre, motivo });
+
 /**
  * Entrega el archivo. Son tres pasos y el orden importa: primero la
  * sesión anónima (sin ella el almacén rechaza la subida), después el
