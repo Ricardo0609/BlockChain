@@ -1820,6 +1820,39 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .red-ejemplo{margin:2px 0 4px;padding:11px 14px;border-left:3px solid var(--gris-100);
   background:var(--bg-soft);border-radius:0 9px 9px 0;font-size:14px;line-height:1.5;
   color:var(--gris-700,#6b6b6b);font-style:italic}
+/* ← NUEVO (12 nov): el contrato y su aceptación en la pantalla del
+   enlace. Plegado y no siempre abierto: cuando ya aceptaste, lo que
+   importa es lo que te falta entregar, y un contrato entero encima
+   empuja la lista fuera de la pantalla. Abierto, eso sí, cuando
+   todavía hay que decidir. */
+.entrega-contrato{border:1px solid var(--gris-100);border-radius:12px;margin:0 0 16px;
+  background:var(--bg-soft);overflow:hidden}
+.entrega-contrato summary{display:flex;align-items:center;gap:8px;padding:13px 16px;
+  cursor:pointer;font-size:14px;font-weight:600;list-style:none;user-select:none}
+.entrega-contrato summary::-webkit-details-marker{display:none}
+.entrega-contrato summary:hover{background:var(--gris-050,rgba(0,0,0,.03))}
+.entrega-contrato-c{max-height:50vh;overflow:auto;padding:4px 20px 20px;
+  background:var(--papel,#fff);font-size:14.5px;line-height:1.6}
+.entrega-contrato-c h1{font-size:18px;margin:16px 0 10px}
+.entrega-contrato-c h2{font-size:15px;margin:15px 0 6px}
+.entrega-contrato-c p{margin:0 0 9px}
+.entrega-contrato-c ul,.entrega-contrato-c ol{margin:0 0 9px;padding-left:22px}
+
+.entrega-aceptar{border:1px solid var(--bordes);border-radius:12px;padding:18px 20px;
+  margin:0 0 18px}
+.entrega-aceptar h2{font-size:16px;margin:0 0 7px}
+.entrega-aceptar-p{margin:0 0 14px;font-size:14px;line-height:1.5;color:var(--gris-700,#6b6b6b)}
+.entrega-aceptar-l{display:block;font-size:13px;font-weight:600;margin:0 0 6px}
+.entrega-aceptar .inp{width:100%;margin:0 0 12px}
+.entrega-aceptar .btn{width:100%}
+.entrega-aceptar-e{margin:0 0 10px;font-size:13px;color:var(--rojo,#b42318)}
+/* La advertencia va DESPUÉS del botón y en pequeño, pero va. Es lo
+   que impide que alguien se lleve la idea de que esto prueba quién
+   es: prueba que alguien con este enlace aceptó y dio este nombre. */
+.entrega-aceptar-n{margin:11px 0 0;font-size:12px;line-height:1.45;color:var(--gris-500,#8a8a8a)}
+.entrega-aceptado{display:flex;align-items:center;gap:8px;padding:12px 16px;margin:0 0 18px;
+  border:1px solid #cfe9d6;background:#f3faf5;border-radius:12px;font-size:14px;color:#1b6b38}
+
 .be-redactar{gap:6px;padding:0 11px;font-size:13px;font-weight:600;white-space:nowrap}
 .be-redactar:disabled{opacity:.55;cursor:default}
 @media(max-width:620px){ .be-redactar span{display:none} .be-redactar{padding:0 7px} }

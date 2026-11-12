@@ -68,7 +68,8 @@ import { descartar, fundir, guardarLocales, leerLocales, recuperar } from "./nuc
 import { llamar, errorBackend } from "./nucleo/backend";
 import { leerAvisos } from "./nucleo/avisos";
 import {
-  testigoDeUrl, verInvitacion, entregarArchivo, entregarEnlace as entregarEnlaceInvitado,
+  testigoDeUrl, verInvitacion, aceptarPorInvitacion,
+  entregarArchivo, entregarEnlace as entregarEnlaceInvitado,
   enlaceDeEntrega,
 } from "./nucleo/invitaciones";
 import {
@@ -187,6 +188,10 @@ export default function Octavin(){
   const [invError,setInvError]       = useState("");
   const [invBusy,setInvBusy]         = useState(false);
   const [invPaso,setInvPaso]         = useState("");
+  // ← NUEVO (12 nov): aceptar el contrato desde el enlace, sin cuenta.
+  const [invNombre,setInvNombre]     = useState("");
+  const [invAceptando,setInvAceptando] = useState(false);
+  const [invAceptError,setInvAceptError] = useState("");
   const [invSubiendo,setInvSubiendo] = useState(null);
   const [entregas,setEntregas]       = useState({});
   const [enlaces,setEnlaces]         = useState(null);
@@ -482,6 +487,34 @@ export default function Octavin(){
       }
     })();
   },[testigo]);
+
+  /**
+   * ← NUEVO (12 nov): aceptar el contrato desde el enlace.
+   *
+   * Quien llega por un enlace no tiene cuenta ni clave de firma, así
+   * que acepta escribiendo su nombre completo. Eso no comprueba
+   * quién es —nada que se teclee lo hace— y por eso el servidor lo
+   * asienta diciendo exactamente eso: que aceptó quien declara
+   * llamarse así, desde el enlace enviado a tal correo.
+   *
+   * Después se vuelve a pedir la invitación en vez de apañar el
+   * estado aquí: así lo que se ve sale del servidor, que es quien
+   * sabe en qué estado quedó el acuerdo.
+   */
+  const aceptarInvitacion = async()=>{
+    const nombre = invNombre.trim().replace(/\s+/g, " ");
+    if(nombre.length < 5 || !nombre.includes(" ")){
+      setInvAceptError("Escribe tu nombre y tus apellidos.");
+      return;
+    }
+    setInvAceptando(true); setInvAceptError("");
+    try{
+      await aceptarPorInvitacion(testigo, nombre);
+      setInvitacion(await verInvitacion(testigo));
+      notify("Contrato aceptado \u2713");
+    }catch(e){ setInvAceptError(errorBackend(e)); }
+    finally{ setInvAceptando(false); }
+  };
 
   // ← NUEVO (Etapa 5): el anclaje del documento abierto.
   //
@@ -2471,6 +2504,7 @@ export default function Octavin(){
     verificarFiscal, verificandoFiscal,
     revisarProveedores, revisando69B, hallazgos69B,
     invitacion, invError, invBusy, invPaso, invSubiendo, entregas, entregar,
+    invNombre, setInvNombre, aceptarInvitacion, invAceptando, invAceptError,
     crearEnlace, verEnlaces, revocarEnlace, copiarEnlace, enlaces,
     enlaceNuevo, setEnlaceNuevo, invDias, setInvDias, avisos,
     accCaso: accion?.caso || null, accEstado, accCorreo, accError, accBusy,

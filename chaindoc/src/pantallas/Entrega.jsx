@@ -4,10 +4,21 @@
 // sus facturas. Por eso no hay menú ni barra de navegación. Una lista
 // de lo que le toca entregar y un botón por cada cosa.
 //
-// Lo que NO está aquí importa tanto como lo que sí: no ve el contrato,
-// ni los montos pactados, ni las otras partes, ni los archivos que
-// subieron los demás. Esa limitación no es de esta pantalla — es del
-// servidor, que sólo le manda esto.
+// ← CAMBIADO (12 nov): AHORA SÍ VE EL CONTRATO, Y PRIMERO.
+//
+// Hasta hoy esta pantalla empezaba por «Te piden comprobantes» y la
+// lista de archivos. Lo encontró Ricardo probando: se le pedía a
+// alguien la factura del material sin dejarle ver el contrato que
+// dice qué material, por cuánto y para cuándo. Cumplir a ciegas.
+//
+// Ahora el orden es el mismo que tiene quien sí tiene cuenta: leer,
+// y sólo después responder. Si además le toca aceptar el contrato
+// —porque el enlace se mandó al correo que es parte del acuerdo— lo
+// acepta aquí, escribiendo su nombre completo.
+//
+// Lo que sigue sin salir: la cadena, los archivos que subieron otros,
+// y los requisitos que no le tocan. Puede leer el acuerdo del que
+// forma parte, no asomarse al trabajo de los demás.
 //
 // ← ACTUALIZADO (28 oct): hasta hoy aquí no había NADA que invitara a
 // registrarse, a propósito. Ahora hay una invitación, pero al final de
@@ -37,6 +48,7 @@ export function renderEntrega(ctx){
     invitacion, invError, invPaso, invBusy, invSubiendo, entregas, entregar, notif,
     abrirEnlace, cerrarEnlace, entregarEnlaceReq,
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
+    invNombre, setInvNombre, aceptarInvitacion, invAceptando, invAceptError,
   } = ctx;
 
   const Marco = ({ children }) => (<><style>{ESTILOS}</style>
@@ -70,19 +82,92 @@ export function renderEntrega(ctx){
   const listo = entregados === reqs.length;
   const queda = tiempoRestante(invitacion.expiraEn);
 
+  // ── EL CONTRATO, PRIMERO ──
+  //
+  // Antes de cualquier botón. Quien va a cumplir algo tiene derecho a
+  // leer qué. Va plegado por defecto cuando ya no hay nada que
+  // decidir —si ya aceptó, lo que importa es lo que le falta
+  // entregar— y abierto cuando todavía le toca responder.
+  const acu = invitacion.acuerdo || null;
+  const meToca = Boolean(acu?.puedeAceptar) && !acu?.yaRespondido;
+
+  const contrato = invitacion.contrato && (
+    <details className="entrega-contrato" open={meToca}>
+      <summary>
+        <Icon n="description" size={18}/>
+        <span>Leer el contrato</span>
+      </summary>
+      {/* Ya viene limpio del servidor: es el mismo `content` que la
+          cadena sella, guardado en su día por `normalizar()`. */}
+      <div className="entrega-contrato-c"
+        dangerouslySetInnerHTML={{ __html: invitacion.contrato }}/>
+    </details>
+  );
+
+  // ── ACEPTARLO, SI LE TOCA ──
+  const aceptar = acu && acu.yaRespondido ? (
+    <div className="entrega-aceptado">
+      <Icon n="check_circle" size={18}/>
+      {/* Sin punto final propio: `fmtFull` acaba en «a.m.» o «p.m.»,
+          que ya lleva el suyo, y salían dos seguidos. */}
+      <span>
+        Aceptado{acu.aceptadoPor?.nombre ? ` por ${acu.aceptadoPor.nombre}` : ""}
+        {acu.aceptadoPor?.fecha ? ` el ${fmtFull(acu.aceptadoPor.fecha)}` : "."}
+      </span>
+    </div>
+  ) : meToca ? (
+    <div className="entrega-aceptar">
+      <h2>Para empezar, acepta el contrato</h2>
+      <p className="entrega-aceptar-p">
+        Léelo arriba. Si estás de acuerdo, escribe tu nombre completo y acepta:
+        eso pone el contrato en vigor y queda asentado con la fecha.
+      </p>
+      <label className="entrega-aceptar-l" htmlFor="inv-nombre">Tu nombre completo</label>
+      <input id="inv-nombre" className="inp" value={invNombre} disabled={invAceptando}
+        placeholder="Como aparece en tu identificación" autoComplete="name"
+        onChange={e=>setInvNombre(e.target.value)}/>
+      {invAceptError && <p className="entrega-aceptar-e">{invAceptError}</p>}
+      <button className={`btn btn-primary ${invAceptando?"esperando":""}`}
+        disabled={invAceptando} onClick={aceptarInvitacion}>
+        {invAceptando ? "Aceptando…" : "Acepto este contrato"}
+      </button>
+      {/* Dicho antes de pulsar, no después. Que no se lleve la idea
+          de que esto prueba quién es: prueba que alguien con este
+          enlace aceptó y dio este nombre, que es otra cosa. */}
+      <p className="entrega-aceptar-n">
+        Quedará escrito que aceptó quien declara llamarse así, desde el enlace
+        enviado a {invitacion.correo || "tu correo"}.
+      </p>
+    </div>
+  ) : acu && acu.porQueNo === "no-eres-parte" ? null : null;
+
   return (
     <Marco>
       <div className="entrega-cab">
-        <h1>{listo ? "Ya entregaste todo" : "Te piden comprobantes"}</h1>
+        {/* El titular dice qué toca AHORA. Si lo primero es aceptar un
+            contrato, encabezar con «Te piden comprobantes» manda a la
+            persona a buscar archivos cuando lo que tiene delante es
+            una decisión. */}
+        <h1>{meToca ? "Te mandaron un contrato"
+             : listo ? "Ya entregaste todo" : "Te piden comprobantes"}</h1>
         {invitacion.pedidoPor && (
           <p className="entrega-de">
-            <b>{invitacion.pedidoPor}</b> te pidió esto para «{invitacion.documento}».
+            {meToca
+              ? <><b>{invitacion.pedidoPor}</b> te mandó «{invitacion.documento}» para que lo revises.</>
+              : <><b>{invitacion.pedidoPor}</b> te pidió esto para «{invitacion.documento}».</>}
           </p>
         )}
-        {reqs.length > 1 && (
+        {/* El contador se calla mientras lo que toca es leer y
+            decidir. «0 de 2 entregados» ahí no informa de nada: se
+            adelanta a un paso que todavía no empieza, y lo que hace
+            es apurar a alguien que debería estar leyendo. */}
+        {reqs.length > 1 && !meToca && (
           <p className="entrega-cuenta">{entregados} de {reqs.length} entregados</p>
         )}
       </div>
+
+      {contrato}
+      {aceptar}
 
       <div className="entrega-lista">
         {reqs.map(r=>{

@@ -2418,7 +2418,128 @@ export const verInvitacion = onCall(OPCIONES, async (req) => {
   const { registro } = await abrirInvitacion(req.data?.testigo);
   const op = await leerOperacion(registro.opId);
   if(!op) throw new HttpsError("not-found", "El documento ya no existe.");
-  return vistaPublica(registro, op);
+  return { ...vistaPublica(registro, op), acuerdo: acuerdoParaInvitado(registro, op) };
+});
+
+/**
+ * ← NUEVO (12 nov): si a quien abre el enlace le toca aceptar.
+ *
+ * No a todo el que recibe un enlace. El enlace puede ser para un
+ * proveedor al que sólo se le pide una factura, y ése no acepta nada:
+ * no es parte del acuerdo. Sólo le toca si el correo al que se mandó
+ * la invitación es el MISMO que el destinatario del contrato.
+ *
+ * Sin esa comprobación, cualquiera a quien se le pidiera un
+ * comprobante podría poner en vigor el contrato entero.
+ */
+function acuerdoParaInvitado(registro, op){
+  if(op?.kind !== "expediente" || !op?.acuerdo) return null;
+
+  const { estado } = estadoAcuerdo(op);
+  const esParte = esDestinatario(op, registro.correo);
+  const firma = (op.acuerdo.firmas || [])
+    .find((f) => f.parte === "receptor" && f.momento === "aceptacion");
+
+  return {
+    estado,
+    // Por qué NO le toca, cuando no le toca. Una pantalla que
+    // simplemente no enseña el botón deja a la persona preguntándose
+    // si se le olvidó algo.
+    porQueNo: !esParte ? "no-eres-parte"
+      : (!permiteEstado(estado, "aceptar") ? "ya-no-toca" : null),
+    puedeAceptar: esParte && permiteEstado(estado, "aceptar"),
+    yaRespondido: Boolean(firma),
+    aceptadoPor: firma ? { nombre: firma.nombre, fecha: firma.fecha } : null,
+  };
+}
+
+/**
+ * ← NUEVO (12 nov): ACEPTAR UN CONTRATO DESDE EL ENLACE, SIN CUENTA.
+ *
+ * Lo pidió Ricardo: «en ambos casos lo primero que se debe hacer es
+ * poder leerlo», y que para aceptar se escriba el nombre completo en
+ * vez de la clave de firma.
+ *
+ * LO QUE SE ESCRIBE EN LA CADENA, Y POR QUÉ ASÍ.
+ *
+ * Teclear un nombre no comprueba una identidad: quien tenga el
+ * enlace puede escribir cualquiera. Si el bloque dijera «Firmado por
+ * Juan Pérez», estaríamos afirmando algo que nadie comprobó, que es
+ * justo lo que este producto no se puede permitir.
+ *
+ * Así que se escribe la verdad entera, que además es más útil el día
+ * que haya una discusión:
+ *
+ *     «Aceptado por quien declara llamarse Juan Pérez, desde el
+ *      enlace enviado a juan@proveedor.com»
+ *
+ * Cada pieza de esa frase es comprobable: hubo una invitación a ese
+ * correo, alguien con ese enlace aceptó, y dio ese nombre. Lo que NO
+ * se afirma es que sea él. Y lo que de verdad pesa ahí es el correo,
+ * no el nombre; por eso van juntos y nunca el nombre solo.
+ *
+ * `fuerza: "enlace"` deja esa diferencia escrita en la firma misma,
+ * al lado de «cuenta» y «efirma», para que nadie tenga que deducirla
+ * leyendo el texto.
+ */
+export const aceptarPorInvitacion = onCall(OPCIONES, async (req) => {
+  const { registro, huella } = await abrirInvitacion(req.data?.testigo);
+  const nombre = String(req.data?.nombre || "").trim().replace(/\s+/g, " ");
+
+  // Dos palabras, no una. No comprueba nada —nada puede—, pero corta
+  // el «x» y el «ok» escritos sin leer, que es lo único que un campo
+  // de texto puede hacer por la seriedad del acto.
+  if(nombre.length < 5 || !nombre.includes(" ")){
+    throw new HttpsError("invalid-argument",
+      "Escribe tu nombre completo, como aparece en tu identificación.");
+  }
+  if(nombre.length > 120){
+    throw new HttpsError("invalid-argument", "Ese nombre es demasiado largo.");
+  }
+
+  const op = await leerOperacion(registro.opId);
+  if(!op) throw new HttpsError("not-found", "El documento ya no existe.");
+
+  const puerta = acuerdoParaInvitado(registro, op);
+  if(!puerta) throw new HttpsError("failed-precondition", "Este documento no es un contrato.");
+  if(puerta.porQueNo === "no-eres-parte"){
+    throw new HttpsError("permission-denied",
+      "Este enlace es para entregar comprobantes. El contrato lo acepta la otra parte.");
+  }
+  if(!puerta.puedeAceptar){
+    throw new HttpsError("failed-precondition", motivoBloqueo(puerta.estado, "aceptar"));
+  }
+
+  const correo = (registro.correo || "").toLowerCase() || null;
+  const autor = correo
+    ? `${nombre} (declarado, desde el enlace enviado a ${correo})`
+    : `${nombre} (declarado, desde un enlace de invitación)`;
+
+  const acuerdo = {
+    ...op.acuerdo,
+    firmas: [...(op.acuerdo.firmas || []), marcaDeAcuerdo({
+      parte: "receptor", momento: "aceptacion",
+      uid: null, email: correo, nombre,
+      fuerza: "enlace", metodo: "nombre-escrito",
+    })],
+  };
+
+  const { doc } = await asentar({
+    opId: registro.opId, uid: op.ownerUid, email: op.ownerEmail, autor,
+    exigirAcceso: false,   // el enlace ES el permiso, y ya se comprobó
+    evento: {
+      accion: "ACUERDO",
+      contenido: correo
+        ? `Aceptado por quien declara llamarse ${nombre}, desde el enlace enviado a ${correo}`
+        : `Aceptado por quien declara llamarse ${nombre}, desde un enlace de invitación`,
+      meta: { tipo: "aceptado", fuerza: "enlace", metodo: "nombre-escrito",
+              nombreDeclarado: nombre, correo, porInvitacion: true },
+    },
+    camposServidor: { acuerdo },
+  });
+
+  await refInv(huella).set({ ultimoUso: new Date().toISOString() }, { merge: true });
+  return { ok: true, estado: estadoAcuerdo(doc).estado };
 });
 
 /**

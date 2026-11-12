@@ -179,14 +179,26 @@ describe("lo que ve quien abre el enlace", () => {
     expect(JSON.stringify(v)).not.toContain("Acta secreta");
   });
 
-  it("NO ve el contrato, los montos, las partes, las fases ni la cadena", () => {
-    const texto = JSON.stringify(v);
-    expect(texto).not.toContain("CONTRATO CONFIDENCIAL");
-    expect(texto).not.toContain("Ana Solís");
+  // ← CAMBIADO (12 nov): EL CONTRATO AHORA SÍ SE VE.
+  //
+  // Esta prueba decía lo contrario, y defendía una decisión que
+  // resultó estar mal. Lo encontró Ricardo probando: se le pedía a
+  // alguien la factura del material sin dejarle ver el contrato que
+  // dice qué material, por cuánto y para cuándo. Cumplir a ciegas.
+  //
+  // Lo que NO cambia es el resto, y por eso la prueba sigue aquí en
+  // vez de borrarse: poder leer el acuerdo del que formas parte no es
+  // poder asomarte a la cadena ni al trabajo de los demás.
+  it("ve el contrato, que es a lo que se está obligando", () => {
+    expect(v.contrato).toBe(op.content);
+    expect(v.contrato).toContain("CONTRATO CONFIDENCIAL");
+  });
+
+  it("pero NO la cadena, ni las fases, ni los requisitos de otros", () => {
+    const texto = JSON.stringify({ ...v, contrato: null });
     expect(texto).not.toContain("Anticipo secreto");
-    expect(texto).not.toContain("15000");
-    expect(texto).not.toContain("20000");
     expect(texto).not.toContain("FIRMA");
+    expect(texto).not.toContain("15000");
   });
 
   it("tampoco ve los archivos que ya subieron otros, sólo que hay algo", () => {

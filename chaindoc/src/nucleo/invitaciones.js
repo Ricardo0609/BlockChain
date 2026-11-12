@@ -63,6 +63,18 @@ export function limpiarUrlDeEntrega(){
 export const verInvitacion = (testigo) => llamar("verInvitacion", { testigo });
 
 /**
+ * ← NUEVO (12 nov): aceptar el contrato desde el enlace, sin cuenta.
+ *
+ * El nombre no comprueba nada —quien tenga el enlace puede escribir
+ * cualquiera— y por eso el servidor NO lo asienta como una firma a
+ * secas: escribe «aceptado por quien declara llamarse X, desde el
+ * enlace enviado a Y». La frase entera es comprobable; el nombre
+ * solo, no.
+ */
+export const aceptarPorInvitacion = (testigo, nombre) =>
+  llamar("aceptarPorInvitacion", { testigo, nombre });
+
+/**
  * Entrega el archivo. Son tres pasos y el orden importa: primero la
  * sesión anónima (sin ella el almacén rechaza la subida), después el
  * archivo, y sólo entonces se le avisa al servidor para que lo

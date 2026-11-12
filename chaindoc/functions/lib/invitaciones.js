@@ -119,13 +119,23 @@ export const cubre = (registro, reqId) =>
   Boolean(reqId) && (registro?.reqIds || []).includes(reqId);
 
 /**
- * Lo que ve quien abre el enlace: la lista de lo que le toca entregar,
- * y nada más.
+ * Lo que ve quien abre el enlace.
  *
- * Fíjate en lo que NO sale de aquí: el texto del contrato, los montos
- * pactados, las partes, las fases, la cadena, ni los archivos que
- * subieron otros. De cada requisito sale su título, su descripción y
- * si ya está entregado — lo mínimo para poder hacer el trabajo.
+ * ← CAMBIADO (12 nov): AHORA SALE TAMBIÉN EL CONTRATO.
+ *
+ * Hasta hoy esto era deliberadamente mínimo: título, lo que te piden,
+ * y nada más. El texto del contrato, los montos y las partes se
+ * quedaban fuera a propósito.
+ *
+ * Era un error, y lo encontró Ricardo probando: a alguien se le pedía
+ * «la factura del material» sin dejarle ver el contrato que dice qué
+ * material, por cuánto y para cuándo. Se le pedía cumplir algo que no
+ * podía leer. Quien invita decidió meter a esa persona en el acuerdo;
+ * esconderle los términos no protege a nadie, sólo la deja a ciegas.
+ *
+ * LO QUE SIGUE SIN SALIR, y esto no cambia: la cadena, los archivos
+ * que subieron otros, y los requisitos que no le tocan. Puede leer el
+ * acuerdo del que forma parte, no asomarse al trabajo de los demás.
  */
 export function vistaPublica(registro, operacion){
   const requisitos = (operacion?.requisitos || [])
@@ -145,6 +155,10 @@ export function vistaPublica(registro, operacion){
     expiraEn: registro.expiraEn,
     requisitos,
     archivosRestantes: Math.max(0, (registro.maxArchivos || MAX_ARCHIVOS) - (registro.entregas || 0)),
+    // El contrato, para poder leer a qué se está uno obligando. Ya
+    // viene limpio de cuando se guardó: es el mismo `content` que la
+    // cadena sella, no una copia aparte que pudiera diferir.
+    contrato: operacion?.content || null,
   };
 }
 

@@ -450,13 +450,18 @@ describe("recorrido completo: de crear el contrato a entregar la evidencia", () 
     expect(v.requisitos).toHaveLength(2);
     expect(v.pedidoPor).toBe(RICARDO.nombre);
 
-    // Esto es lo que esta prueba cuida de verdad. Si algún día alguien
-    // agrega un campo a la vista pública sin pensarlo, aquí truena.
-    const texto = JSON.stringify(v);
-    expect(texto).not.toContain("CONTRATO DE OBRA");   // el contrato
-    expect(texto).not.toContain("20000");              // el monto pactado
+    // ← CAMBIADO (12 nov): el contrato SÍ sale, el resto no.
+    //
+    // Hasta hoy esta prueba exigía que no saliera tampoco el
+    // contrato. Era un error de diseño que encontró Ricardo
+    // probando: a quien se le pide cumplir algo hay que dejarle leer
+    // qué. Lo demás sigue igual, y es lo que esta prueba cuida: si
+    // alguien agrega un campo a la vista pública sin pensarlo, aquí
+    // truena.
+    expect(v.contrato).toContain("CONTRATO DE OBRA");
+
+    const texto = JSON.stringify({ ...v, contrato: null });
     expect(texto).not.toContain("15000");              // lo ya comprobado
-    expect(texto).not.toContain(ANA.nombre);           // las otras partes
     expect(texto).not.toContain("factura-cemento");    // archivos de otros
     expect(texto).not.toContain(op.ultimoHash);        // la cadena
   });
