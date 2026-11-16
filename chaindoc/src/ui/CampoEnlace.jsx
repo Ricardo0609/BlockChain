@@ -36,7 +36,10 @@ export function CampoEnlace({
 
       {/* Decirlo aquí y no en la letra chica: quien entrega tiene que
           saber qué está probando antes de darle a guardar, no después. */}
-      <div className="enl-nota">
+      {/* `con-icono` es lo que la pone en fila con el icono. Sin esa
+          clase es un párrafo, que es como tienen que ser las demás
+          notas del producto: ver el comentario de `.enl-nota`. */}
+      <div className="enl-nota con-icono">
         <Icon n="info" size={15}/>
         <span>
           Queda registrada <b>la dirección y la fecha</b> en que se entregó. Lo que haya

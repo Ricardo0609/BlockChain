@@ -82,6 +82,46 @@ export const METHODS = [
   { id:"cero",     ico:"draft", name:"Crear desde cero",  desc:"Empieza con la plantilla en blanco" },
 ];
 
+/**
+ * CON QUÉ SE PUEDE EMPEZAR CADA TIPO.
+ *
+ * ← NUEVO (16 nov). Hasta hoy los tres métodos salían para todo, y en
+ * un recibo o una factura eso ofrecía algo que el producto no debería
+ * poder hacer: «crear desde cero» abría una plantilla en blanco para
+ * que la llenaras a mano. Un comprobante escrito a mano, firmado por
+ * quien lo escribió, no prueba nada —y sin embargo salía con la misma
+ * cadena de bloques y la misma firma que uno de verdad—.
+ *
+ * El encuadre es de Ricardo y es el que ordena todo esto: «mi
+ * plataforma no emite recibos ni facturas». Si OCTAVIN no los emite,
+ * no puede haber un camino que empiece con una hoja en blanco. Los
+ * datos salen del documento que ya existía, y el papel de aquí es
+ * leerlo, guardarlo y poder cotejarlo.
+ *
+ *   · FACTURA — sólo subir archivo. «Prácticamente todas las facturas
+ *     se emiten digitales», así que escanear una factura con la
+ *     cámara es fotografiar la impresión de un archivo que ya tienes:
+ *     se pierde el XML, que es lo único verificable contra el SAT, y
+ *     se gana ruido de OCR.
+ *   · RECIBO — subir archivo o escanear. «Sigue habiendo tickets o
+ *     recibos físicos», y de un ticket de papel la foto ES el
+ *     original.
+ *   · TODO LO DEMÁS — los tres, como siempre.
+ */
+export const METODOS_DE = (tplId) => {
+  if(tplId === "factura") return ["subir"];
+  if(tplId === "recibo")  return ["subir", "escanear"];
+  return METHODS.map((m) => m.id);
+};
+
+/** Qué puede traer cada tipo, dicho para quien lo va a elegir. */
+export const QUE_ARCHIVO = {
+  factura: "El XML del CFDI, el PDF o una foto de la factura. Si traes el XML "
+         + "leemos los datos exactos y comprobamos el folio con el SAT.",
+  recibo:  "Una foto del ticket, el comprobante de la transferencia o el PDF "
+         + "que te hayan mandado.",
+};
+
 // ── SELLOS DE FIRMA (sistema viejo) ───────────────────────────
 //
 // ← RETIRADO (10 oct). Repartía una de ocho imágenes según el uid.

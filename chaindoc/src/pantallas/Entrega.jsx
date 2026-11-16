@@ -50,6 +50,9 @@ export function renderEntrega(ctx){
     enlReq, enlUrl, enlNom, enlErr, enlBusy, setEnlUrl, setEnlNom,
     invNombre, setInvNombre, aceptarInvitacion, invAceptando, invAceptError,
     invRechazando, setInvRechazando, invMotivo, setInvMotivo, rechazarInvitacion,
+    // ← NUEVO (15 nov): el candado y la firma de un documento de texto.
+    invClave, setInvClave, abrirConClave, invClaveBusy, invClaveErr,
+    firmarInvitacion,
   } = ctx;
 
   const Marco = ({ children }) => (<><style>{ESTILOS}</style>
@@ -77,6 +80,213 @@ export function renderEntrega(ctx){
       </div>
     </Marco>
   );
+
+  // ══════════════════════════════════════════════════════════
+  // EL CANDADO (15 nov)
+  //
+  // «Si llega a tener candado de seguridad igual pide la clave que el
+  // usuario le proporcionará». El enlace prueba que te lo mandaron;
+  // la clave, que te la dieron. Son dos cosas distintas y un
+  // documento con candado pide las dos.
+  //
+  // Esto no es una pantalla que esconda el texto: cuando el servidor
+  // dice `bloqueado`, el texto NO HA VIAJADO. Esconder en el
+  // navegador algo que ya llegó no esconde nada, y aquí no hay
+  // sesión que lo proteja.
+  // ══════════════════════════════════════════════════════════
+  if(invitacion.bloqueado) return (
+    <Marco>
+      <div className="entrega-candado">
+        <Icon n="lock" size={40}/>
+        <h1>Este documento está protegido</h1>
+        <p>
+          {invitacion.pedidoPor
+            ? <><b>{invitacion.pedidoPor}</b> le puso una clave. Pídesela —el enlace solo no abre.</>
+            : <>Quien te lo envió le puso una clave. Pídesela: el enlace solo no abre.</>}
+        </p>
+        <input className="inp" type="password" placeholder="Clave" autoComplete="off"
+          value={invClave||""} disabled={invClaveBusy}
+          onChange={e=>setInvClave(e.target.value)}
+          onKeyDown={e=>{ if(e.key==="Enter" && !invClaveBusy) abrirConClave(); }}/>
+        {invClaveErr && <p className="entrega-aceptar-e">{invClaveErr}</p>}
+        <button className={`btn btn-primary ${invClaveBusy?"esperando":""}`}
+          disabled={invClaveBusy||!String(invClave||"").length} onClick={abrirConClave}>
+          {invClaveBusy ? "Abriendo…" : "Abrir el documento"}
+        </button>
+      </div>
+    </Marco>
+  );
+
+  // ══════════════════════════════════════════════════════════
+  // UN DOCUMENTO DE TEXTO (15 nov)
+  //
+  // Lo pidió Ricardo para el caso del freelance: un acuerdo de
+  // servicio que las dos partes firman, sin expediente, sin
+  // requisitos y sin comprobantes. Dos versiones:
+  //
+  //   · «lectura» — sólo el texto. No hay nada que hacer, y por eso
+  //     no hay ningún botón que insinúe que sí.
+  //   · «firma»   — el texto, y abajo su nombre para firmarlo o el
+  //     motivo para no firmarlo. «El mismo proceso que en un
+  //     expediente», y por eso se reusan los mismos campos y el
+  //     mismo rechazo con motivo.
+  //
+  // Va antes del resto de la pantalla, con su propio `return`, en vez
+  // de colarse por los huecos de la de entregas: ésta habla de
+  // comprobantes, huellas de archivos y de cuántos quedan por subir,
+  // y aquí no hay archivos. Media pantalla de texto que no viene a
+  // cuento es peor que una pantalla aparte.
+  // ══════════════════════════════════════════════════════════
+  if(invitacion.proposito === "lectura" || invitacion.proposito === "firma"){
+    const paraFirmar = invitacion.proposito === "firma";
+    const resp = invitacion.respuesta || null;
+    const firmas = invitacion.firmas || [];
+    const quedaT = tiempoRestante(invitacion.expiraEn);
+
+    return (
+      <Marco>
+        <div className="entrega-cab">
+          <h1>{paraFirmar ? "Te mandaron un documento para firmar" : "Te compartieron un documento"}</h1>
+          {invitacion.pedidoPor && (
+            <p className="entrega-de">
+              <b>{invitacion.pedidoPor}</b> te mandó «{invitacion.documento}»
+              {paraFirmar ? " para que lo leas y lo firmes." : " para que lo leas."}
+            </p>
+          )}
+        </div>
+
+        {/* El documento, abierto y de una pieza. No en un `<details>`
+            plegable como en un expediente: allí el contrato acompaña a
+            una lista de cosas que hacer, y aquí el documento ES la
+            página. Plegarlo sería esconder lo único que hay. */}
+        <div className="entrega-texto"
+          dangerouslySetInnerHTML={{ __html: invitacion.contrato || "" }}/>
+
+        {/* Las firmas que ya tiene. Quien va a firmar debajo de otro
+            tiene derecho a ver quién firmó antes y cómo: una firma
+            hecha desde un enlace prueba menos que una de una cuenta, y
+            eso se dice, no se deja deducir. */}
+        {paraFirmar && firmas.length > 0 && (
+          <div className="entrega-firmas">
+            <div className="entrega-firmas-t">
+              {firmas.length === 1 ? "Ya lo firmó:" : `Ya lo firmaron (${firmas.length}):`}
+            </div>
+            {firmas.map((f,i)=>(
+              <div key={i} className="entrega-firma">
+                <Icon n="check_circle" size={16}/>
+                <span>{f.autor}</span>
+                {f.fecha && <span className="entrega-firma-f">{fmtFull(f.fecha)}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── FIRMARLO, O NO ── */}
+        {paraFirmar && resp ? (
+          <div className={resp.tipo==="rechazado" ? "entrega-nota" : "entrega-aceptado"}>
+            <Icon n={resp.tipo==="rechazado" ? "info" : "check_circle"} size={18}/>
+            <div>
+              {resp.tipo==="rechazado" ? <>
+                <strong>Dijiste que no estabas de acuerdo.</strong>
+                <p>
+                  Quedó escrito el {fmtFull(resp.fecha)} a nombre de {resp.nombre}
+                  {resp.motivo ? `, porque: ${resp.motivo}` : ""}. Quien te lo mandó
+                  puede corregirlo y mandártelo otra vez.
+                </p>
+              </> : (
+                <span>
+                  Firmado por {resp.nombre}
+                  {resp.fecha ? ` el ${fmtFull(resp.fecha)}` : "."}
+                  {" "}Ya puedes cerrar esta página.
+                </span>
+              )}
+            </div>
+          </div>
+        ) : paraFirmar ? (
+          <div className="entrega-aceptar">
+            {/* Las palabras son las de Ricardo, tal cual. */}
+            <label className="entrega-aceptar-l" htmlFor="inv-firma">
+              Ingresa tu nombre completo para firmar si estás de acuerdo
+            </label>
+            <input id="inv-firma" className="inp" value={invNombre} disabled={invAceptando}
+              placeholder="Como aparece en tu identificación" autoComplete="name"
+              onChange={e=>setInvNombre(e.target.value)}
+              onKeyDown={e=>{ if(e.key==="Enter" && !invAceptando && !invRechazando) firmarInvitacion(); }}/>
+
+            {/* El motivo sale sólo al decir que no. Pedirlo de entrada
+                sugiere que la respuesta esperada es el rechazo. */}
+            {invRechazando && (<>
+              <label className="entrega-aceptar-l" htmlFor="inv-motivo-t">¿Por qué no lo firmas?</label>
+              <input id="inv-motivo-t" className="inp" value={invMotivo} disabled={invAceptando}
+                placeholder="Ej.: el plazo no es el que acordamos"
+                onChange={e=>setInvMotivo(e.target.value)}/>
+            </>)}
+
+            {invAceptError && <p className="entrega-aceptar-e">{invAceptError}</p>}
+
+            <div className="entrega-aceptar-b">
+              {invRechazando ? (<>
+                <button className="btn btn-secondary" disabled={invAceptando}
+                  onClick={()=>{ setInvRechazando(false); setInvMotivo(""); }}>
+                  Volver
+                </button>
+                <button className={`btn btn-primary ${invAceptando?"esperando":""}`}
+                  disabled={invAceptando} onClick={rechazarInvitacion}>
+                  {invAceptando ? "Enviando…" : "Enviar mi respuesta"}
+                </button>
+              </>) : (<>
+                {/* Los dos a la vista. Un acuerdo con una sola salida
+                    no es un acuerdo, y quien llega sin cuenta es justo
+                    el que menos margen tiene para decir que no. */}
+                <button className="btn btn-secondary" disabled={invAceptando}
+                  onClick={()=>setInvRechazando(true)}>
+                  No estoy de acuerdo
+                </button>
+                <button className={`btn btn-primary ${invAceptando?"esperando":""}`}
+                  disabled={invAceptando} onClick={firmarInvitacion}>
+                  {invAceptando ? "Firmando…" : "Firmar"}
+                </button>
+              </>)}
+            </div>
+
+            {/* Dicho antes de pulsar, no después. Que no se lleve la
+                idea de que esto prueba quién es: prueba que alguien
+                con este enlace firmó y dio este nombre. */}
+            <p className="entrega-aceptar-n">
+              Quedará escrito que firmó quien declara llamarse así, desde el enlace
+              enviado a {invitacion.correo || "tu correo"}. Se puede firmar una sola vez.
+            </p>
+          </div>
+        ) : null}
+
+        <div className="entrega-pie">
+          {paraFirmar
+            ? "Tu firma queda en el historial del documento con la fecha y la hora, y ya no se puede cambiar ni borrar: ni tú ni quien te lo mandó."
+            : "Este enlace sólo deja leer: no puedes editar el documento ni ver su historial."}
+          {" "}
+          {quedaT && quedaT !== "vencido" && <>Vence en {quedaT}</>}
+          {invitacion.expiraEn ? <>, el {fmtFull(invitacion.expiraEn)}</> : "."}
+          {" "}Quien te lo envió puede retirarlo cuando quiera.
+        </div>
+
+        <div className="entrega-cta">
+          <Icon n="shield" size={22}/>
+          <div className="entrega-cta-b">
+            <strong>¿Y si lo tuyo también quedara probado?</strong>
+            <p>
+              {paraFirmar
+                ? "Acabas de leer un acuerdo cuya firma queda con fecha y huella, sin crear ninguna cuenta. Eso mismo puede trabajar de tu lado: lo que acuerdas, lo que entregas y la prueba de lo que cumpliste, guardados de forma que nadie los pueda cambiar después."
+                : "Este documento lleva un historial que nadie puede cambiar después. Eso mismo puede trabajar de tu lado: lo que acuerdas, lo que entregas y la prueba de lo que cumpliste."}
+            </p>
+            <a className="entrega-cta-btn" href={LANDING}
+               target="_blank" rel="noopener noreferrer">
+              Conoce OCTAVIN
+            </a>
+          </div>
+        </div>
+      </Marco>
+    );
+  }
 
   const reqs = invitacion.requisitos || [];
   const entregados = reqs.filter(r=>r.entregado || entregas[r.id]).length;
@@ -347,7 +557,7 @@ export function renderEntrega(ctx){
         alguien lo cambiara aunque fuera un carácter dejarían de coincidir. Puedes guardarlas.
         {" "}
         {queda && queda !== "vencido" && <>Este enlace vence en {queda}</>}
-        {invitacion.expiraEn && <>, el {fmtFull(invitacion.expiraEn)}</>}.
+        {invitacion.expiraEn ? <>, el {fmtFull(invitacion.expiraEn)}</> : "."}
         {" "}Sólo sirve para entregar estos comprobantes, y quien te lo envió puede retirarlo
         cuando quiera. Hasta {invitacion.archivosRestantes} archivos más.
       </div>

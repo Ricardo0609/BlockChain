@@ -13,7 +13,7 @@ import { renderCuerpo } from "../ui/Cuerpo";
 import { estaVacio, normalizar, ID_PAPEL } from "../nucleo/texto";
 import { esBorradorContrato } from "../nucleo/catalogos";
 import { esComprobante, faltanDatos, sePuedeFirmar, puedeSalir, soloSuDueno,
-         porQueNoSale, faltaRespaldo } from "../nucleo/comprobantes";
+         porQueNoSale, faltaRespaldo, sinOriginalViejo } from "../nucleo/comprobantes";
 import { renderExpediente } from "./Expediente";
 import { botonCampana, renderCampana } from "./Campana";
 import { renderMenu } from "./MenuLateral";
@@ -27,7 +27,7 @@ import { SECCIONES, motivoOcupada } from "../nucleo/secciones";
 import { ESTILOS } from "../ui/estilos";
 export function renderDocumento(ctx){
   const {
-    MAX_IMGS, abrirProtegido, acctEmail, addImage, bioBusy, bioCreds, bioOk, convOculto, d, doVerify,
+    MAX_IMGS, abrirProtegido, acctEmail, addImage, adjuntarOriginal, bioBusy, bioCreds, bioOk, convOculto, d, doVerify,
     docs, editMode, exportarPaquete, fields, getFile, goHome, histOpen, histTab, ocupado,
     iniciarConversion, lockInput, menuOpen, modal, notif, openDoc, openExpedientes,
     ocultarConvertir, puedeConvertir, removeImage, renombrar, save, saving, setDirty, setEdit, setFields,
@@ -83,6 +83,8 @@ export function renderDocumento(ctx){
   // Llenar → firmar → compartir. Hasta el último paso no sale de aquí.
   const puedeIrse  = puedeSalir(d);
   const porQue     = porQueNoSale(d);
+  // Uno de los de antes: dice de donde salio, pero el archivo no esta.
+  const viejoSinOriginal = sinOriginalViejo(d);
 
   // ← NUEVO (21 oct): quién más ve este documento, para las pestañas.
   // ← ACTUALIZADO (28 oct): cuenta personas Y enlaces vivos. Un
@@ -457,7 +459,16 @@ export function renderDocumento(ctx){
                     </div>
                     <div className="gal-acts">
                       <button className="btn btn-tertiary" onClick={()=>getFile(img,true)}>Descargar</button>
-                      {loEdito && (
+                      {/* ← CAMBIADO (16 nov): el original no lleva ×.
+                          Y no lleva uno apagado: lleva una etiqueta
+                          que dice lo que es. Una × apagada invita a
+                          preguntarse qué falta para poder usarla, y
+                          aquí no falta nada —no se quita nunca—. */}
+                      {img.esOriginal ? (
+                        <span className="gal-org" title="De aquí salieron los datos. No se puede quitar.">
+                          <Icon n="lock" size={13}/> Original
+                        </span>
+                      ) : loEdito && (
                         <button className="smart-x" title="Retirar"
                           onClick={()=>removeImage(img.path)}>×</button>
                       )}
@@ -528,18 +539,47 @@ export function renderDocumento(ctx){
           Sale después y no a la vez que el aviso de arriba: mandar a
           alguien a buscar una foto mientras el papel sigue a medias es
           mandarlo a por algo que todavía no va a poder usar. */}
-      {esRecibo && !iSigned && puede("firmar") && faltan.length === 0 && faltaRespaldo(d) && (
+      {/* ← REESCRITO (16 nov). Antes sólo salía si el comprobante
+          estaba SIN FIRMAR y con los datos completos, porque el
+          original sólo hacía falta para firmar. Ahora hace falta
+          siempre, y el caso que más lo necesita es justo el que
+          quedaba fuera: un comprobante de los de antes, ya firmado,
+          del que sólo se guardó el nombre del archivo. Ése parece
+          terminado —datos y firma— y no puede salir de aquí.
+
+          Y lleva el botón dentro. Antes decía «adjúntalo abajo» y
+          mandaba a buscar la galería, que está al final de la página
+          y se llama «Evidencia visual»: quien busca el XML de una
+          factura no va a pensar que es ahí. */}
+      {esRecibo && faltaRespaldo(d) && loEdito && (faltan.length === 0 || viejoSinOriginal) && (
         <div className="falta-datos">
           <Icon n="attach_file" size={19}/>
           <div>
-            <strong>Falta el documento original</strong>
+            <strong>
+              {viejoSinOriginal ? "Este comprobante no tiene su archivo original"
+                                : "Falta el documento original"}
+            </strong>
             <div className="falta-datos-s">
-              {d.tplId === "factura"
-                ? "El XML del CFDI, o una foto de la factura que te dieron."
-                : "Una foto del recibo de papel, de la transferencia o del pago."}
-              {" "}Sin esto, el documento sólo dice lo que tú escribiste: adjúntalo
-              abajo y entonces se podrá firmar.
+              {viejoSinOriginal ? <>
+                Se creó cuando todavía no guardábamos el archivo: de «{d.sourceFile}»
+                sólo quedó el nombre. Mientras no esté, los datos de aquí no se pueden
+                cotejar con nada, y por eso no se puede compartir ni adjuntar a un
+                expediente. Lo que ya firmaste y mandaste no cambia.
+              </> : <>
+                {d.tplId === "factura"
+                  ? "El XML del CFDI, el PDF o una foto de la factura que te dieron."
+                  : "Una foto del recibo de papel, de la transferencia o del pago."}
+                {" "}Sin esto, el documento sólo dice lo que tú escribiste.
+              </>}
             </div>
+            <label className="exp-up falta-up">
+              <span>{saving ? "Guardando…" : "Adjuntar el archivo original"}</span>
+              <input type="file" style={{display:"none"}} disabled={saving}
+                accept={d.tplId === "factura"
+                  ? ".xml,.pdf,image/*,text/xml,application/xml,application/pdf"
+                  : ".pdf,image/*,application/pdf"}
+                onChange={e=>{ adjuntarOriginal(e.target.files?.[0]); e.target.value=""; }} />
+            </label>
           </div>
         </div>
       )}
@@ -718,6 +758,21 @@ export function renderDocumento(ctx){
                     <span className="eb-sat">SAT</span>
                     Firmada con e.firma
                     {firmaDe(b).rfc ? ` · ${firmaDe(b).rfc}` : ""}
+                  </div>
+                )}
+                {/* ← NUEVO (15 nov): una firma hecha DESDE UN ENLACE.
+                    Prueba menos que las otras dos y eso tiene que
+                    verse, no deducirse de leer el nombre del autor con
+                    atención. Lo que prueba: que alguien con ese enlace
+                    firmó y declaró ese nombre. Lo que no: que sea él.
+                    Sin esta etiqueta, en la lista de firmas una de
+                    cuenta y una de enlace se ven igual, y no valen
+                    igual el día que haya una discusión. */}
+                {b.meta?.fuerza==="enlace" && (
+                  <div className="enlace-badge" title={b.author}>
+                    <Icon n="link" size={14}/>
+                    Firmada por enlace, sin cuenta
+                    {b.meta?.correo ? ` · ${b.meta.correo}` : ""}
                   </div>
                 )}
                 {/* ← NUEVO: distingue una firma biométrica de una con código */}

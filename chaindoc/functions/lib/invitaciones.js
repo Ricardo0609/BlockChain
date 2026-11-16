@@ -27,6 +27,31 @@
 //   · Lo que se sube queda en la cadena con una identidad honesta:
 //     «entregado por invitación enviada a tal correo», nunca «firmado
 //     por Fulano», porque nadie verificó quién estaba del otro lado.
+//
+// ── TRES PROPÓSITOS, NO UNO (15 nov) ─────────────────────────
+//
+// Esto nació para una sola cosa: que un proveedor suba una factura.
+// Ahora sirve para tres, y conviene nombrarlas, porque la pieza que
+// reparte acceso sin sesión es el último sitio donde se debe adivinar
+// qué puede hacer quien entra.
+//
+//   · «entrega» — lo de siempre. Un expediente con requisitos.
+//     Sube archivos y nada más.
+//   · «lectura» — un documento de texto sin sección de firmas. Lo
+//     lee y ya. No escribe nada, ni en el documento ni en la cadena.
+//   · «firma»   — un documento de texto con sección de firmas. Lo
+//     lee, y lo firma con su nombre o dice que no.
+//
+// Lo pidió Ricardo pensando en un freelance: «se usa el documento de
+// texto para solo hacer el acuerdo y firmarlo». Las dos partes
+// cumplen algo —uno da el servicio, el otro paga— y para eso no hace
+// falta un expediente entero con requisitos y comprobantes: hace
+// falta un texto y dos firmas.
+//
+// EL PROPÓSITO NO LO MANDA EL CLIENTE. Lo calcula el servidor con
+// `propositoDe`, leyendo el documento. Si viajara en la petición,
+// cualquiera podría pedir un enlace de «firma» para un expediente, o
+// de «lectura» para algo que no debe leer.
 // ─────────────────────────────────────────────────────────────
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
@@ -34,6 +59,78 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 export const DIAS_POR_OMISION = 7;
 export const MAX_ARCHIVOS = 20;
 export const LIMITE_DIAS = 60;
+
+/** Para qué sirve un enlace. Ver la cabecera. */
+export const PROPOSITOS = ["entrega", "lectura", "firma"];
+
+/** Si sólo deja leer y responder, sin subir nada. */
+export const esDeTexto = (p) => p === "lectura" || p === "firma";
+
+/**
+ * Si la sección de firmas se ve en este documento.
+ *
+ * Mismo criterio que `src/nucleo/secciones.js`: se guarda sólo lo que
+ * se APAGÓ, así que ausente quiere decir encendida. Va escrito aquí
+ * en vez de importado porque el servidor no puede importar de `src`,
+ * y es una línea: duplicarla cuesta menos que un módulo gemelo más.
+ */
+export const conFirmas = (op) => op?.secciones?.firmas !== false;
+
+/** Las firmas que ya tiene un documento. */
+export const firmasDe = (op) =>
+  (op?.chain || []).filter((b) => b?.action === "FIRMA");
+
+/**
+ * Si el dueño ya firmó.
+ *
+ * Los bloques nuevos llevan el uid en la marca; los de antes no, y de
+ * ésos sólo queda el nombre del autor, que es lo que se compara.
+ * Ninguna de las dos vías acepta una firma hecha DESDE un enlace:
+ * ésas llevan `fuerza: "enlace"` y no son del dueño por definición.
+ */
+export function firmoElDueno(op, nombreDelDueno){
+  return firmasDe(op).some((b) => {
+    if(b?.meta?.fuerza === "enlace") return false;
+    if(b?.meta?.uid) return b.meta.uid === op?.ownerUid;
+    return Boolean(nombreDelDueno) && b?.author === nombreDelDueno;
+  });
+}
+
+/**
+ * Un recibo o una factura. Se reconocen por su plantilla.
+ *
+ * ← NUEVO (16 nov). Escrito aquí y no importado de `src/nucleo` por
+ * lo de siempre: el servidor no puede importar del cliente. Es una
+ * comparación, y duplicarla cuesta menos que un módulo gemelo más.
+ */
+export const esComprobante = (op) =>
+  op?.tplId === "recibo" || op?.tplId === "factura";
+
+/**
+ * Para qué sirve el enlace de ESTE documento, o null si no lleva.
+ *
+ * Un expediente siempre es «entrega»: tiene requisitos y su acuerdo
+ * se acepta, no se firma con el nombre escrito. Un documento de
+ * texto depende de si tiene sección de firmas.
+ *
+ * ── Y UN COMPROBANTE NO LLEVA ENLACE (16 nov) ────────────────
+ *
+ * Devuelve null, y `crearInvitacion` se niega. El motivo es de
+ * Ricardo: «no tiene sentido compartírselo a alguien que no tiene
+ * cuenta porque no estás emitiendo una factura o recibo que quieras
+ * mandar, solamente estás respaldando la información».
+ *
+ * Esto hace falta HOY, no algún día: desde el 15 de noviembre un
+ * documento que no es expediente recibe enlace de lectura o de
+ * firma, y una factura no es un expediente. Sin esta línea, el
+ * trabajo de ayer le habría abierto a los comprobantes justo la
+ * puerta que él quiere cerrada.
+ */
+export function propositoDe(op){
+  if(esComprobante(op)) return null;
+  if(op?.kind === "expediente") return "entrega";
+  return conFirmas(op) ? "firma" : "lectura";
+}
 
 const b64u = (b) => Buffer.from(b).toString("base64")
   .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -64,12 +161,19 @@ export function mismaHuella(a, b){
  * `reqIds` es una lista porque el caso normal es un proveedor que te
  * debe varias facturas. Mandarle un enlace por cada una sería obligarlo
  * a hacer nuestro trabajo de organización.
+ *
+ * ← CAMBIADO (15 nov): un enlace de «lectura» o de «firma» va SIN
+ * requisitos, porque un documento de texto no los tiene. La lista
+ * vacía sigue siendo un error para «entrega»: un enlace de entrega
+ * que no pide nada no es un enlace, es un agujero.
  */
 export function armarInvitacion({ opId, reqIds, correo, creadaPor, creadaPorUid,
+                                  proposito = "entrega",
                                   dias = DIAS_POR_OMISION, maxArchivos = MAX_ARCHIVOS,
                                   ahora = Date.now() }){
+  if(!PROPOSITOS.includes(proposito)) throw new Error("proposito-raro");
   const lista = [...new Set((Array.isArray(reqIds) ? reqIds : [reqIds]).filter(Boolean))];
-  if(!lista.length) throw new Error("sin-requisitos");
+  if(!lista.length && proposito === "entrega") throw new Error("sin-requisitos");
 
   const d = Math.min(Math.max(Number(dias) || DIAS_POR_OMISION, 1), LIMITE_DIAS);
   const tope = Math.min(Math.max(Number(maxArchivos) || MAX_ARCHIVOS, 1), MAX_ARCHIVOS);
@@ -79,6 +183,7 @@ export function armarInvitacion({ opId, reqIds, correo, creadaPor, creadaPorUid,
     testigo,
     registro: {
       huella: huellaDe(testigo),
+      proposito,
       opId, reqIds: lista,
       correo: String(correo || "").toLowerCase().trim() || null,
       creadaPor: creadaPor || null, creadaPorUid: creadaPorUid || null,
@@ -101,6 +206,10 @@ export function revisarInvitacion(registro, ahora = Date.now()){
   if(!registro) return { ok: false, motivo: "no-existe" };
   if(registro.revocada) return { ok: false, motivo: "revocada" };
   if(registro.expiraEn && Date.parse(registro.expiraEn) < ahora) return { ok: false, motivo: "vencida" };
+  // El tope cuenta archivos, y un enlace de texto no sube ninguno. Sin
+  // esta salida, un enlace de lectura con `maxArchivos: 0` heredado de
+  // algún sitio se daría por agotado sin haberse usado nunca.
+  if(esDeTexto(registro.proposito)) return { ok: true };
   if((registro.entregas || 0) >= (registro.maxArchivos || MAX_ARCHIVOS)) {
     return { ok: false, motivo: "agotada" };
   }
@@ -137,7 +246,7 @@ export const cubre = (registro, reqId) =>
  * que subieron otros, y los requisitos que no le tocan. Puede leer el
  * acuerdo del que forma parte, no asomarse al trabajo de los demás.
  */
-export function vistaPublica(registro, operacion){
+export function vistaPublica(registro, operacion, { abierto = true } = {}){
   const requisitos = (operacion?.requisitos || [])
     .filter((r) => cubre(registro, r.id))
     .map((r) => ({
@@ -148,17 +257,46 @@ export function vistaPublica(registro, operacion){
       entregado: (Array.isArray(r.archivos) ? r.archivos.length : 0) > 0,
     }));
 
+  const proposito = registro.proposito || "entrega";
+  // ← NUEVO (15 nov): EL CANDADO TAMBIÉN APRIETA AQUÍ.
+  //
+  // Lo pidió Ricardo: «si llega a tener candado de seguridad igual
+  // pide la clave que el usuario le proporcionará». Un documento
+  // protegido que se abriera entero por tener el enlace volvería el
+  // candado en decoración, y el enlace se reenvía.
+  //
+  // `bloqueado` no es una bandera para que la pantalla esconda el
+  // texto: cuando está puesta, el texto NO VIENE. Esconder en el
+  // navegador algo que ya viajó no esconde nada.
+  const bloqueado = Boolean(operacion?.protegido || operacion?.password) && !abierto;
+
   return {
     documento: operacion?.title || "Documento",
     pedidoPor: registro.creadaPor || null,
     correo: registro.correo || null,
     expiraEn: registro.expiraEn,
-    requisitos,
+    proposito,
+    bloqueado,
+    requisitos: bloqueado ? [] : requisitos,
     archivosRestantes: Math.max(0, (registro.maxArchivos || MAX_ARCHIVOS) - (registro.entregas || 0)),
     // El contrato, para poder leer a qué se está uno obligando. Ya
     // viene limpio de cuando se guardó: es el mismo `content` que la
     // cadena sella, no una copia aparte que pudiera diferir.
-    contrato: operacion?.content || null,
+    contrato: bloqueado ? null : (operacion?.content || null),
+    // Las firmas que ya tiene, para un documento de texto que se
+    // firma. Sólo el nombre y la fecha: quién firmó es parte de lo
+    // que se está leyendo, y a cuántas firmas le faltan no se le
+    // puede contestar sin enseñarlas.
+    firmas: (proposito === "firma" && !bloqueado)
+      ? firmasDe(operacion).map((b) => ({
+          autor: b.author || null, fecha: b.timestamp || null,
+          fuerza: b?.meta?.fuerza || "cuenta",
+        }))
+      : [],
+    // Si ESTE enlace ya contestó. Un enlace de firma se gasta al
+    // usarse: dos firmas con dos nombres distintos desde el mismo
+    // enlace no serían dos partes, serían una persona probando.
+    respuesta: registro.respuesta || null,
   };
 }
 
@@ -174,6 +312,45 @@ export function autorDeInvitacion(registro){
   return registro?.correo
     ? `Entrega por invitación (${registro.correo})`
     : "Entrega por invitación";
+}
+
+/**
+ * Cómo se nombra a quien firma, acepta o rechaza desde un enlace.
+ *
+ * ← NUEVO (15 nov): estaba escrito dos veces dentro de
+ * `functions/index.js`, y ahora harían falta cuatro. La frase es la
+ * prueba: tiene que decir lo mismo en los cuatro sitios o la cadena
+ * contaría la misma cosa de maneras distintas.
+ *
+ * Teclear un nombre no comprueba una identidad: quien tenga el enlace
+ * puede escribir cualquiera. Así que se escribe la verdad entera, que
+ * además es la útil el día que haya una discusión. Cada pieza es
+ * comprobable —hubo una invitación a ese correo, alguien con ese
+ * enlace respondió, y dio ese nombre—; lo que NO se afirma es que sea
+ * él. Y lo que de verdad pesa es el correo, no el nombre: por eso van
+ * juntos y nunca el nombre solo.
+ */
+export function autorDeclarado(nombre, correo){
+  return correo
+    ? `${nombre} (declarado, desde el enlace enviado a ${correo})`
+    : `${nombre} (declarado, desde un enlace de invitación)`;
+}
+
+/**
+ * El nombre que escribió, limpio, o el motivo por el que no sirve.
+ * Devuelve { ok:true, nombre } o { ok:false, error }.
+ *
+ * Dos palabras, no una. No comprueba nada —nada puede—, pero corta el
+ * «x» y el «ok» escritos sin leer, que es lo único que un campo de
+ * texto puede hacer por la seriedad del acto.
+ */
+export function revisarNombre(crudo){
+  const nombre = String(crudo || "").trim().replace(/\s+/g, " ");
+  if(nombre.length < 5 || !nombre.includes(" ")){
+    return { ok: false, error: "Escribe tu nombre completo, como aparece en tu identificación." };
+  }
+  if(nombre.length > 120) return { ok: false, error: "Ese nombre es demasiado largo." };
+  return { ok: true, nombre };
 }
 
 /**

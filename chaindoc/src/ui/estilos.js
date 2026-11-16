@@ -250,6 +250,24 @@ img,svg{max-width:100%}
    tapando el contenido al desplazar ya se entiende sola. */
 .modal > .modal-row{position:sticky;bottom:-24px;background:#fff;
   padding:14px 0 24px;margin-bottom:-24px;z-index:1}
+/* ── ARREGLADO (15 nov): LA FILA QUE TAPABA EL TEXTO DE ABAJO ──
+   La regla de arriba convierte CUALQUIER fila de botones hija del
+   modal en una barra pegajosa: fondo blanco, z-index 1 y
+   margin-bottom de -24px para que quede encajada en el borde. Eso
+   esta bien para EL PIE del modal, que es para lo que se escribio.
+
+   El problema es que no todas las filas son el pie. Cuando debajo de
+   una fila va una nota explicativa, esos -24px la meten por debajo de
+   la barra blanca y el navegador pinta el blanco encima: la nota
+   pierde su primera linea -a veces dos- y lo que queda parece una
+   frase cortada a mitad. Ricardo lo vio en una captura: debajo de
+   "Dar acceso" solo se leia "acaba donde no debia.", sin el principio.
+
+   No se quita de la de arriba porque el pie SI lo necesita: en un
+   modal largo es lo que mantiene "Cerrar" a la vista mientras lees.
+   Asi que las filas de enmedio se marcan y se salen. */
+.modal > .modal-row.enmedio{position:static;background:transparent;
+  padding:0;margin-bottom:0;z-index:auto}
 .modal.wide{width:766px}
 @keyframes sU{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
 .modal h2{font-family:var(--f-t);font-size:24px;font-weight:600;margin-bottom:8px}
@@ -412,6 +430,17 @@ img,svg{max-width:100%}
 .sol-d{color:var(--gris-300);font-size:12px;margin-top:2px}
 .exp-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
 .exp-acts .exp-up{margin-top:0}
+
+/* ── NUEVO (16 nov): EL ARCHIVO ORIGINAL DE UN COMPROBANTE ─────
+   En el sitio de la x de retirar va una etiqueta, porque ese archivo
+   no se retira nunca. Ver quitarImagen en functions/index.js. */
+.gal-org{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;
+  color:var(--gris-400);background:var(--bg-soft);border:1px solid var(--gris-100);
+  padding:3px 8px;border-radius:7px;white-space:nowrap}
+.gal-org .msym{color:var(--gris-300)}
+/* El boton de traer el original va DENTRO del aviso que lo pide: el
+   sitio natural para buscarlo es justo donde se dice que falta. */
+.falta-up{margin-top:11px}
 .como-btn{font-family:var(--f-p);font-size:14px;background:none}
 .tono-solicitud .tl-punto{background:rgba(202,138,4,.16);color:#a16207}
 
@@ -600,8 +629,23 @@ span.dup-lugar.aqui{cursor:default}
 .enl-url{font-family:ui-monospace,monospace;font-size:14px}
 .enl-url.malo{border-color:var(--rojo)}
 .enl-err{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--rojo);line-height:1.4}
-.enl-nota{display:flex;align-items:flex-start;gap:7px;font-size:12.5px;
-  color:var(--gris-400);line-height:1.5}
+/* ── ARREGLADO (15 nov): LA NOTA QUE SE CORTABA ────────────────
+   Esto era .enl-nota con display:flex a secas, y abajo -linea ~1180-
+   hay otra regla .enl-nota que pisa el color y el tamano PERO NO EL
+   DISPLAY. Quien la escribio dio por hecho que reemplazaba a esta; en
+   realidad solo le cambio la tipografia. Resultado: TODAS las notas
+   del producto eran cajas flex.
+
+   Una nota de prosa en flex no se maqueta como un parrafo: cada trozo
+   -el texto, el <b>, el texto de despues- se vuelve una caja en fila,
+   la fila se pasa de ancho y se sale del modal. Ricardo lo vio en una
+   captura: de una frase de tres lineas solo se leia el final, «acaba
+   donde no debia.», flotando debajo del boton.
+
+   Asi que el flex se queda SOLO donde hace falta de verdad, que es la
+   unica nota con icono al lado (ver ui/CampoEnlace.jsx). Las demas
+   vuelven a ser parrafos. */
+.enl-nota.con-icono{display:flex;align-items:flex-start;gap:7px}
 .enl-nota .msym{flex:0 0 auto;margin-top:1px;color:var(--gris-200)}
 .enl-acts{display:flex;gap:9px;justify-content:flex-end;flex-wrap:wrap}
 
@@ -1123,7 +1167,10 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   color:var(--negro);line-height:1.5}
 .enl-aviso{display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.5;
   color:#a16207;background:rgba(202,138,4,.09);border-radius:10px;padding:11px 13px;text-align:left}
-.enl-nota{font-size:12.5px;color:var(--gris-300);line-height:1.5;margin-top:6px;text-align:left}
+/* El display:block esta dicho a proposito, no por omision: arriba hay
+   otra regla .enl-nota y es justo lo que esa no decia. Ver su comentario. */
+.enl-nota{display:block;font-size:12.5px;color:var(--gris-300);line-height:1.5;
+  margin-top:6px;text-align:left}
 .enl-plazos{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:6px}
 .enl-plazo{font-size:13px;padding:7px 14px;border-radius:99px;border:1px solid var(--bordes);
   background:transparent;color:var(--gris-400);cursor:pointer}
@@ -1319,6 +1366,14 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   font-weight:600;color:#1a7f4b;background:rgba(26,127,75,.08);padding:6px 10px;border-radius:8px}
 .eb-sat{font-size:10px;font-weight:700;letter-spacing:.6px;background:#1a7f4b;color:#fff;
   padding:2px 6px;border-radius:4px}
+/* Una firma hecha desde un enlace, sin cuenta. En gris y no en verde
+   a proposito: la de e.firma la comprobo el SAT y la biometrica el
+   dispositivo; esta solo prueba que alguien con el enlace escribio un
+   nombre. Pintarla del mismo verde seria igualar tres cosas que no
+   valen igual, que es justo lo contrario de para que esta la etiqueta. */
+.enlace-badge{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:12.5px;
+  font-weight:600;color:var(--gris-500,#8a8a8a);background:var(--bg-soft);
+  border:1px solid var(--gris-100);padding:5px 10px;border-radius:8px}
 .efirma-abrir{width:100%}
 .efirma-pie{font-size:12px;color:var(--gris-300);text-align:center;margin-top:10px;line-height:1.5}
 .modal.efirma{text-align:left}
@@ -1880,6 +1935,53 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .entrega-nota p{margin:0;font-size:13.5px;line-height:1.5;color:var(--gris-700,#6b6b6b)}
 .entrega-aceptado{display:flex;align-items:center;gap:8px;padding:12px 16px;margin:0 0 18px;
   border:1px solid #cfe9d6;background:#f3faf5;border-radius:12px;font-size:14px;color:#1b6b38}
+
+/* ── NUEVO (15 nov): EL ENLACE DE UN DOCUMENTO DE TEXTO ─────────
+   El candado, el texto y las firmas que ya tiene. */
+
+/* La clave, cuando el documento esta protegido. Centrado y con poco
+   mas: aqui no hay nada que hacer salvo una cosa. */
+.entrega-candado{text-align:center;padding:18px 0}
+.entrega-candado h1{margin:14px 0 8px;font-size:21px}
+.entrega-candado p{color:var(--gris-400);font-size:15px;line-height:1.55;margin:0 auto 16px;max-width:380px}
+.entrega-candado .inp{width:100%;max-width:320px;margin:0 auto 12px;display:block}
+.entrega-candado .btn{max-width:320px;width:100%}
+.entrega-candado .entrega-aceptar-e{max-width:320px;margin:0 auto 10px}
+
+/* El documento, abierto y de una pieza. Hereda el aspecto del
+   contrato de un expediente para que leer sea igual en los dos, pero
+   SIN max-height: alli el contrato acompaña a una lista de cosas que
+   hacer y cabe plegado; aqui el documento es la pagina entera, y
+   meterlo en una ventanita de 50vh con su propia barra de scroll
+   dentro de la de la pagina es pelear con el dedo de quien lee. */
+.entrega-texto{border:1px solid var(--gris-100);border-radius:12px;margin:0 0 18px;
+  padding:6px 22px 22px;background:var(--papel,#fff);
+  font-size:15px;line-height:1.65;overflow-wrap:anywhere}
+.entrega-texto h1{font-family:var(--f-t);font-size:24px;margin:18px 0 10px}
+.entrega-texto h2{font-family:var(--f-t);font-size:19px;margin:18px 0 8px}
+.entrega-texto h3{font-family:var(--f-t);font-size:16.5px;margin:15px 0 6px}
+.entrega-texto p{margin:0 0 10px}
+.entrega-texto ul,.entrega-texto ol{margin:0 0 10px;padding-left:22px}
+.entrega-texto li{margin:0 0 4px}
+.entrega-texto table{border-collapse:collapse;width:100%;margin:0 0 12px;font-size:14px}
+.entrega-texto th,.entrega-texto td{border:1px solid var(--gris-100);padding:7px 9px;text-align:left}
+@media(max-width:520px){ .entrega-texto{padding:4px 15px 18px;font-size:14.5px} }
+
+/* Quien firma debajo de otro tiene derecho a ver quien firmo antes.
+   El nombre sale tal cual lo escribio el servidor, con su "(declarado,
+   desde el enlace enviado a ...)" si vino por un enlace: esa frase es
+   la que dice cuanto prueba cada firma, y recortarla para que quede
+   bonita seria recortar justo lo que importa. */
+.entrega-firmas{border:1px solid var(--gris-100);background:var(--bg-soft);
+  border-radius:12px;padding:13px 16px;margin:0 0 18px}
+.entrega-firmas-t{font-size:13px;font-weight:600;margin:0 0 8px;color:var(--gris-700,#6b6b6b)}
+.entrega-firma{display:flex;align-items:flex-start;gap:8px;font-size:13.5px;line-height:1.5;
+  padding:4px 0;color:#1b6b38}
+.entrega-firma-f{color:var(--gris-400);white-space:nowrap}
+@media(max-width:520px){
+  .entrega-firma{flex-wrap:wrap}
+  .entrega-firma-f{width:100%;padding-left:24px}
+}
 
 .be-redactar{gap:6px;padding:0 11px;font-size:13px;font-weight:600;white-space:nowrap}
 .be-redactar:disabled{opacity:.55;cursor:default}

@@ -2,7 +2,7 @@
 
 import { ACCEPTED_DOCS, ACCEPTED_IMAGES } from "../fileImport";
 import { Icon } from "../ui/iconos";
-import { METHODS, TEMPLATES } from "../nucleo/catalogos";
+import { METHODS, METODOS_DE, QUE_ARCHIVO, TEMPLATES } from "../nucleo/catalogos";
 import { MIN_CONTRATO, aiConfigured, listModels } from "../smartContract";
 import { fmtFecha } from "../nucleo/formato";
 import { renderCampoCarpeta } from "../ui/SelectorCarpeta";
@@ -17,6 +17,10 @@ export function modalCrear(ctx){
   } = ctx;
   if(modal.t==="create"){
     const isSmart = tpl==="inteligente";   // ← NUEVO
+    // ← NUEVO (16 nov): un recibo o una factura sólo se crea trayendo
+    // el documento original. Ver METODOS_DE en `nucleo/catalogos.js`.
+    const esCompr = tpl==="factura" || tpl==="recibo";
+    const metodos = METODOS_DE(tpl);
     return (
     <div className="ov" onClick={()=>{if(!imp&&!smartBusy)closeCreate();}}><div className="modal wide" onClick={e=>e.stopPropagation()}>
 
@@ -26,9 +30,24 @@ export function modalCrear(ctx){
         <h2>¿Qué vas a crear?</h2>
         <p className="sub">Elige el tipo de documento.</p>
         <div className="tpl-grid">
+          {/* ← CAMBIADO (16 nov): al elegir el tipo se elige también
+              el método, SI sólo hay uno —la factura, que sólo se
+              sube—. Hacer clic en la única tarjeta posible para poder
+              seguir no es elegir: es un paso de más entre el usuario
+              y lo que venía a hacer.
+
+              Va aquí y no en el paso 2 con un efecto porque estas
+              pantallas son funciones, no componentes: no hay dónde
+              colgar un efecto, y el sitio natural para decidirlo es
+              el clic que ya decide el tipo. */}
           {TEMPLATES.map(t=>(
             <div key={t.id} className={`tpl ${tpl===t.id?"sel":""} ${t.destacado?"destacado":""}`}
-              onClick={()=>{ setTpl(t.id); setMethod(null); resetImport(); setCreateStep(1); }}>
+              onClick={()=>{
+                setTpl(t.id);
+                const ms = METODOS_DE(t.id);
+                setMethod(ms.length===1 ? ms[0] : null);
+                resetImport(); setCreateStep(1);
+              }}>
               {/* ← NUEVO (14 oct): la recomendación de cada tipo.
                   stopPropagation porque este botón NO elige el tipo: si
                   lo hiciera, preguntar «¿qué es esto?» te metería
@@ -73,19 +92,49 @@ export function modalCrear(ctx){
       {/* ← NUEVO */}
       {createStep===1 && (<>
         <h2>{TEMPLATES.find(x=>x.id===tpl)?.name}</h2>
-        <p className="sub">¿Cómo quieres empezar?</p>
-        <div className="tpl-grid tres">
-          {METHODS.map(m=>(
-            <div key={m.id} className={`tpl ${method===m.id?"sel":""}`}
-              onClick={()=>{ setMethod(m.id); resetImport(); }}>
-              <span className="tpl-ico"><Icon n={m.ico} size={40}/></span>
-              <span className="tpl-n">{m.name}</span>
+        {/* ← CAMBIADO (16 nov): en un recibo o una factura la pregunta
+            no es cómo quieres empezar —no hay varias formas de
+            empezar— sino con qué documento. Ver METODOS_DE. */}
+        <p className="sub">
+          {esCompr ? "Trae el documento original. Los datos salen de ahí."
+                   : "¿Cómo quieres empezar?"}
+        </p>
+        {/* Con una sola forma de empezar no se enseña la rejilla: ya
+            está elegida desde el paso anterior y lo único que haría
+            una tarjeta sola es pedir un clic para seguir. */}
+        {metodos.length>1 && (<>
+          <div className={`tpl-grid ${metodos.length>2 ? "tres" : ""}`}>
+            {METHODS.filter(m=>metodos.includes(m.id)).map(m=>(
+              <div key={m.id} className={`tpl ${method===m.id?"sel":""}`}
+                onClick={()=>{ setMethod(m.id); resetImport(); }}>
+                <span className="tpl-ico"><Icon n={m.ico} size={40}/></span>
+                <span className="tpl-n">{m.name}</span>
+              </div>
+            ))}
+          </div>
+          {method && <p className="imp-hint" style={{textAlign:"center",marginTop:-4}}>
+            {METHODS.find(m=>m.id===method)?.desc}
+          </p>}
+        </>)}
+
+        {/* Por qué no hay una hoja en blanco, dicho una vez y sin
+            esconderlo: es la decisión que más cambia respecto a como
+            funcionaba antes, y quien venía de usarlo va a buscar ese
+            botón. */}
+        {esCompr && (
+          <div className="borr-aviso">
+            <Icon n="info" size={17}/>
+            <div>
+              <strong>{QUE_ARCHIVO[tpl]}</strong>
+              <p>
+                No se puede empezar en blanco: OCTAVIN no emite {tpl==="factura"
+                  ? "facturas" : "recibos"}. Leemos los datos del documento que traes, tú
+                corriges lo que haya quedado mal, y el archivo se guarda junto al
+                registro para que cualquiera pueda cotejar que coinciden.
+              </p>
             </div>
-          ))}
-        </div>
-        {method && <p className="imp-hint" style={{textAlign:"center",marginTop:-4}}>
-          {METHODS.find(m=>m.id===method)?.desc}
-        </p>}
+          </div>
+        )}
 
       {/* ── CONTRATO INTELIGENTE ── */}
       {/* ← NUEVO: el contrato se escribe o importa, y de ahí sale el expediente */}

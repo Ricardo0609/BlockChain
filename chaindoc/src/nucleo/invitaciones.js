@@ -79,6 +79,33 @@ export const rechazarPorInvitacion = (testigo, nombre, motivo) =>
   llamar("rechazarPorInvitacion", { testigo, nombre, motivo });
 
 /**
+ * ← NUEVO (15 nov): firmar un DOCUMENTO DE TEXTO desde el enlace.
+ *
+ * No es lo mismo que aceptar un contrato, aunque se parezca en la
+ * pantalla. Aceptar un contrato mueve el estado de un acuerdo —de «en
+ * firma» a «aceptado»— y por eso tiene puertas de estado. Firmar un
+ * documento de texto sólo añade un bloque de FIRMA a su cadena: no
+ * hay estados que mover porque un documento de texto no es una
+ * máquina de estados, es un texto con firmas debajo.
+ *
+ * Misma honestidad en los dos: el servidor escribe «quien declara
+ * llamarse X, desde el enlace enviado a Y», nunca el nombre solo.
+ */
+export const firmarPorInvitacion = (testigo, nombre) =>
+  llamar("firmarPorInvitacion", { testigo, nombre });
+
+/**
+ * ← NUEVO (15 nov): la clave, cuando el documento tiene candado.
+ *
+ * El enlace prueba que te lo mandaron; la clave, que te la dieron.
+ * Devuelve la vista entera —con el texto dentro— sólo si acierta: si
+ * el texto viniera antes y la pantalla lo escondiera, cualquiera lo
+ * leería abriendo las herramientas del navegador.
+ */
+export const abrirPorInvitacion = (testigo, password) =>
+  llamar("abrirPorInvitacion", { testigo, password });
+
+/**
  * Entrega el archivo. Son tres pasos y el orden importa: primero la
  * sesión anónima (sin ella el almacén rechaza la subida), después el
  * archivo, y sólo entonces se le avisa al servidor para que lo

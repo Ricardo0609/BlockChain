@@ -23,7 +23,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { vistaPublica } from "../functions/lib/invitaciones.js";
+import { vistaPublica, revisarNombre } from "../functions/lib/invitaciones.js";
 
 const leer = (r) => readFileSync(resolve(process.cwd(), r), "utf8");
 
@@ -166,18 +166,38 @@ describe("lo que queda escrito en la cadena", () => {
 });
 
 describe("el nombre que se escribe", () => {
-  const trozo = () => {
-    const s = leer("functions/index.js");
-    const i = s.indexOf("export const aceptarPorInvitacion");
-    return s.slice(i, i + 1600);
-  };
-
+  // ← CAMBIADO (15 nov): estas dos miraban el texto de
+  // `aceptarPorInvitacion` con una expresion regular, porque la
+  // comprobacion vivia escrita ahi dentro. Ahora vive en
+  // `revisarNombre`, que se puede LLAMAR, asi que se llama: una
+  // regular no distingue `< 5` de `< 4` y esto si.
   it("el servidor exige nombre y apellido", () => {
     // No comprueba nada -nada que se teclee puede- pero corta el «x»
     // y el «ok» escritos sin leer, que es lo unico que un campo de
     // texto puede hacer por la seriedad del acto.
-    expect(trozo()).toMatch(/nombre\.length < 5 \|\| !nombre\.includes\(" "\)/);
-    expect(trozo()).toMatch(/nombre\.length > 120/);
+    for(const malo of ["", " ", "x", "ok", "Juan", "Perez", "    "]){
+      expect(revisarNombre(malo).ok, JSON.stringify(malo)).toBe(false);
+    }
+    expect(revisarNombre("Juan Perez").ok).toBe(true);
+    expect(revisarNombre("Ana Li").ok).toBe(true);
+    // Y un tope, para que nadie meta un parrafo donde va un nombre.
+    expect(revisarNombre("a" + " " + "b".repeat(200)).ok).toBe(false);
+    expect(revisarNombre("Juan " + "e".repeat(114)).ok).toBe(true);
+  });
+
+  it("y las CUATRO vias de responder usan la misma", () => {
+    // Firmar, aceptar, rechazar por enlace y rechazar un documento de
+    // texto. Si una se escribiera su propia comprobacion, acabaria
+    // siendo mas floja que las otras tres sin que nadie se enterara.
+    const srv = leer("functions/index.js");
+    for(const fn of ["aceptarPorInvitacion", "rechazarPorInvitacion", "firmarPorInvitacion"]){
+      const i = srv.indexOf(`export const ${fn}`);
+      expect(i, fn).toBeGreaterThan(-1);
+      const dentro = srv.slice(i, srv.indexOf("\n});", i));
+      expect(dentro, fn).toMatch(/revisarNombre\(req\.data\?\.nombre\)/);
+      // Y que no se haya quedado una copia a mano al lado.
+      expect(dentro, fn).not.toMatch(/nombre\.length < 5/);
+    }
   });
 
   it("y la pantalla lo pide igual, para no ir y volver", () => {
@@ -191,8 +211,11 @@ describe("el nombre que se escribe", () => {
   it("los espacios de mas se recortan en los dos lados", () => {
     // «Juan   Perez  » y «Juan Perez» tienen que quedar igual en la
     // cadena: si no, el mismo nombre se ve distinto segun como se
-    // tecleo.
-    expect(trozo()).toMatch(/\.trim\(\)\.replace\(\/\\s\+\/g, " "\)/);
+    // tecleo, y el bloque de la cadena lleva el nombre DENTRO de lo
+    // que se sella.
+    expect(revisarNombre("  Juan   Perez  ").nombre).toBe("Juan Perez");
+    expect(revisarNombre("Juan\tPerez").nombre).toBe("Juan Perez");
+    expect(revisarNombre("Juan\nPerez").nombre).toBe("Juan Perez");
     const app = leer("src/App.jsx");
     const i = app.indexOf("const aceptarInvitacion");
     expect(app.slice(i, i + 400)).toMatch(/\.trim\(\)\.replace\(\/\\s\+\/g, " "\)/);
@@ -386,7 +409,12 @@ describe("compartir tiene DOS opciones, no tres", () => {
   it("mandar a firmar cuelga del rol, que es donde vive", () => {
     // «Involucrado» ES la otra parte. Darle acceso es mandarselo a
     // firmar, sin preguntar.
-    expect(m()).toMatch(/const mandaAFirmar = modo==="completo" && rol==="involucrado"/);
+    // ← CAMBIADO (15 nov): lleva `esExpediente &&` delante. Sin eso,
+    // un documento de texto cuyo rol se llamara «involucrado» se
+    // intentaria mandar a firmar por la via del acuerdo, que un
+    // documento de texto no tiene.
+    expect(m()).toMatch(
+      /const mandaAFirmar = esExpediente && modo==="completo" && rol==="involucrado"/);
   });
 
   it("y el enlace sin cuenta sigue saliendo al mandarlo", () => {

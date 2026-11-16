@@ -265,16 +265,27 @@ async function selloDeCuenta(uid, nombre){
   });
 }
 
-/** Lo que se estampa en el bloque de FIRMA. */
+/**
+ * Lo que se estampa en el bloque de FIRMA.
+ *
+ * ← AÑADIDO (15 nov): el `uid`. Hacía falta para poder contestar «¿ya
+ * firmó el dueño?» sin comparar nombres, que es lo que hace falta
+ * antes de mandar un documento a firmar por enlace. Comparar nombres
+ * funciona hasta que alguien se cambia el nombre del perfil.
+ *
+ * No entra en el hash del bloque: la huella se calcula sobre
+ * index|timestamp|action|content|author|previousHash, y `meta` queda
+ * fuera. Así que esto no toca ninguna firma ya hecha.
+ */
 async function marcaDeFirma(uid, nombre){
   try{
     const s = await selloDeCuenta(uid, nombre);
-    return { sello: s.clave, selloSemilla: s.semilla ?? null, selloV: s.v ?? VERSION_SELLO };
+    return { uid, sello: s.clave, selloSemilla: s.semilla ?? null, selloV: s.v ?? VERSION_SELLO };
   }catch(e){
     // Que falle el sello no puede impedir una firma: es decoración, no
     // la prueba. La firma vale igual sin marca.
     console.error("sello: no se pudo asignar", e);
-    return { sello: null };
+    return { uid, sello: null };
   }
 }
 
@@ -1210,6 +1221,87 @@ export const registrarImagen = onCall(OPCIONES, async (req) => {
   return { doc, imagen };
 });
 
+/**
+ * ← NUEVO (16 nov): EL ARCHIVO ORIGINAL DE UN COMPROBANTE.
+ *
+ * Puerta aparte de `registrarImagen`, y no por gusto: el original de
+ * una factura normalmente NO es una imagen. Es el XML del CFDI, o el
+ * PDF que le mandaron. `registrarImagen` rechaza todo lo que no
+ * empiece por `image/`, que está bien para la galería y es justo lo
+ * contrario de lo que hace falta aquí.
+ *
+ * Las dos reglas que lo hacen valer algo, y las dos viven AQUÍ:
+ *
+ *   1. SÓLO HAY UNO. Si ya tiene original, esta llamada se niega. Sin
+ *      eso, «el original» sería el que cada pantalla decidiera
+ *      enseñar.
+ *   2. NO SE QUITA. Eso lo guarda `quitarImagen`, abajo.
+ *
+ * Que estén en el servidor es el punto entero. Ricardo lo pidió como
+ * «este archivo original no se va a poder quitar», y un botón que no
+ * se pinta no quita nada: lo quita quien llame a la función.
+ */
+const TIPOS_ORIGINAL = [
+  "image/", "application/pdf", "text/xml", "application/xml",
+  "text/plain",
+];
+
+export const registrarOriginal = onCall(OPCIONES, async (req) => {
+  const { uid, email } = quien(req);
+  const { opId, ruta, nombre, thumb } = req.data || {};
+  if(!opId || !ruta) throw new HttpsError("invalid-argument", "Faltan datos del archivo.");
+  rutaValida(ruta, uid, opId);
+
+  const actual = await leerOperacion(opId);
+  if(!actual) throw new HttpsError("not-found", "La operación no existe.");
+  exigir(actual, uid, email, "editar");
+
+  if(actual.tplId !== "recibo" && actual.tplId !== "factura"){
+    throw new HttpsError("failed-precondition",
+      "Sólo un recibo o una factura llevan archivo original.");
+  }
+  if((actual.imagenes || []).some((x) => x.esOriginal)){
+    throw new HttpsError("failed-precondition",
+      "Este comprobante ya tiene su archivo original, y sólo puede tener uno. "
+      + "Si quieres añadir más pruebas, adjúntalas como imágenes.");
+  }
+
+  const { hash, tam, tipo } = await leerYHashear(ruta);
+  if(!TIPOS_ORIGINAL.some((t) => tipo.startsWith(t))){
+    throw new HttpsError("invalid-argument",
+      "El original tiene que ser el XML, un PDF o una foto.");
+  }
+
+  const autor = await nombreDe(uid, email);
+  const id = `${opId}-org-${Math.random().toString(36).slice(2, 10)}`;
+  const imagen = {
+    path: id, ruta, nombre: nombre || "original", tipo, tam, hash,
+    thumb: thumb || null, subidoEn: new Date().toISOString(), subidoPor: autor,
+    esOriginal: true,
+  };
+
+  await db.doc(`${META}/${id}`).set({
+    id, ownerUid: uid, docId: opId, reqId: "org", ruta,
+    nombre: imagen.nombre, tipo, tam, hash, thumb: thumb || null, creadoEn: imagen.subidoEn,
+  });
+
+  const { doc } = await asentar({
+    opId, uid, email, autor,
+    evento: {
+      accion: "EVIDENCIA",
+      // Se dice que es EL ORIGINAL, no «una imagen». Quien lea la
+      // cadena dentro de dos años tiene que poder distinguir el
+      // documento del que salieron los datos de las fotos que se
+      // añadieron después.
+      contenido: `Archivo original «${imagen.nombre}» (${hash.slice(0, 16)}…)`,
+      meta: { tipo: "original", archivo: imagen.nombre, huella: hash, tam, mime: tipo },
+    },
+    cambios: { imagenes: [...(actual.imagenes || []), imagen] },
+  });
+
+  return { doc, imagen };
+});
+
 export const quitarImagen = onCall(OPCIONES, async (req) => {
   const { uid, email } = quien(req);
   const { opId, path } = req.data || {};
@@ -1221,6 +1313,25 @@ export const quitarImagen = onCall(OPCIONES, async (req) => {
 
   const img = (actual.imagenes || []).find((x) => x.path === path);
   if(!img) throw new HttpsError("not-found", "Esa imagen ya no está.");
+
+  // ← NUEVO (16 nov): el original no se retira. NUNCA, ni por su
+  // dueño, ni antes de firmar.
+  //
+  // Es lo único que ata los datos al mundo: sin él, el comprobante
+  // vuelve a ser un papel que alguien escribió sobre sí mismo, y
+  // encima uno que ya lleva firma y cadena detrás, o sea con mejor
+  // pinta de prueba que antes de tenerlo. Poder quitarlo convertiría
+  // el respaldo en un trámite de paso: lo subes, firmas, lo borras.
+  //
+  // Si de verdad está mal, lo que se hace es borrar el comprobante
+  // entero y registrarlo otra vez. Eso deja rastro; esto no lo
+  // dejaría.
+  if(img.esOriginal){
+    throw new HttpsError("failed-precondition",
+      "El archivo original no se puede quitar: es lo que prueba que los datos "
+      + "de este comprobante salieron de algún lado. Si está equivocado, borra "
+      + "el comprobante y regístralo de nuevo con el archivo correcto.");
+  }
 
   const meta = await db.doc(`${META}/${path}`).get();
   const ruta = meta.data()?.ruta || img.ruta;
@@ -2339,6 +2450,8 @@ export const revisar69B = onCall(OPCIONES, async (req) => {
 import {
   armarInvitacion, huellaDe, revisarInvitacion, MOTIVOS as MOTIVOS_INV,
   vistaPublica, autorDeInvitacion, rutaValidaDeInvitacion, cubre,
+  propositoDe, esDeTexto, conFirmas, firmoElDueno,
+  autorDeclarado, revisarNombre,
 } from "./lib/invitaciones.js";
 
 const INV = "invitaciones";
@@ -2367,7 +2480,79 @@ export const crearInvitacion = onCall(OPCIONES, async (req) => {
 
   const op = await leerOperacion(opId);
   if(!op) throw new HttpsError("not-found", "La operación no existe.");
-  exigir(op, uid, email, "pedir");
+
+  // ── EL PROPÓSITO LO DECIDE EL DOCUMENTO (15 nov) ───────────
+  //
+  // No viaja en la petición a propósito: si lo mandara el navegador,
+  // cualquiera con permiso de pedir comprobantes podría pedir un
+  // enlace de «firma» para un expediente y ponerlo en vigor con un
+  // nombre escrito. Se lee del documento y punto.
+  const proposito = propositoDe(op);
+  const autor = await nombreDe(uid, email);
+
+  // ← NUEVO (16 nov): un recibo o una factura no se reparten por
+  // enlace. Ver `propositoDe` para el porqué; aquí lo que importa es
+  // que la negativa esté en el SERVIDOR. En la pantalla el botón ni
+  // siquiera sale, pero un botón que no sale no es una puerta
+  // cerrada: es una puerta que no se ve.
+  if(proposito === null){
+    throw new HttpsError("failed-precondition",
+      "Un recibo o una factura sólo se comparten con alguien que tenga cuenta. "
+      + "No los estás emitiendo tú: los estás respaldando, y un enlace sin "
+      + "cuenta no deja saber quién lo abrió.");
+  }
+
+  // Un expediente pide comprobantes; un documento de texto se
+  // comparte para leerlo o para firmarlo. Son permisos distintos
+  // porque son actos distintos.
+  exigir(op, uid, email, esDeTexto(proposito) ? "compartir" : "pedir");
+
+  if(esDeTexto(proposito)){
+    // ── UN DOCUMENTO DE TEXTO, SIN REQUISITOS ────────────────
+    //
+    // Lo pidió Ricardo para el caso del freelance: «se usa el
+    // documento de texto para solo hacer el acuerdo y firmarlo».
+    //
+    // LA REGLA QUE IMPORTA, Y ES SUYA: «si tiene activada la sección
+    // de firma primero tendrá que estar firmado por él para poderlo
+    // compartir». Tiene razón y no es una formalidad: mandar a firmar
+    // algo que tú no has firmado es pedirle a la otra parte que se
+    // comprometa primero y sola. Y un documento de texto se puede
+    // editar hasta que alguien lo firma, así que sin esa firma lo que
+    // se manda no está fijo: podría cambiar entre que lo lee y lo
+    // firma.
+    if(proposito === "firma" && !firmoElDueno(op, autor)){
+      throw new HttpsError("failed-precondition",
+        "Fírmalo tú primero. Lo que mandas a firmar tiene que estar firmado por ti, "
+        + "y hasta que lo firmes el texto todavía se puede editar.");
+    }
+    if(!String(op.content || "").trim()){
+      throw new HttpsError("failed-precondition",
+        "Este documento está vacío. Escribe algo antes de mandarlo.");
+    }
+
+    const { testigo, registro } = armarInvitacion({
+      opId, reqIds: [], correo, proposito,
+      creadaPor: autor, creadaPorUid: uid, dias,
+    });
+    await refInv(registro.huella).set(registro);
+
+    const { doc } = await asentar({
+      opId, uid, email, autor, tocarFecha: false, permiso: "compartir",
+      evento: {
+        accion: "COMPARTIDO",
+        contenido: (proposito === "firma"
+          ? "Enlace para leerlo y firmarlo, sin cuenta"
+          : "Enlace de lectura, sin cuenta")
+          + (registro.correo ? ` (${registro.correo})` : ""),
+        meta: { tipo: "invitacion", proposito, requisitos: [], correo: registro.correo,
+                expiraEn: registro.expiraEn, huella: registro.huella },
+      },
+    });
+
+    return { doc, testigo, expiraEn: registro.expiraEn, huella: registro.huella,
+             proposito, requisitos: [] };
+  }
 
   // «Todo lo que falta» es el caso normal: un proveedor que te debe
   // varias facturas. Mandarle un enlace por cada una sería obligarlo a
@@ -2384,9 +2569,8 @@ export const crearInvitacion = onCall(OPCIONES, async (req) => {
       : "Elige al menos un requisito que exista en el expediente.");
   }
 
-  const autor = await nombreDe(uid, email);
   const { testigo, registro } = armarInvitacion({
-    opId, reqIds: lista, correo,
+    opId, reqIds: lista, correo, proposito,
     creadaPor: autor, creadaPorUid: uid, dias, maxArchivos,
   });
 
@@ -2410,7 +2594,7 @@ export const crearInvitacion = onCall(OPCIONES, async (req) => {
   });
 
   return { doc, testigo, expiraEn: registro.expiraEn, huella: registro.huella,
-           requisitos: titulos };
+           proposito, requisitos: titulos };
 });
 
 /** Retirar un enlace antes de que venza. */
@@ -2453,6 +2637,9 @@ export const invitacionesDe = onCall(OPCIONES, async (req) => {
       .map((x) => ({
         huella: x.huella, reqIds: x.reqIds || [], correo: x.correo,
         creadaEn: x.creadaEn, expiraEn: x.expiraEn,
+        // Sin esto la lista de enlaces de un documento de texto diría
+        // «0 comprobantes», que es verdad y no dice nada.
+        proposito: x.proposito || "entrega", respuesta: x.respuesta || null,
         entregas: x.entregas || 0, maxArchivos: x.maxArchivos || 20,
         estado: revisarInvitacion(x, ahora).ok ? "vigente" : revisarInvitacion(x, ahora).motivo,
       }))
@@ -2470,7 +2657,126 @@ export const verInvitacion = onCall(OPCIONES, async (req) => {
   const { registro } = await abrirInvitacion(req.data?.testigo);
   const op = await leerOperacion(registro.opId);
   if(!op) throw new HttpsError("not-found", "El documento ya no existe.");
+  // `abierto: false` a propósito: si el documento tiene candado, de
+  // aquí no sale el texto. La clave se da en `abrirPorInvitacion`.
+  return { ...vistaPublica(registro, op, { abierto: false }),
+           acuerdo: acuerdoParaInvitado(registro, op) };
+});
+
+/**
+ * ← NUEVO (15 nov): EL CANDADO, PARA QUIEN ENTRA POR EL ENLACE.
+ *
+ * «Si llega a tener candado de seguridad igual pide la clave que el
+ * usuario le proporcionará». El enlace prueba que te lo mandaron; la
+ * clave, que te la dieron. Son dos cosas, y un documento con candado
+ * pide las dos.
+ *
+ * Mismo freno de intentos que para quien tiene cuenta —y es el mismo
+ * contador, el del documento—, porque aquí hace más falta: no hay
+ * sesión que bloquear, sólo un enlace que cualquiera puede reabrir.
+ */
+export const abrirPorInvitacion = onCall(OPCIONES, async (req) => {
+  const { registro } = await abrirInvitacion(req.data?.testigo);
+  const op = await leerOperacion(registro.opId);
+  if(!op) throw new HttpsError("not-found", "El documento ya no existe.");
+
+  if(!(op.protegido || op.password)){
+    // No está protegido: no hay nada que abrir, y decir «contraseña
+    // incorrecta» sería mentir. Se devuelve la vista entera.
+    return { ...vistaPublica(registro, op), acuerdo: acuerdoParaInvitado(registro, op) };
+  }
+
+  const texto = String(req.data?.password || "");
+  const refP = db.doc(`${PROTEGIDOS}/${registro.opId}`);
+  const guardado = (await refP.get()).data();
+
+  if(!guardado){
+    // Documentos de antes: la clave estaba en claro dentro del propio
+    // documento. Se acepta, pero NO se convierte al formato nuevo
+    // desde aquí: quien entra por un enlace no tiene por qué poder
+    // escribir en la base. La conversión la hace el dueño al entrar.
+    if(op.password && texto === op.password){
+      return { ...vistaPublica(registro, op), acuerdo: acuerdoParaInvitado(registro, op) };
+    }
+    throw new HttpsError("permission-denied", "Contraseña incorrecta.");
+  }
+
+  const estado = estadoIntentos(guardado.intentos || {});
+  if(estado.bloqueado){
+    throw new HttpsError("resource-exhausted",
+      `Demasiados intentos. Espera ${Math.ceil(estado.segundos / 60)} minuto(s).`);
+  }
+
+  const { ok } = await comprobarSecreto(texto, guardado.clave);
+  await refP.set({ intentos: trasIntento(guardado.intentos, ok) }, { merge: true });
+  if(!ok) throw new HttpsError("permission-denied", "Contraseña incorrecta.");
+
   return { ...vistaPublica(registro, op), acuerdo: acuerdoParaInvitado(registro, op) };
+});
+
+/**
+ * ← NUEVO (15 nov): FIRMAR UN DOCUMENTO DE TEXTO DESDE EL ENLACE.
+ *
+ * Es el caso del freelance, dicho por Ricardo: «la persona que no
+ * tiene cuenta al ingresar igual podrá ver el texto y hasta abajo
+ * habrá un input y un texto que diga: ingresa tu nombre completo para
+ * firmar si estás de acuerdo».
+ *
+ * No pasa por `acuerdo`: un documento de texto no tiene estados de
+ * contrato ni partes declaradas. Lo que tiene son bloques de FIRMA en
+ * su cadena, y aquí se añade uno más, igual que si lo hubiera firmado
+ * alguien con cuenta —con la diferencia escrita en la firma misma:
+ * `fuerza: "enlace"` al lado de «cuenta» y «efirma».
+ *
+ * El enlace se gasta: una vez que contestó, no vuelve a contestar.
+ * Dos firmas con dos nombres distintos desde el mismo enlace no
+ * serían dos partes, serían una persona probando.
+ */
+export const firmarPorInvitacion = onCall(OPCIONES, async (req) => {
+  const { registro, huella } = await abrirInvitacion(req.data?.testigo);
+  const v = revisarNombre(req.data?.nombre);
+  if(!v.ok) throw new HttpsError("invalid-argument", v.error);
+  const nombre = v.nombre;
+
+  const op = await leerOperacion(registro.opId);
+  if(!op) throw new HttpsError("not-found", "El documento ya no existe.");
+
+  if(registro.proposito !== "firma"){
+    throw new HttpsError("failed-precondition",
+      "Este enlace es sólo para leer el documento.");
+  }
+  if(registro.respuesta){
+    throw new HttpsError("failed-precondition",
+      "Este enlace ya se usó para responder. Pídele uno nuevo a quien te lo mandó.");
+  }
+  // La sección de firmas se pudo apagar después de mandar el enlace.
+  // Firmar donde ya no hay firmas dejaría un bloque que la pantalla
+  // del dueño no enseña: una prueba invisible es peor que ninguna.
+  if(!conFirmas(op)){
+    throw new HttpsError("failed-precondition",
+      "Quien te lo mandó quitó la sección de firmas de este documento.");
+  }
+
+  const correo = (registro.correo || "").toLowerCase() || null;
+  const autor = autorDeclarado(nombre, correo);
+
+  const { doc } = await asentar({
+    opId: registro.opId, uid: op.ownerUid, email: op.ownerEmail, autor,
+    exigirAcceso: false,   // el enlace ES el permiso, y ya se comprobó
+    evento: {
+      accion: "FIRMA",
+      contenido: "Firma",
+      meta: { fuerza: "enlace", metodo: "nombre-escrito",
+              nombreDeclarado: nombre, correo, porInvitacion: true, sello: null },
+    },
+  });
+
+  await refInv(huella).set({
+    ultimoUso: new Date().toISOString(),
+    respuesta: { tipo: "firmado", nombre, fecha: new Date().toISOString() },
+  }, { merge: true });
+
+  return { ok: true, firmas: (doc?.chain || []).filter((b) => b.action === "FIRMA").length };
 });
 
 /**
@@ -2554,18 +2860,11 @@ function acuerdoParaInvitado(registro, op){
  */
 export const aceptarPorInvitacion = onCall(OPCIONES, async (req) => {
   const { registro, huella } = await abrirInvitacion(req.data?.testigo);
-  const nombre = String(req.data?.nombre || "").trim().replace(/\s+/g, " ");
-
-  // Dos palabras, no una. No comprueba nada —nada puede—, pero corta
-  // el «x» y el «ok» escritos sin leer, que es lo único que un campo
-  // de texto puede hacer por la seriedad del acto.
-  if(nombre.length < 5 || !nombre.includes(" ")){
-    throw new HttpsError("invalid-argument",
-      "Escribe tu nombre completo, como aparece en tu identificación.");
-  }
-  if(nombre.length > 120){
-    throw new HttpsError("invalid-argument", "Ese nombre es demasiado largo.");
-  }
+  // Dos palabras, no una, y el mismo criterio en los cuatro sitios
+  // donde se escribe un nombre para responder: ver `revisarNombre`.
+  const v = revisarNombre(req.data?.nombre);
+  if(!v.ok) throw new HttpsError("invalid-argument", v.error);
+  const nombre = v.nombre;
 
   const op = await leerOperacion(registro.opId);
   if(!op) throw new HttpsError("not-found", "El documento ya no existe.");
@@ -2581,9 +2880,7 @@ export const aceptarPorInvitacion = onCall(OPCIONES, async (req) => {
   }
 
   const correo = (registro.correo || "").toLowerCase() || null;
-  const autor = correo
-    ? `${nombre} (declarado, desde el enlace enviado a ${correo})`
-    : `${nombre} (declarado, desde un enlace de invitación)`;
+  const autor = autorDeclarado(nombre, correo);
 
   const acuerdo = {
     ...op.acuerdo,
@@ -2630,13 +2927,11 @@ export const aceptarPorInvitacion = onCall(OPCIONES, async (req) => {
  */
 export const rechazarPorInvitacion = onCall(OPCIONES, async (req) => {
   const { registro, huella } = await abrirInvitacion(req.data?.testigo);
-  const nombre = String(req.data?.nombre || "").trim().replace(/\s+/g, " ");
+  const v = revisarNombre(req.data?.nombre);
+  if(!v.ok) throw new HttpsError("invalid-argument", v.error);
+  const nombre = v.nombre;
   const motivo = String(req.data?.motivo || "").trim();
 
-  if(nombre.length < 5 || !nombre.includes(" ")){
-    throw new HttpsError("invalid-argument",
-      "Escribe tu nombre completo, como aparece en tu identificación.");
-  }
   if(!motivo){
     throw new HttpsError("invalid-argument",
       "Di por qué no lo aceptas, para que puedan corregirlo.");
@@ -2644,6 +2939,47 @@ export const rechazarPorInvitacion = onCall(OPCIONES, async (req) => {
 
   const op = await leerOperacion(registro.opId);
   if(!op) throw new HttpsError("not-found", "El documento ya no existe.");
+
+  // ── UN DOCUMENTO DE TEXTO SE RECHAZA IGUAL (15 nov) ────────
+  //
+  // «El mismo proceso que en un expediente», dijo Ricardo, y el
+  // rechazo es la mitad de ese proceso: si se puede firmar hay que
+  // poder no firmar. Lo que cambia es dónde queda escrito: un
+  // documento de texto no tiene `acuerdo` con estados, así que el
+  // rechazo es un bloque de la cadena y nada más. No destruye nada ni
+  // cierra el documento: queda asentado que lo leyó y no lo aceptó,
+  // con fecha y motivo, y quien lo mandó corrige y vuelve a mandarlo.
+  if(esDeTexto(registro.proposito)){
+    if(registro.respuesta){
+      throw new HttpsError("failed-precondition",
+        "Este enlace ya se usó para responder. Pídele uno nuevo a quien te lo mandó.");
+    }
+    const correoT = (registro.correo || "").toLowerCase() || null;
+    const autorT = autorDeclarado(nombre, correoT);
+    const razon = motivo.slice(0, 80);
+
+    const { doc } = await asentar({
+      opId: registro.opId, uid: op.ownerUid, email: op.ownerEmail, autor: autorT,
+      exigirAcceso: false,
+      evento: {
+        accion: "ACUERDO",
+        contenido: correoT
+          ? `Quien declara llamarse ${nombre}, desde el enlace enviado a ${correoT}, no firmó el documento: ${razon}`
+          : `Quien declara llamarse ${nombre} no firmó el documento: ${razon}`,
+        meta: { tipo: "rechazado", motivo: razon,
+                detalle: String(req.data?.detalle || "").trim().slice(0, 600) || null,
+                fuerza: "enlace", nombreDeclarado: nombre, correo: correoT,
+                porInvitacion: true },
+      },
+    });
+
+    await refInv(huella).set({
+      ultimoUso: new Date().toISOString(),
+      respuesta: { tipo: "rechazado", nombre, motivo: razon, fecha: new Date().toISOString() },
+    }, { merge: true });
+
+    return { ok: true, bloques: (doc?.chain || []).length };
+  }
 
   const puerta = acuerdoParaInvitado(registro, op);
   if(!puerta) throw new HttpsError("failed-precondition", "Este documento no es un contrato.");
@@ -2658,9 +2994,7 @@ export const rechazarPorInvitacion = onCall(OPCIONES, async (req) => {
   const correo = (registro.correo || "").toLowerCase() || null;
   // La misma honestidad que al aceptar: se dice quién DECLARA ser, y
   // desde dónde. Un rechazo entra en la cadena igual que una firma.
-  const autor = correo
-    ? `${nombre} (declarado, desde el enlace enviado a ${correo})`
-    : `${nombre} (declarado, desde un enlace de invitación)`;
+  const autor = autorDeclarado(nombre, correo);
 
   const acuerdo = {
     ...op.acuerdo,

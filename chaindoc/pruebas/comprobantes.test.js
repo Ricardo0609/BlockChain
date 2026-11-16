@@ -7,6 +7,7 @@ import { describe, it, expect } from "vitest";
 import {
   esComprobante, faltanDatos, estaFirmado, sePuedeFirmar, puedeSalir,
   soloSuDueno, porQueNoSale, faltaRespaldo, REQUERIDOS,
+  originalDe, sinOriginalViejo, soloConCuenta,
 } from "../src/nucleo/comprobantes";
 
 // ← ACTUALIZADO (10 nov): todos los comprobantes de estas pruebas
@@ -15,7 +16,16 @@ import {
 // no serviria para probar ninguna de las otras reglas —fallaria
 // siempre, y por el motivo equivocado—. Lo que vigila esa regla tiene
 // su propio bloque mas abajo.
-const RESPALDO = [{ path: "u/U1/r1/foto.jpg", nombre: "foto.jpg" }];
+// ← CAMBIADO (16 nov): el respaldo lleva `esOriginal`.
+//
+// Antes bastaba con que la lista de imagenes no estuviera vacia. Pero
+// una foto cualquiera no es el documento del que salieron los datos:
+// es una foto mas. Ahora UNO de los adjuntos es el original -el que
+// se subio al crearlo, el que no se puede quitar- y es ese el que
+// cuenta como respaldo.
+const RESPALDO = [{ path: "u/U1/r1/foto.jpg", nombre: "foto.jpg", esOriginal: true }];
+/** Una foto cualquiera, de las que se añaden despues. */
+const SOLO_FOTOS = [{ path: "u/U1/r1/extra.jpg", nombre: "extra.jpg" }];
 
 const recibo = (fields = {}, extra = {}) => ({
   id: "r1", tplId: "recibo", ownerUid: "U1", chain: [], fields,
@@ -210,18 +220,82 @@ describe("el documento original que respalda el papel", () => {
     expect(sePuedeFirmar(sinNada)).toBe(false);
   });
 
-  it("una foto adjunta basta", () => {
+  it("el archivo original basta", () => {
     expect(faltaRespaldo(recibo(LLENO))).toBe(false);
     expect(sePuedeFirmar(recibo(LLENO))).toBe(true);
   });
 
-  it("el original leido tambien vale, sin fotos", () => {
-    // Cuando el comprobante se lleno leyendo el XML del CFDI, el
-    // original ya esta guardado: pedir ademas una foto seria pedir una
-    // prueba peor de algo que ya esta probado mejor.
-    const conXml = factura(FACTURA_LLENA, { imagenes: [], sourceFile: "u/U1/f1/cfdi.xml" });
-    expect(faltaRespaldo(conXml)).toBe(false);
-    expect(sePuedeFirmar(conXml)).toBe(true);
+  it("`originalDe` devuelve EL original, no el primero de la lista", () => {
+    // El original no tiene por que haberse subido primero: a un
+    // comprobante de los de antes se le adjunta despues de las fotos
+    // que ya tuviera. Si esto devolviera `imagenes[0]`, en ese caso
+    // señalaria a una foto cualquiera como el documento de origen.
+    const doc = { tplId: "recibo", imagenes: [
+      { path: "a", nombre: "extra.jpg" },
+      { path: "b", nombre: "ticket.jpg", esOriginal: true },
+    ] };
+    expect(originalDe(doc).path).toBe("b");
+    expect(originalDe({ tplId: "recibo", imagenes: [] })).toBe(null);
+    expect(originalDe({ tplId: "recibo" })).toBe(null);
+  });
+
+  it("pero una foto cualquiera NO: tiene que ser EL original", () => {
+    // ← NUEVO (16 nov). Antes valia cualquier adjunto, asi que subir
+    // una foto del perro despues de firmar daba por respaldado el
+    // recibo. El respaldo no es «hay algo adjunto»: es «esta el
+    // documento del que salieron estos datos».
+    const conFotos = recibo(LLENO, { imagenes: SOLO_FOTOS });
+    expect(faltaRespaldo(conFotos)).toBe(true);
+    expect(sePuedeFirmar(conFotos)).toBe(false);
+  });
+
+  it("y `sourceFile` NO vale: nunca fue un archivo", () => {
+    // ← CORREGIDO (16 nov), y esta prueba es la leccion.
+    //
+    // La version del 10 de noviembre aceptaba `sourceFile` como
+    // respaldo, y esta prueba lo confirmaba con una ruta de pinta
+    // creible -«u/U1/f1/cfdi.xml»- y un comentario que decia «el
+    // original ya esta guardado».
+    //
+    // No lo estaba. `sourceFile` se escribe como `impMeta?.name`: el
+    // NOMBRE del archivo que subiste, una cadena de texto, y el
+    // archivo se tiraba. La prueba no comprobaba la regla, repetia lo
+    // que yo creia de ella, y el dato inventado hizo verdadera esa
+    // creencia durante seis dias.
+    const soloElNombre = factura(FACTURA_LLENA, { imagenes: [], sourceFile: "cfdi.xml" });
+    expect(faltaRespaldo(soloElNombre)).toBe(true);
+    expect(sePuedeFirmar(soloElNombre)).toBe(false);
+    // Y se reconoce como uno de los de antes, para poder decirselo.
+    expect(sinOriginalViejo(soloElNombre)).toBe(true);
+    // Uno nuevo sin nada no es «de los de antes»: es uno a medio hacer.
+    expect(sinOriginalViejo(factura(FACTURA_LLENA, { imagenes: [] }))).toBe(false);
+  });
+
+  it("un comprobante viejo ya firmado tampoco sale de aqui", () => {
+    // El caso que decidio Ricardo: «marcarlos sin original y pedirlo
+    // para volver a usarlos». Parece terminado -datos y firma- y es
+    // justo el que mas falta hace frenar, porque es el que se iria a
+    // un expediente sin que nadie mirara.
+    const viejo = factura(FACTURA_LLENA, {
+      imagenes: [], sourceFile: "factura.pdf", chain: [firma],
+    });
+    expect(estaFirmado(viejo)).toBe(true);
+    expect(puedeSalir(viejo)).toBe(false);
+    expect(porQueNoSale(viejo)).toMatch(/sólo quedó el nombre/);
+    // Y en cuanto trae el archivo, sale.
+    const arreglado = { ...viejo, imagenes: RESPALDO };
+    expect(puedeSalir(arreglado)).toBe(true);
+    expect(porQueNoSale(arreglado)).toBe(null);
+  });
+
+  it("un comprobante nunca se reparte por enlace", () => {
+    // «No tiene sentido compartirselo a alguien que no tiene cuenta
+    // porque no estas emitiendo una factura o recibo que quieras
+    // mandar, solamente estas respaldando la informacion».
+    expect(soloConCuenta(recibo(LLENO))).toBe(true);
+    expect(soloConCuenta(factura(FACTURA_LLENA))).toBe(true);
+    expect(soloConCuenta({ kind: "documento" })).toBe(false);
+    expect(soloConCuenta({ kind: "expediente" })).toBe(false);
   });
 
   it("vale para los dos: recibo y factura", () => {

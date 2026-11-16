@@ -69,6 +69,7 @@ import { llamar, errorBackend } from "./nucleo/backend";
 import { leerAvisos } from "./nucleo/avisos";
 import {
   testigoDeUrl, verInvitacion, aceptarPorInvitacion, rechazarPorInvitacion,
+  firmarPorInvitacion, abrirPorInvitacion,
   entregarArchivo, entregarEnlace as entregarEnlaceInvitado,
   enlaceDeEntrega,
 } from "./nucleo/invitaciones";
@@ -194,6 +195,12 @@ export default function Octavin(){
   const [invAceptError,setInvAceptError] = useState("");
   const [invRechazando,setInvRechazando] = useState(false);
   const [invMotivo,setInvMotivo]     = useState("");
+  // ← NUEVO (15 nov): el candado del enlace. Aparte de `invAceptando`
+  // a propósito: son dos pasos distintos de la misma pantalla y el
+  // error de uno no tiene por qué salir debajo del otro.
+  const [invClave,setInvClave]       = useState("");
+  const [invClaveBusy,setInvClaveBusy] = useState(false);
+  const [invClaveErr,setInvClaveErr] = useState("");
   const [invSubiendo,setInvSubiendo] = useState(null);
   const [entregas,setEntregas]       = useState({});
   const [enlaces,setEnlaces]         = useState(null);
@@ -382,6 +389,13 @@ export default function Octavin(){
   const [imp,setImp]         = useState(null);   // {stage,message,percent}
   const [impText,setImpText] = useState("");
   const [impMeta,setImpMeta] = useState(null);   // {name,pages,confidence,kind}
+  // ← NUEVO (16 nov): EL ARCHIVO, no su nombre.
+  //
+  // `impMeta.name` es lo unico que se guardaba del original, y con eso
+  // se daba por respaldado un comprobante: ver `faltaRespaldo` en
+  // `nucleo/comprobantes.js`, que aceptaba esa cadena de texto como
+  // prueba. El archivo se leia, se extraia el texto y se tiraba.
+  const [impFile,setImpFile] = useState(null);
   const [impErr,setImpErr]   = useState("");
   const [dragOver,setDragOver] = useState(false);
   const [unlocked,setUnlocked] = useState(false);
@@ -503,6 +517,48 @@ export default function Octavin(){
    * estado aquí: así lo que se ve sale del servidor, que es quien
    * sabe en qué estado quedó el acuerdo.
    */
+  /**
+   * ← NUEVO (15 nov): firmar un documento de texto desde el enlace.
+   *
+   * Hermana de `aceptarInvitacion` y deliberadamente NO la misma: lo
+   * que escribe en la cadena es distinto —un bloque de FIRMA, no el
+   * estado de un acuerdo— y mezclarlas haría que una de las dos
+   * tuviera que preguntar qué clase de documento es antes de hacer su
+   * trabajo. El servidor ya lo sabe por el propósito del enlace.
+   */
+  const firmarInvitacion = async()=>{
+    const nombre = invNombre.trim().replace(/\s+/g, " ");
+    if(nombre.length < 5 || !nombre.includes(" ")){
+      setInvAceptError("Escribe tu nombre y tus apellidos.");
+      return;
+    }
+    setInvAceptando(true); setInvAceptError("");
+    try{
+      await firmarPorInvitacion(testigo, nombre);
+      setInvitacion(await verInvitacion(testigo));
+      notify("Documento firmado ✓");
+    }catch(e){ setInvAceptError(errorBackend(e)); }
+    finally{ setInvAceptando(false); }
+  };
+
+  /**
+   * ← NUEVO (15 nov): la clave del candado, desde el enlace.
+   *
+   * La respuesta del servidor ES la vista entera, con el texto
+   * dentro, así que se guarda tal cual: no hace falta volver a pedir
+   * `verInvitacion`, y pedirla volvería a traerla bloqueada.
+   */
+  const abrirConClave = async()=>{
+    const clave = String(invClave || "");
+    if(!clave){ setInvClaveErr("Escribe la clave."); return; }
+    setInvClaveBusy(true); setInvClaveErr("");
+    try{
+      setInvitacion(await abrirPorInvitacion(testigo, clave));
+      setInvClave("");
+    }catch(e){ setInvClaveErr(errorBackend(e)); }
+    finally{ setInvClaveBusy(false); }
+  };
+
   const aceptarInvitacion = async()=>{
     const nombre = invNombre.trim().replace(/\s+/g, " ");
     if(nombre.length < 5 || !nombre.includes(" ")){
@@ -786,7 +842,7 @@ export default function Octavin(){
   };
 
   // ── IMPORTAR ARCHIVOS ──
-  const resetImport = ()=>{ setImp(null); setImpText(""); setImpMeta(null); setImpErr(""); };
+  const resetImport = ()=>{ setImp(null); setImpText(""); setImpMeta(null); setImpErr(""); setImpFile(null); };
 
   const handleFile = async(file, forceOcr=false)=>{
     if(!file) return;
@@ -806,6 +862,7 @@ export default function Octavin(){
         chars: res.text.length,
       });
       if(!mIn.trim()) setMIn(stripExtension(file.name).slice(0,80));
+      setImpFile(file);
       setImp(null);
     }catch(err){
       setImp(null);
@@ -933,15 +990,47 @@ export default function Octavin(){
     if(!nd){ notify("Error al crear","err"); return; }
     const id = nd.id;
 
+    // ── EL ORIGINAL SE GUARDA AQUÍ (16 nov) ──────────────────
+    //
+    // Hasta hoy el archivo se leía, se sacaba el texto y se tiraba:
+    // de él sólo quedaba el nombre en `sourceFile`. Ahora sube al
+    // almacén y queda pegado al comprobante como su original, con su
+    // huella, y de ahí no se mueve.
+    //
+    // Va DESPUÉS de crear el documento porque la ruta del archivo
+    // lleva su id dentro. Si esto falla, el comprobante existe sin
+    // original: no se podrá firmar y la propia pantalla le pedirá el
+    // archivo. Es un final feo pero honesto, y mejor que perder
+    // también los datos que ya se extrajeron.
+    let docFinal = nd;
+    if(isImport && formKey && impFile){
+      let ruta = null;
+      try{
+        const thumb = (impFile.type||"").startsWith("image/")
+          ? await makeThumb(impFile) : null;
+        ({ ruta } = await subirArchivo({ uid, docId:id, file:impFile }));
+        const r = enServidor()
+          ? await llamar("registrarOriginal", { opId:id, ruta, nombre:impFile.name, thumb })
+          : await registrarOriginalLocal(nd, { file:impFile, ruta, thumb });
+        docFinal = r.doc;
+      }catch(e){
+        console.error(e);
+        if(ruta) await descartarSubida(ruta);
+        notify("Se creó, pero no se pudo guardar el archivo original: "
+          + errArchivo(e) + " Adjúntalo desde el documento.", "err");
+      }
+    }
+
     if(isImport && formKey){
       notify(filled
         ? `${filled} campo${filled===1?"":"s"} llenado${filled===1?"":"s"} automáticamente ✓`
-        : "No se reconocieron campos. Llénalos a mano.", filled?"ok":"err");
+        : "No se reconocieron campos. Corrígelos mirando el original.", filled?"ok":"err");
     }
 
     closeCreate();
-    setD(nd); setTitle(name); setContent(nd.content); setFields(nd.fields||{});
-    setSecciones(seccionesDe(nd));
+    const nd2 = docFinal;
+    setD(nd2); setTitle(name); setContent(nd2.content); setFields(nd2.fields||{});
+    setSecciones(seccionesDe(nd2));
     setUnlocked(true); setEdit(true); setUrlDoc(id); setScreen("doc");
     }finally{ setCreando(false); }
   };
@@ -966,6 +1055,19 @@ export default function Octavin(){
         source:"nuevo", sourceFile:null, password:null, sharedWith:[],
       }, { accion:"CREACIÓN", contenido:`Borrador de contrato: ${name}` });
       if(!nd){ notify("Error al crear","err"); return; }
+
+      // ← NUEVO (25 oct): que no se pierda en silencio.
+      //
+      // `destino` es lo que marca el borrador, y el servidor filtra
+      // los campos que acepta. Si las funciones desplegadas todavía no
+      // conocen el campo, lo tiran sin decir nada: el documento nace
+      // como texto normal, con su barra completa y su cartel de «¿es
+      // un contrato?», y desde fuera parece que la función no se hizo.
+      // Vale más una frase incómoda que media tarde buscando.
+      if(!esBorradorContrato(nd)){
+        notify("Se creó, pero el servidor no guardó la marca de borrador. Falta desplegar las funciones: firebase deploy --only functions","err");
+      }
+
       closeCreate();
       setD(nd); setTitle(name); setContent(""); setFields({});
       setSecciones(seccionesDe(nd));
@@ -1428,8 +1530,39 @@ export default function Octavin(){
     return { doc };
   };
 
+  /**
+   * ← NUEVO (16 nov): el original, cuando no hay servidor.
+   *
+   * Gemela de `registrarImagenLocal` y aparte por lo mismo que en el
+   * servidor: el original de una factura suele ser un XML o un PDF, y
+   * lleva su marca. Toma el documento por argumento porque se usa
+   * justo despues de crearlo, cuando `d` todavia es el de antes.
+   */
+  const registrarOriginalLocal = async(doc0, { file, ruta, thumb })=>{
+    const hash = await hashFile(file);
+    const path = genId();
+    const imagenes = [...(doc0.imagenes||[]), {
+      path, ruta, nombre:file.name, tipo:file.type, tam:file.size, hash, thumb,
+      subidoEn:new Date().toISOString(), subidoPor:user, esOriginal:true,
+    }];
+    const doc = await aplicar(doc0, {
+      accion:"EVIDENCIA",
+      contenido:`Archivo original «${file.name}» (${hash.slice(0,16)}…)`,
+      meta:{ tipo:"original", archivo:file.name, huella:hash, tam:file.size, mime:file.type },
+    }, { imagenes }, { autor:user, autorUid:uid });
+    if(!doc) throw new Error("No se pudo guardar el archivo original.");
+    return { doc };
+  };
+
   const quitarImagenLocal = async(path)=>{
     const img = (d.imagenes||[]).find(x=>x.path===path);
+    // El original no se retira. El motivo entero esta en `quitarImagen`,
+    // en functions/index.js; aqui se repite la puerta porque sin
+    // servidor esta es la unica que hay.
+    if(img?.esOriginal){
+      throw new Error("El archivo original no se puede quitar: es lo que prueba que "
+        + "los datos de este comprobante salieron de algún lado.");
+    }
     if(img?.ruta) await descartarSubida(img.ruta);
     const doc = await aplicar(d, {
       accion:"EVIDENCIA",
@@ -1621,7 +1754,24 @@ export default function Octavin(){
 
   // ← ACTUALIZADO: antes aceptaba cualquier texto. Ahora comprueba que
   // el correo corresponda a una cuenta real antes de compartir.
-  const doShare = async()=>{
+  /**
+   * Dar acceso a alguien con cuenta.
+   *
+   * ← CAMBIADO (15 nov): el rol se puede pasar.
+   *
+   * Hacía falta porque en un documento de texto que se firma el rol
+   * NO se elige: lo decide el modal (ver PARA_FIRMAR en
+   * `modales/Compartir.jsx`) y no hay radio que lo guarde en
+   * `shareRol`. Llega por aquí.
+   *
+   * `typeof rolDado === "string"` no es paranoia: `onClick={doShare}`
+   * le pasaría el EVENTO del clic en ese sitio, y un evento es
+   * truthy. Eso ya pasó el 12 de nov con `conBio` y costó una tarde,
+   * así que se arregla en los dos extremos —el botón llama a mano y
+   * la función no se fía— porque va a volver a pasar.
+   */
+  const doShare = async(rolDado)=>{
+    const rolAUsar = typeof rolDado === "string" ? rolDado : shareRol;
     const correo = mIn.trim().toLowerCase();
     setShareErr(""); setShareFound(null);
 
@@ -1633,7 +1783,7 @@ export default function Octavin(){
       setShareErr("Ese es tu propio correo."); return;
     }
     const rolPrevio = rolDe(d, null, correo);
-    if(rolPrevio && rolPrevio === shareRol){
+    if(rolPrevio && rolPrevio === rolAUsar){
       setShareErr(`Esa persona ya entra como ${ROL_TEXTO[rolPrevio]}.`); return;
     }
 
@@ -1648,19 +1798,19 @@ export default function Octavin(){
       // ← ACTUALIZADO (Etapa 3): los accesos los reparte el servidor,
       // que comprueba que quien comparte tenga permiso para hacerlo.
       if(enServidor()){
-        const r = await compartirServidor(d.id, correo, shareRol);
+        const r = await compartirServidor(d.id, correo, rolAUsar);
         setD(r.doc); setMIn(""); setShareFound(cuenta);
-        notify(`${rolPrevio ? "Rol actualizado" : "Compartido"}: ${cuenta.nombre||correo} · ${ROL_TEXTO[shareRol]} ✓`);
+        notify(`${rolPrevio ? "Rol actualizado" : "Compartido"}: ${cuenta.nombre||correo} · ${ROL_TEXTO[rolAUsar]} ✓`);
         return;
       }
 
       const up = await aplicar(d, {
         accion:"COMPARTIDO",
-        contenido:`Compartido con ${cuenta.nombre||correo} (${correo}) como ${ROL_TEXTO[shareRol]}`,
-        meta:{ tipo:"alta", correo, rol:shareRol },
+        contenido:`Compartido con ${cuenta.nombre||correo} (${correo}) como ${ROL_TEXTO[rolAUsar]}`,
+        meta:{ tipo:"alta", correo, rol:rolAUsar },
       }, {
         sharedWith:[...new Set([...(d.sharedWith||[]), correo])],
-        roles:{ ...(d.roles||{}), [correo]: shareRol },
+        roles:{ ...(d.roles||{}), [correo]: rolAUsar },
       }, { autor:user, autorUid:uid });
 
       if(up){
@@ -1698,6 +1848,43 @@ export default function Octavin(){
 
       setD(r.doc);
       notify("Imagen adjunta ✓");
+    }catch(e){
+      console.error(e);
+      if(ruta) await descartarSubida(ruta);
+      notify(errArchivo(e),"err");
+    }
+    finally{ setSaving(false); }
+  };
+
+  /**
+   * ← NUEVO (16 nov): traerle el original a un comprobante que no lo
+   * tiene.
+   *
+   * Dos clientes, y los dos hacen falta:
+   *
+   *   · LOS DE ANTES. Los recibos y facturas creados cuando el
+   *     producto sólo guardaba el nombre del archivo. Ricardo decidió
+   *     que se marquen y que pidan el original para volver a
+   *     compartirse o adjuntarse, y esto es por dónde lo traen.
+   *   · LOS QUE FALLARON AL NACER. Si la subida se cae justo al
+   *     crearlo, el comprobante queda sin original. Sin esta puerta
+   *     el único arreglo sería borrarlo y empezar de nuevo.
+   *
+   * No acepta un segundo original: eso lo niega el servidor, que es
+   * donde tiene que negarse.
+   */
+  const adjuntarOriginal = async(file)=>{
+    if(!file || !d) return;
+    setSaving(true);
+    let ruta = null;
+    try{
+      const thumb = (file.type||"").startsWith("image/") ? await makeThumb(file) : null;
+      ({ ruta } = await subirArchivo({ uid, docId:d.id, file }));
+      const r = enServidor()
+        ? await llamar("registrarOriginal", { opId:d.id, ruta, nombre:file.name, thumb })
+        : await registrarOriginalLocal(d, { file, ruta, thumb });
+      setD(r.doc);
+      notify("Archivo original guardado ✓");
     }catch(e){
       console.error(e);
       if(ruta) await descartarSubida(ruta);
@@ -2351,19 +2538,27 @@ export default function Octavin(){
   // que lo abren— o los requisitos marcados a mano.
   const crearEnlace = async()=>{
     if(!enServidor()){ notify("Esto necesita el servidor activo","err"); return; }
+    // ← CAMBIADO (15 nov): un documento de texto no tiene requisitos,
+    // así que estos dos frenos sólo valen para un expediente. Sin
+    // esta línea, «mandar a alguien sin cuenta» en un documento de
+    // texto contestaba «no falta ningún comprobante por entregar»,
+    // que además de ser inútil es confuso: nadie había pedido
+    // ninguno. El propósito del enlace lo decide el SERVIDOR leyendo
+    // el documento; de aquí no se manda.
+    const esExp = d.kind==="expediente";
     const pendientes = (d.requisitos||[]).filter(r=>r.estado!=="cumplido");
-    if(shareTodo && pendientes.length === 0){
+    if(esExp && shareTodo && pendientes.length === 0){
       notify("No falta ningún comprobante por entregar","err"); return;
     }
-    if(!shareTodo && shareReqs.length === 0){
+    if(esExp && !shareTodo && shareReqs.length === 0){
       notify("Elige al menos un comprobante","err"); return;
     }
     setSaving(true);
     try{
       const r = await llamar("crearInvitacion", {
         opId: d.id,
-        todoLoQueFalta: !!shareTodo,
-        reqIds: shareTodo ? [] : shareReqs,
+        todoLoQueFalta: esExp ? !!shareTodo : false,
+        reqIds: (esExp && !shareTodo) ? shareReqs : [],
         correo: (mIn||"").trim() || null,
         dias: invDias || 7,
       });
@@ -2371,6 +2566,8 @@ export default function Octavin(){
       setEnlaceNuevo({
         url: enlaceDeEntrega(r.testigo),
         requisitos: r.requisitos || [],
+        proposito: r.proposito || "entrega",
+        correo: (mIn||"").trim() || null,
         expiraEn: r.expiraEn,
       });
       setEnlaces(null);
@@ -2510,7 +2707,7 @@ export default function Octavin(){
 
   // Todo lo que las pantallas y modales necesitan del estado y los manejadores.
   const ctx = {
-    MAX_IMGS, moveTo, acctEmail, addImage, attachEvidence, authBusy, authMode, authStep,
+    MAX_IMGS, moveTo, acctEmail, addImage, adjuntarOriginal, attachEvidence, authBusy, authMode, authStep,
     bioBusy, bioCreds, bioOk, cancelarSolicitud, closeCreate, confirmarConversion,
     content, convOculto, copyLink, creando, crearBorrador, createDoc, createExpediente, createStep, d, delDoc, doLogin,
     expTab, setExpTab, tplInfo, setTplInfo, desbloqueando,
@@ -2578,6 +2775,8 @@ export default function Octavin(){
     invitacion, invError, invBusy, invPaso, invSubiendo, entregas, entregar,
     invNombre, setInvNombre, aceptarInvitacion, invAceptando, invAceptError,
     invRechazando, setInvRechazando, invMotivo, setInvMotivo, rechazarInvitacion,
+    invClave, setInvClave, abrirConClave, invClaveBusy, invClaveErr,
+    firmarInvitacion,
     crearEnlace, verEnlaces, revocarEnlace, copiarEnlace, enlaces,
     enlaceNuevo, setEnlaceNuevo, invDias, setInvDias, avisos,
     accCaso: accion?.caso || null, accEstado, accCorreo, accError, accBusy,
