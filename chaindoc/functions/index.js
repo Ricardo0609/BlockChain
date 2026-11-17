@@ -1626,15 +1626,273 @@ function exigirDestinatario(op, email){
  * propósito: una firma sólo significa algo si lo que se firmó ya no
  * puede cambiar, y al crear el contrato todavía se está armando.
  */
+/**
+ * ← NUEVO (17 nov): AÑADIR UN REQUISITO A UN EXPEDIENTE QUE YA EXISTE.
+ *
+ * Lo pidió Ricardo así: «si al usuario se le olvidó o se le ocurrió
+ * poner algo que debía haber pedido, no tener que editar el contrato
+ * o hacer otro para que esté».
+ *
+ * Es la ÚNICA acción que cambia lo acordado después de acordarlo, y
+ * por eso lleva más puertas que ninguna. Lo que la hace aceptable no
+ * es una de ellas sino la forma de la acción: sólo AÑADE.
+ *
+ *   · No toca ningún requisito que ya estuviera. Lo que la otra
+ *     parte leyó y aceptó sigue diciendo exactamente lo mismo.
+ *   · No quita, no renombra, no reordena, no cambia montos ni
+ *     plazos. Nada de lo firmado se mueve.
+ *   · Queda en la cadena con fecha, autor y fase, y el requisito
+ *     nuevo se marca con `anadidoEn`: dentro de dos años se podrá
+ *     ver cuáles venían del contrato y cuál se pidió después.
+ *   · Y se avisa. Quien firmó se entera por la campana, derivado de
+ *     este mismo bloque (ver `nucleo/notificaciones.js`). Pedir algo
+ *     nuevo en silencio sería lo que convertiría esto en una trampa.
+ *
+ * Los dos estados donde NO se puede están en `ACCIONES_POR_ESTADO` y
+ * `exigir` los aplica: «en firma», porque la otra parte está leyendo
+ * esa misma lista para decidir, y «cerrado», porque las dos partes
+ * ya dijeron que estaba todo bien.
+ */
+export const anadirRequisito = onCall(OPCIONES, async (req) => {
+  const { uid, email } = quien(req);
+  const { opId, titulo, descripcion, fase } = req.data || {};
+  if(!opId) throw new HttpsError("invalid-argument", "Falta el expediente.");
+
+  const op = await leerOperacion(opId);
+  if(!op) throw new HttpsError("not-found", "El expediente no existe.");
+  if(op.kind !== "expediente"){
+    throw new HttpsError("failed-precondition",
+      "Sólo un expediente lleva requisitos de evidencia.");
+  }
+
+  // Rol y estado, en la única puerta que hay.
+  exigir(op, uid, email, "pedir-mas");
+
+  // Y además el dueño, que es más estricto que el rol. «El dueño y
+  // creador del expediente», dijo Ricardo, y un editor no lo es:
+  // puede editar el contrato mientras es borrador, pero una vez
+  // firmado quien puede pedir algo nuevo es quien lo creó.
+  if(op.ownerUid !== uid){
+    throw new HttpsError("permission-denied",
+      "Sólo quien creó este expediente puede añadirle requisitos.");
+  }
+
+  const t = String(titulo || "").trim().replace(/\s+/g, " ");
+  if(t.length < 3){
+    throw new HttpsError("invalid-argument",
+      "Ponle un título que diga qué hay que entregar.");
+  }
+  if(t.length > 120){
+    throw new HttpsError("invalid-argument", "Ese título es demasiado largo.");
+  }
+  const desc = String(descripcion || "").trim().slice(0, 600) || null;
+
+  // La fase tiene que existir AHORA, no cuando se abrió la pantalla.
+  const fases = op.fases || [];
+  const faseId = fase ? String(fase) : null;
+  const laFase = faseId ? fases.find((f) => f.id === faseId) : null;
+  if(faseId && !laFase){
+    throw new HttpsError("failed-precondition",
+      "Esa fase ya no existe en el contrato. Vuelve a abrirlo e inténtalo otra vez.");
+  }
+
+  const previos = op.requisitos || [];
+  if(previos.length >= 60){
+    throw new HttpsError("failed-precondition",
+      "Este expediente ya tiene demasiados requisitos.");
+  }
+  // Un id libre, sin dar por hecho que los de antes son correlativos:
+  // si alguno se borró, `r{n+1}` podría chocar con uno existente.
+  const usados = new Set(previos.map((r) => r.id));
+  let n = previos.length + 1;
+  while(usados.has(`r${n}`)) n++;
+
+  const autor = await nombreDe(uid, email);
+  const nuevo = {
+    id: `r${n}`, titulo: t, descripcion: desc,
+    // «documento» es el tipo neutro de los tres —un papel que debe
+    // existir—. Los otros dos dicen algo que aquí no se sabe:
+    // «entregable» es el producto final y «comprobante» es prueba de
+    // un pago. No se pregunta porque Ricardo pidió dos campos, no
+    // tres, y adivinar mal un tipo no rompe nada.
+    tipo: "documento", fase: faseId, obligatorio: true, archivos: [],
+    anadidoEn: new Date().toISOString(), anadidoPor: autor, anadidoPorUid: uid,
+  };
+
+  const { doc } = await asentar({
+    opId, uid, email, autor, permiso: "pedir-mas",
+    evento: {
+      accion: "SOLICITUD",
+      contenido: laFase
+        ? `Requisito añadido en «${laFase.nombre || laFase.id}»: ${t}`
+        : `Requisito añadido: ${t}`,
+      meta: { tipo: "requisito-extra", reqId: nuevo.id, titulo: t,
+              fase: faseId, faseNombre: laFase?.nombre || null },
+    },
+    cambios: { requisitos: [...previos, nuevo] },
+  });
+
+  return { doc, requisito: nuevo };
+});
+
+/**
+ * ← NUEVO (17 nov): QUITAR UNA SOLICITUD DE COMPROBANTE.
+ *
+ * La otra mitad de `anadirRequisito`: «por si se añadió de más o ya
+ * no se necesita». Mismas puertas —sólo el dueño, mismos estados— y
+ * una suya que no tiene la de añadir, y es la que importa:
+ *
+ *   NO SE QUITA UNO QUE YA TENGA ALGO ENTREGADO.
+ *
+ * Lo decidió Ricardo y es lo correcto. Quitar un requisito cumplido
+ * haría desaparecer de la lista la entrega de la otra persona: el
+ * archivo seguiría en el almacén y en la cadena, pero el expediente
+ * dejaría de decir que lo entregó. Alguien que cumplió pasaría a
+ * figurar como si nunca le hubieran pedido nada, y eso no es un
+ * cambio de alcance: es borrar el rastro de un cumplimiento.
+ *
+ * Y es la diferencia de fondo entre las dos mitades. Añadir pide algo
+ * nuevo —se avisa y se discute—. Quitar algo VACÍO no le quita nada a
+ * nadie: libera a la otra parte de una obligación. Quitar algo
+ * CUMPLIDO le quitaría la prueba de haberla cumplido.
+ *
+ * Si de verdad sobra un requisito que ya tiene archivos, el camino es
+ * retirar los archivos primero —que deja su propio rastro en la
+ * cadena, con quién y cuándo— y entonces quitarlo.
+ */
+export const quitarRequisito = onCall(OPCIONES, async (req) => {
+  const { uid, email } = quien(req);
+  const { opId, reqId } = req.data || {};
+  if(!opId || !reqId) throw new HttpsError("invalid-argument", "Faltan datos.");
+
+  const op = await leerOperacion(opId);
+  if(!op) throw new HttpsError("not-found", "El expediente no existe.");
+  if(op.kind !== "expediente"){
+    throw new HttpsError("failed-precondition",
+      "Sólo un expediente lleva requisitos de evidencia.");
+  }
+
+  // La misma puerta que para añadir: rol, estado y dueño.
+  exigir(op, uid, email, "pedir-mas");
+  if(op.ownerUid !== uid){
+    throw new HttpsError("permission-denied",
+      "Sólo quien creó este expediente puede quitarle requisitos.");
+  }
+
+  const previos = op.requisitos || [];
+  const r = previos.find((x) => x.id === reqId);
+  if(!r) throw new HttpsError("not-found", "Ese comprobante ya no está en la lista.");
+
+  // ── LA PUERTA QUE IMPORTA ──────────────────────────────────
+  //
+  // Se cuenta lo que hay DE VERDAD, no lo que diga `r.estado`: el
+  // estado es un campo que se escribe, y los archivos son los
+  // archivos. Entre fiarse de una etiqueta y contar, se cuenta.
+  const archivos = Array.isArray(r.archivos) ? r.archivos : [];
+  if(archivos.length > 0){
+    throw new HttpsError("failed-precondition",
+      archivos.length === 1
+        ? "No se puede quitar: ya hay un archivo entregado aquí. Si de verdad sobra, "
+          + "retira primero el archivo y entonces quítalo."
+        : `No se puede quitar: ya hay ${archivos.length} archivos entregados aquí. `
+          + "Si de verdad sobra, retíralos primero y entonces quítalo.");
+  }
+
+  // Una solicitud pendiente a nombre de alguien también cuenta: hay
+  // una persona esperando que le pidieron esto. Se cancela sola al
+  // quitarlo, pero se dice, porque esa persona tiene un aviso en su
+  // campana que va a dejar de llevar a ningún sitio.
+  const pendientes = (op.solicitudes || []).filter(
+    (s) => s.reqId === reqId && s.estado === "pendiente");
+
+  const autor = await nombreDe(uid, email);
+  const laFase = (op.fases || []).find((f) => f.id === r.fase) || null;
+
+  const { doc } = await asentar({
+    opId, uid, email, autor, permiso: "pedir-mas",
+    evento: {
+      accion: "SOLICITUD",
+      contenido: laFase
+        ? `Requisito retirado de «${laFase.nombre || laFase.id}»: ${r.titulo || reqId}`
+        : `Requisito retirado: ${r.titulo || reqId}`,
+      meta: { tipo: "requisito-quitado", reqId, titulo: r.titulo || null,
+              fase: r.fase || null, faseNombre: laFase?.nombre || null,
+              // Si lo había pedido el propio dueño hace un rato, no es
+              // lo mismo que quitar uno que venía en el contrato. Queda
+              // escrito para que se note la diferencia al leer la
+              // cadena.
+              eraAnadido: Boolean(r.anadidoEn) },
+    },
+    cambios: {
+      requisitos: previos.filter((x) => x.id !== reqId),
+      // Las solicitudes a nombre de alguien se van con él: dejarlas
+      // apuntando a un requisito que ya no existe le pondría a esa
+      // persona un pendiente que no se puede cumplir.
+      ...(pendientes.length
+        ? { solicitudes: (op.solicitudes || []).filter((s) => s.reqId !== reqId) }
+        : {}),
+    },
+  });
+
+  return { doc, quitado: reqId, solicitudesCanceladas: pendientes.length };
+});
+
 export const ponerEnFirme = onCall(OPCIONES, async (req) => {
   const { uid, email } = quien(req);
   exigirCorreoVerificado(req);
 
   const { opId, codigo } = req.data || {};
   if(!opId) throw new HttpsError("invalid-argument", "Falta el identificador de la operación.");
-  const correo = correoValido(req.data?.correo);
-  if(correo === String(email || "").toLowerCase()){
+  // ── EL ENLACE YA NO VA ATADO A UN CORREO (17 nov) ──────────
+  //
+  // Lo pidió Ricardo con el motivo dentro: «sólo el código, para que
+  // este enlace se lo puedas compartir por el medio que el usuario
+  // quiera y no esté atado al correo; el input de correo sólo se usa
+  // para el correo atado a la cuenta».
+  //
+  // Tiene razón en lo práctico: un contrato se manda por WhatsApp
+  // igual que por correo, y pedir una dirección para después no
+  // usarla es pedir un dato por pedirlo.
+  //
+  // LO QUE SE PIERDE, DICHO AQUÍ PARA QUE NO SE OLVIDE: con correo,
+  // la cadena puede escribir «Aceptado por quien declara llamarse
+  // Juan Pérez, desde el enlace enviado a juan@proveedor.com», y esa
+  // frase es comprobable pieza por pieza. Sin correo sólo queda
+  // «desde un enlace de invitación» y el nombre que esa persona
+  // teclee. Por eso el correo sigue siendo OPCIONAL y no prohibido:
+  // quien lo escriba se lleva la versión fuerte.
+  const conEnlace = req.data?.conEnlace === true;
+  const pedido = String(req.data?.correo || "").trim();
+  const correo = (conEnlace && !pedido) ? null : correoValido(pedido);
+  if(correo && correo === String(email || "").toLowerCase()){
     throw new HttpsError("invalid-argument", "No puedes mandarte el contrato a ti mismo a firmar.");
+  }
+
+  // ── ¿TIENE CUENTA? (17 nov) ────────────────────────────────
+  //
+  // Hace falta saberlo ANTES de firmar nada, y por dos motivos.
+  //
+  // El de Ricardo, que es el fallo que vino a arreglar esto: mandó
+  // el contrato a alguien CON cuenta y le salió la pantalla del
+  // enlace, la que dice «mándale esto para que lo firme». Entendió
+  // que la plataforma no se lo había mandado, cuando sí. Escribí yo
+  // esa pantalla el 12 de noviembre con el comentario «el enlace no
+  // estorba a quien sí [tiene cuenta]». Estorba: hace dudar de si lo
+  // que acabas de hacer funcionó.
+  //
+  // Y el otro: si alguien pulsa el botón de «con cuenta» para una
+  // persona que no la tiene, lo honesto es decírselo ANTES de poner
+  // el contrato en firme. Negarse después sería peor: el contrato ya
+  // estaría firmado y mandado a nadie.
+  // Sin correo no hay a quién buscar: es un enlace y punto.
+  const tieneCuenta = correo
+    ? (await db.doc(`directorio/${correo}`).get()).exists
+    : false;
+  if(correo && !tieneCuenta && !conEnlace){
+    throw new HttpsError("not-found",
+      `No se encontró ninguna cuenta con «${correo}». Si esa persona no tiene cuenta, `
+      + "usa «Mandar a alguien sin cuenta»: le damos un enlace para que lea el contrato "
+      + "y lo acepte sin registrarse.");
   }
 
   const op = (await db.doc(`${OPS}/${opId}`).get()).data();
@@ -1660,7 +1918,11 @@ export const ponerEnFirme = onCall(OPCIONES, async (req) => {
   // ← ACTUALIZADO (20 oct): «involucrado», no «aprobador». La otra
   // parte no sólo aprueba: después sube lo que le toque entregar, y
   // con «aprobador» no podía.
-  if(!rolDe(op, null, correo)) await ponerAcceso(opId, correo, "involucrado");
+  // ← ACTUALIZADO (17 nov): sólo si hay correo. Un acceso dentro de
+  // la aplicación se le da a una cuenta, y un enlace suelto no
+  // identifica ninguna: quien lo abre entra POR el enlace, que ya es
+  // su permiso. Ver `exigirAcceso: false` en `aceptarPorInvitacion`.
+  if(correo && !rolDe(op, null, correo)) await ponerAcceso(opId, correo, "involucrado");
 
   const plazos = plazosPedidos(req.data?.plazos);
   const acuerdo = {
@@ -1683,7 +1945,9 @@ export const ponerEnFirme = onCall(OPCIONES, async (req) => {
     opId, uid, email, autor, permiso: "editar",
     evento: {
       accion: "ACUERDO",
-      contenido: `Contrato puesto en firme y mandado a firmar a ${correo}`,
+      contenido: correo
+        ? `Contrato puesto en firme y mandado a firmar a ${correo}`
+        : "Contrato puesto en firme y mandado a firmar por enlace, sin correo",
       meta: { tipo: "puesto-en-firme", correo, requiereConformidad: true,
               metodo: ident.metodo },
     },
@@ -1703,10 +1967,20 @@ export const ponerEnFirme = onCall(OPCIONES, async (req) => {
   // plataforma o mediante un link, en ambos lo primero que aparece
   // es el contrato».
   //
-  // El enlace se crea SIEMPRE, tenga cuenta o no. Branchear aqui
-  // seria pedirle a quien manda que sepa algo que no tiene por que
-  // saber, y el enlace no estorba: si la otra parte tiene cuenta, lo
-  // vera igual al entrar.
+  // ← CORREGIDO (17 nov): el enlace ya NO se crea siempre.
+  //
+  // Decía aquí que «el enlace no estorba: si la otra parte tiene
+  // cuenta, lo verá igual al entrar». Las dos frases eran verdad por
+  // separado y juntas daban un resultado malo: a quien tiene cuenta
+  // se le entrega DENTRO de la aplicación, y enseñarle además un
+  // enlace para reenviar hace dudar de si lo primero funcionó. Eso
+  // le pasó a Ricardo y por eso está escrito.
+  //
+  // Ahora se crea cuando va a servir de algo: cuando esa persona no
+  // tiene cuenta, o cuando se pidió el enlace a propósito. Y de paso
+  // deja de haber invitaciones vivas que nadie va a abrir: una
+  // invitación es una credencial, y las credenciales que sobran son
+  // las que acaban usándose mal.
   //
   // Y va a nombre del DESTINATARIO, que es lo que hace que la
   // pantalla del enlace le ofrezca aceptar: `acuerdoParaInvitado`
@@ -1714,12 +1988,18 @@ export const ponerEnFirme = onCall(OPCIONES, async (req) => {
   // Un enlace sin correo —como los de pedir comprobantes— no acepta
   // nada, y eso sigue igual de bien.
   let enlace = null;
-  try{
+  const haceFaltaElEnlace = !correo || !tieneCuenta || conEnlace;
+  if(haceFaltaElEnlace){
+   try{
     const pendientes = (doc.requisitos || [])
       .filter((r) => r.estado !== "cumplido").map((r) => r.id);
 
     const { testigo, registro } = armarInvitacion({
       opId, reqIds: pendientes, correo,
+      // Esto es lo que hace que la pantalla del enlace ofrezca
+      // aceptar o rechazar, y ya no el correo: ver `paraElContrato`
+      // en lib/invitaciones.js y `acuerdoParaInvitado` aquí abajo.
+      paraElContrato: true,
       creadaPor: autor, creadaPorUid: uid,
       // Más largo que los 7 de pedir un comprobante: esto no es un
       // recado, es el contrato. Quien lo recibe puede querer
@@ -1733,9 +2013,10 @@ export const ponerEnFirme = onCall(OPCIONES, async (req) => {
     // firme y asentado; el enlace es una comodidad, y si falla
     // siempre se puede crear a mano desde «compartir».
     console.error("ponerEnFirme: no se pudo crear el enlace", e);
+   }
   }
 
-  return { doc, enlace };
+  return { doc, enlace, tieneCuenta };
 });
 
 /** Los plazos que pide el cliente, saneados; los de arranque si no vienen. */
@@ -2119,7 +2400,10 @@ export const analizarContrato = onCall(
       // nada, el servicio tardó más de lo que esperamos.
       const codigo = ["cuota", "saturado", "conexion", "lento"].includes(motivo)
         ? "unavailable" : "internal";
-      throw new HttpsError(codigo, mensaje);
+      // ← NUEVO (17 nov): `deOctavin` marca que esta frase la
+      // escribimos aquí, para que el navegador no la cambie por la
+      // genérica de «revisa tu conexión». Ver `errorBackend`.
+      throw new HttpsError(codigo, mensaje, { deOctavin: true, motivo });
     }
   });
 
@@ -2162,7 +2446,10 @@ export const redactarBorrador = onCall(
       // nada, el servicio tardó más de lo que esperamos.
       const codigo = ["cuota", "saturado", "conexion", "lento"].includes(motivo)
         ? "unavailable" : "internal";
-      throw new HttpsError(codigo, mensaje);
+      // ← NUEVO (17 nov): `deOctavin` marca que esta frase la
+      // escribimos aquí, para que el navegador no la cambie por la
+      // genérica de «revisa tu conexión». Ver `errorBackend`.
+      throw new HttpsError(codigo, mensaje, { deOctavin: true, motivo });
     }
   });
 
@@ -2809,7 +3096,22 @@ function acuerdoParaInvitado(registro, op){
   }
 
   const { estado } = estadoAcuerdo(op);
-  const esParte = esDestinatario(op, registro.correo);
+  // ── QUIÉN ACEPTA, DESDE UN ENLACE (17 nov) ─────────────────
+  //
+  // Antes esto comparaba el correo del enlace con el destinatario
+  // del contrato. Ya no se puede: desde hoy el enlace del contrato
+  // puede ir SIN correo, a petición de Ricardo, y dos correos vacíos
+  // no son el mismo correo —`esDestinatario` exige los dos llenos a
+  // propósito, y menos mal, porque si no cualquier enlace sin correo
+  // habría pasado por aquí—.
+  //
+  // Ahora lo dice el enlace mismo. Lo escribe sólo `ponerEnFirme`,
+  // que es el acto de mandar el contrato a firmar; el de pedir
+  // comprobantes no lo lleva, y por eso sigue sin poder aceptar
+  // nada. La comparación de correos se queda para los enlaces que se
+  // mandaron antes de hoy, que no traen la marca.
+  const esParte = registro?.paraElContrato === true
+    || esDestinatario(op, registro.correo);
   const firma = (op.acuerdo.firmas || [])
     .find((f) => f.parte === "receptor" && f.momento === "aceptacion");
 

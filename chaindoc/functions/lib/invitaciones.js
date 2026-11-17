@@ -168,7 +168,7 @@ export function mismaHuella(a, b){
  * que no pide nada no es un enlace, es un agujero.
  */
 export function armarInvitacion({ opId, reqIds, correo, creadaPor, creadaPorUid,
-                                  proposito = "entrega",
+                                  proposito = "entrega", paraElContrato = false,
                                   dias = DIAS_POR_OMISION, maxArchivos = MAX_ARCHIVOS,
                                   ahora = Date.now() }){
   if(!PROPOSITOS.includes(proposito)) throw new Error("proposito-raro");
@@ -184,6 +184,25 @@ export function armarInvitacion({ opId, reqIds, correo, creadaPor, creadaPorUid,
     registro: {
       huella: huellaDe(testigo),
       proposito,
+      // ── QUÉ ENLACE ES ÉSTE (17 nov) ──────────────────────────
+      //
+      // Hasta hoy se deducía del correo: si el correo del enlace era
+      // el mismo que el destinatario del contrato, era el enlace del
+      // contrato; si no, era el de pedirle un comprobante a alguien.
+      // Deducirlo funcionaba mientras TODO enlace llevara correo.
+      //
+      // Ricardo pidió que el enlace de la otra parte NO vaya atado a
+      // ningún correo —«para que se lo puedas compartir por el medio
+      // que el usuario quiera»— y con eso la deducción se queda sin
+      // nada que comparar: dos correos vacíos no son el mismo correo.
+      //
+      // Así que ahora se dice en vez de deducirse. LO ESCRIBE SÓLO
+      // `ponerEnFirme`, que es el acto de mandar el contrato a
+      // firmar; `crearInvitacion` no lo pasa nunca y no sale de
+      // ninguna petición del navegador. La garantía que protegía la
+      // comparación de correos sigue entera: a quien se le pide un
+      // comprobante no puede poner el contrato en vigor.
+      paraElContrato: paraElContrato === true,
       opId, reqIds: lista,
       correo: String(correo || "").toLowerCase().trim() || null,
       creadaPor: creadaPor || null, creadaPorUid: creadaPorUid || null,

@@ -1,5 +1,6 @@
 // Pruebas de utilidades: lectura de facturas, sellos y limpieza de llaves.
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { parseFactura } from "../src/nucleo/extraccion";
 import { limpiar, limpiarProfundo, filtrarRastro } from "../src/monitoreo";
 
@@ -66,6 +67,45 @@ describe("errorBackend", () => {
     expect(errorBackend({ code: "functions/permission-denied",
                           message: "No tienes una solicitud abierta para ese requisito." }))
       .toBe("No tienes una solicitud abierta para ese requisito.");
+  });
+
+  it("un mensaje NUESTRO gana al generico, aunque el codigo sea del transporte", () => {
+    // ← NUEVO (17 nov). El fallo que vio Ricardo: analizar un contrato
+    // con la cuota de Gemini agotada devuelve `unavailable` -que es un
+    // 503 en el navegador- con el texto «Se agoto la cuota de
+    // analisis por ahora, espera un minuto». En pantalla salia «No se
+    // pudo contactar al servidor. Revisa tu conexion». Su conexion
+    // estaba perfecta: le mandamos a revisar lo que no estaba roto y
+    // escondimos lo unico que decia que hacer.
+    //
+    // La marca `deOctavin` la pone la funcion al lanzar el error. Se
+    // sabe, no se adivina: mi primer intento miraba el texto para
+    // decidir si «parecia» nuestro, y «fetch failed» -que es del SDK-
+    // tambien lo parecia.
+    expect(errorBackend({
+      code: "functions/unavailable",
+      message: "Se agotó la cuota de análisis por ahora. Espera un minuto e inténtalo de nuevo.",
+      details: { deOctavin: true, motivo: "cuota" },
+    })).toMatch(/cuota de análisis/);
+
+    expect(errorBackend({
+      code: "functions/unavailable",
+      message: "El servicio de IA está saturado en este momento. Espera un par de minutos.",
+      details: { deOctavin: true, motivo: "saturado" },
+    })).toMatch(/saturado/);
+
+    // Sin la marca, manda el generico: es un fallo del transporte.
+    expect(errorBackend({ code: "functions/unavailable", message: "fetch failed" }))
+      .toBe("No se pudo contactar al servidor. Revisa tu conexión.");
+  });
+
+  it("y el servidor marca los suyos donde se perdian", () => {
+    // Si la funcion dejara de marcarlos, el mensaje volveria a
+    // cambiarse por «revisa tu conexion» sin que nadie se entere.
+    const srv = readFileSync(
+      new URL("../functions/index.js", import.meta.url), "utf8");
+    const marcas = [...srv.matchAll(/deOctavin: true, motivo/g)];
+    expect(marcas.length, "analizarContrato y redactarBorrador").toBe(2);
   });
 
   it("traduce los errores del transporte, que vienen en jerga", () => {

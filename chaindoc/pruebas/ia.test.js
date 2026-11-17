@@ -4,6 +4,7 @@
 // determinista); lo que sí se prueba es que nada de lo que conteste
 // pueda llegar a la app con una forma que la rompa.
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { normalizar, normalizarFases, SCHEMA, PROMPT, EXPLICA } from "../functions/lib/ia.js";
 
 describe("fases", () => {
@@ -120,5 +121,33 @@ describe("lo que se le pide al modelo", () => {
     for(const motivo of ["llave", "cuota", "saturado", "conexion", "ilegible", "sin-requisitos"]){
       expect(EXPLICA[motivo]).toBeTruthy();
     }
+  });
+});
+// ── EL CUPO DEL PLAN GRATUITO (17 nov) ───────────────────────
+//
+// El 503 que veia Ricardo al analizar contratos no era Google caido
+// ni su conexion: era esta funcion devolviendo «unavailable» porque
+// Gemini contestaba 429. La cuota se agotaba en cuatro analisis
+// porque la lista pedia los modelos MAS NUEVOS primero, y en el plan
+// gratuito esos traen el cupo diario mas pequeño.
+describe("que modelo se pide primero", () => {
+  const ia = () => readFileSync(new URL("../functions/lib/ia.js", import.meta.url), "utf8");
+
+  it("«lite» va el primero mientras el plan sea gratuito", () => {
+    const s = ia();
+    const i = s.indexOf("const PREFER = [");
+    expect(i).toBeGreaterThan(-1);
+    const lista = s.slice(i, s.indexOf("];", i));
+    const pLite = lista.indexOf("flash-lite");
+    const pNuevo = lista.indexOf("gemini-3");
+    expect(pLite, "flash-lite tiene que ir antes que los flash nuevos")
+      .toBeGreaterThan(-1);
+    expect(pLite).toBeLessThan(pNuevo);
+  });
+
+  it("y se puede forzar uno sin tocar codigo", () => {
+    // Para el dia que el plan sea de pago: ahi el cupo deja de ser el
+    // freno y conviene volver a los grandes.
+    expect(ia()).toMatch(/const FORZADO = \(\) => process\.env\.GEMINI_MODELO \|\| "";/);
   });
 });

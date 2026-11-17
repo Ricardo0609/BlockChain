@@ -408,11 +408,25 @@ export function renderEntrega(ctx){
       <Icon n="info" size={18}/>
       <div>
         {acu.porQueNo === "sin-mandar" ? <>
-          <strong>Este contrato todavía no se manda a firmar.</strong>
+          {/* ← CORREGIDO (17 nov): prometía algo que podía no pasar.
+              Decía «entonces te llegará para que lo leas y lo aceptes»,
+              y eso daba por hecho que la otra parte del contrato eras
+              tú y que tienes cuenta donde recibirlo. Lo vio Ricardo:
+              «puede ser que el único involucrado no tenga cuenta».
+              Un enlace de entrega no te hace parte de nada: te pide
+              comprobantes. Ahora dice sólo lo que sí es cierto.
+
+              Esta pantalla ya casi no debería salir: desde hoy el
+              enlace ni se crea mientras no haya contrato aceptado
+              —ver `crearInvitacion`—. Sigue aquí por los enlaces que
+              se mandaron antes, que no se pueden cambiar hacia
+              atrás. */}
+          <strong>Todavía no hay nada que entregar aquí.</strong>
           <p>
-            Por ahora es un borrador. Quien lo escribió tiene que mandarlo desde
-            «Compartir», y entonces te llegará para que lo leas y lo aceptes.
-            Mientras tanto puedes leerlo aquí.
+            Este contrato sigue siendo un borrador: nadie lo ha aceptado, así que
+            todavía no se le pueden subir comprobantes. Puedes leerlo mientras tanto.
+            En cuanto las dos partes lo acepten, lo que te toque subir aparecerá en
+            este mismo enlace, si no ha vencido.
           </p>
         </> : acu.porQueNo === "no-eres-parte" ? <>
           <strong>Este enlace es para entregar comprobantes.</strong>

@@ -201,6 +201,11 @@ export default function Octavin(){
   const [invClave,setInvClave]       = useState("");
   const [invClaveBusy,setInvClaveBusy] = useState(false);
   const [invClaveErr,setInvClaveErr] = useState("");
+  // ← NUEVO (17 nov): pedir un comprobante que no estaba en el contrato.
+  const [reqTitulo,setReqTitulo]     = useState("");
+  const [reqDesc,setReqDesc]         = useState("");
+  const [reqBusy,setReqBusy]         = useState(false);
+  const [reqErr,setReqErr]           = useState("");
   const [invSubiendo,setInvSubiendo] = useState(null);
   const [entregas,setEntregas]       = useState({});
   const [enlaces,setEnlaces]         = useState(null);
@@ -557,6 +562,66 @@ export default function Octavin(){
       setInvClave("");
     }catch(e){ setInvClaveErr(errorBackend(e)); }
     finally{ setInvClaveBusy(false); }
+  };
+
+  /**
+   * ← NUEVO (17 nov): abrir el modal para pedir un comprobante mas.
+   *
+   * Limpia los campos al abrir, no al cerrar: si se cerraran al
+   * cerrar, un fallo del servidor borraria lo que la persona acababa
+   * de escribir junto con el mensaje de error.
+   */
+  const pedirRequisito = (fase)=>{
+    setReqTitulo(""); setReqDesc(""); setReqErr("");
+    setModal({ t:"requisito", fase: fase || null });
+  };
+
+  /**
+   * ← NUEVO (17 nov): quitar una solicitud de comprobante.
+   *
+   * Dos pasos a proposito. El boton que lleva aqui vive en la misma
+   * fila que los de entregar -adjuntar, entregar un enlace, pedirlo-,
+   * asi que un dedo gordo en un telefono lo alcanza sin querer, y
+   * esto no se deshace.
+   */
+  const quitarEsteRequisito = (r)=>{
+    if(!r?.id) return;
+    setReqErr("");
+    setModal({ t:"quitar-requisito", reqId:r.id });
+  };
+
+  const confirmarQuitarRequisito = async()=>{
+    if(!enServidor()){ notify("Esto necesita el servidor activo","err"); return; }
+    const reqId = modal?.reqId;
+    if(!reqId) return;
+    setReqBusy(true); setReqErr("");
+    try{
+      const r = await llamar("quitarRequisito", { opId: d.id, reqId });
+      setD(r.doc);
+      setModal(null);
+      notify(r.solicitudesCanceladas
+        ? "Solicitud quitada \u2713 Se cancel\u00f3 lo que se le hab\u00eda pedido a alguien."
+        : "Solicitud quitada \u2713");
+    }catch(e){ setReqErr(errorBackend(e)); }
+    finally{ setReqBusy(false); }
+  };
+
+  const guardarRequisito = async()=>{
+    if(!enServidor()){ notify("Esto necesita el servidor activo","err"); return; }
+    const titulo = reqTitulo.trim().replace(/\s+/g," ");
+    if(titulo.length < 3){ setReqErr("Ponle un título que diga qué hay que entregar."); return; }
+    setReqBusy(true); setReqErr("");
+    try{
+      const r = await llamar("anadirRequisito", {
+        opId: d.id, titulo,
+        descripcion: reqDesc.trim() || null,
+        fase: modal?.fase || null,
+      });
+      setD(r.doc);
+      setModal(null);
+      notify("Comprobante añadido \u2713");
+    }catch(e){ setReqErr(errorBackend(e)); }
+    finally{ setReqBusy(false); }
   };
 
   const aceptarInvitacion = async()=>{
@@ -2034,7 +2099,19 @@ export default function Octavin(){
   // ← ACTUALIZADO (27 oct): `conBio` manda la aserción del dispositivo
   // en vez del código. Las dos vías valen lo mismo para el servidor;
   // lo que cambia es cómo demuestras que eres tú.
-  const mandarAFirmar = async(correoDe=null, nombreDe=null, conBio=false)=>{
+  /**
+   * ← CAMBIADO (17 nov): gana un cuarto argumento, `conEnlace`.
+   *
+   * Dice si quien pulsó quería EL ENLACE —para alguien sin cuenta— o
+   * mandarlo por la plataforma. No se adivina del correo: si se
+   * adivinara, mandar a una persona sin cuenta por el botón de «con
+   * cuenta» acabaría en un enlace que nadie pidió, y es justo la
+   * confusión que esto viene a quitar.
+   *
+   * Va el ÚLTIMO y con valor por omisión para no mover las tres
+   * llamadas que ya existen en `modales/Acuerdo.jsx`.
+   */
+  const mandarAFirmar = async(correoDe=null, nombreDe=null, conBio=false, conEnlace=false)=>{
     if(!enServidor()){ notify("Esto necesita el servidor activo","err"); return; }
     // ← NUEVO (12 nov): sólo cuenta si es texto.
     //
@@ -2045,8 +2122,15 @@ export default function Octavin(){
     // mensaje señalaba a un sitio donde no estaba el fallo.
     const dado = typeof correoDe === "string" ? correoDe : null;
     const correo = String(dado ?? enFirmeCorreo).trim().toLowerCase();
-    if(!correo.includes("@")){ setEnFirmeErr("Escribe el correo de la otra parte."); return; }
-    if(correo === (acctEmail||"").toLowerCase()){
+    // ← CAMBIADO (17 nov): al pedir el enlace a propósito, el correo
+    // es opcional. Lo pidió Ricardo: «sólo el código, para que este
+    // enlace se lo puedas compartir por el medio que el usuario
+    // quiera y no esté atado al correo». Para mandarlo DENTRO de la
+    // aplicación sigue haciendo falta, claro: es a dónde llega.
+    const porEnlace = conEnlace === true;
+    if(!correo && !porEnlace){ setEnFirmeErr("Escribe el correo de la otra parte."); return; }
+    if(correo && !correo.includes("@")){ setEnFirmeErr("Escribe el correo de la otra parte."); return; }
+    if(correo && correo === (acctEmail||"").toLowerCase()){
       setEnFirmeErr("Ese es tu propio correo."); return;
     }
     // `=== true` y no a secas: lo que llega puede ser un evento, y un
@@ -2065,6 +2149,12 @@ export default function Octavin(){
       const r = await llamar("ponerEnFirme", {
         opId: d.id, correo,
         nombre: String((typeof nombreDe === "string" ? nombreDe : null) ?? enFirmeNombre).trim() || null,
+        // ← NUEVO (17 nov): si se pidió el enlace a propósito. Sin
+        // esto el servidor se niega cuando el correo no tiene cuenta,
+        // que es justo lo que queremos al pulsar «Dar acceso», y lo
+        // contrario de lo que queremos al pulsar «mandar a alguien
+        // sin cuenta».
+        conEnlace: conEnlace === true,
         ...prueba,
       });
       setD(r.doc); setPass("");
@@ -2072,25 +2162,30 @@ export default function Octavin(){
       setMIn(""); setShareErr(""); setShareFound(null); setShareRol("involucrado");
       await refresh();
 
-      // ← NUEVO (12 nov): y aquí está su enlace.
+      // ── LA PANTALLA DEL ENLACE, SÓLO SI HAY ENLACE (17 nov) ──
       //
-      // Hasta hoy esto cerraba el modal y ya. Si el destinatario no
-      // tenía cuenta, no le llegaba NADA: el acceso que se le da es
-      // dentro de la aplicación, y sin cuenta no hay dónde entrar.
+      // El servidor ya decide: crea el enlace cuando esa persona no
+      // tiene cuenta, o cuando se pidió a propósito. Si tiene cuenta
+      // y no se pidió, `r.enlace` viene vacío y esto cierra el modal
+      // con su aviso, que es lo que tenía que haber hecho siempre.
       //
-      // Ahora el servidor devuelve el enlace junto con el contrato
-      // puesto en firme, y se enseña en el mismo sitio donde se
-      // enseñan los demás. Se muestra siempre, tenga cuenta o no:
-      // quien manda no tiene por qué saber si la otra parte la
-      // tiene, y el enlace no estorba a quien sí.
+      // Lo de antes mostraba el enlace SIEMPRE, con un comentario mío
+      // que decía «el enlace no estorba a quien sí [tiene cuenta]».
+      // Estorba: Ricardo compartió a alguien con cuenta, vio la
+      // pantalla que dice «mándale esto para que lo firme» y entendió
+      // que la plataforma no lo había mandado.
       if(r.enlace){
         setEnlaceNuevo({
           url: enlaceDeEntrega(r.enlace.testigo),
           expiraEn: r.enlace.expiraEn,
-          paraFirmar: true, correo,
+          paraFirmar: true, correo: correo || null,
+          // ← CAMBIADO (17 nov): «esa persona no tiene cuenta» sólo
+          // se puede decir si hubo una persona que buscar. Sin correo
+          // el servidor no comprobó nada, y afirmarlo sería inventar.
+          sinCuenta: Boolean(correo) && r.tieneCuenta === false,
         });
         setModal({ t:"share" });
-        notify(`Contrato mandado a firmar a ${correo} ✓`);
+        notify("Contrato firmado y listo para mandar \u2713");
       }else{
         setModal(null);
         notify(`Contrato mandado a firmar a ${correo} ✓`);
@@ -2776,6 +2871,8 @@ export default function Octavin(){
     invNombre, setInvNombre, aceptarInvitacion, invAceptando, invAceptError,
     invRechazando, setInvRechazando, invMotivo, setInvMotivo, rechazarInvitacion,
     invClave, setInvClave, abrirConClave, invClaveBusy, invClaveErr,
+    reqTitulo, setReqTitulo, reqDesc, setReqDesc, reqBusy, reqErr,
+    pedirRequisito, guardarRequisito, quitarEsteRequisito, confirmarQuitarRequisito,
     firmarInvitacion,
     crearEnlace, verEnlaces, revocarEnlace, copiarEnlace, enlaces,
     enlaceNuevo, setEnlaceNuevo, invDias, setInvDias, avisos,

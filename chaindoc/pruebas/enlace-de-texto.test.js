@@ -128,11 +128,15 @@ describe("estilos.js sigue siendo un solo texto", () => {
     // comprobante. Lo que se vigila no es el numero sino que NINGUNA
     // fila con texto debajo se quede sin marcar, asi que se cuentan
     // las dos clases por separado y no solo el total.
-    expect(filas.length).toBe(6);
-    // Cuatro de enmedio -dar acceso de texto, mandar sin cuenta, dar
-    // acceso de comprobante, y la del expediente- y dos pies, que
-    // siguen pegados a proposito.
-    expect(filas.filter(f => f[1]).length).toBe(4);
+    expect(filas.length).toBe(7);
+    // Cinco de enmedio -dar acceso de texto, mandar sin cuenta de
+    // texto, dar acceso de comprobante, y las DOS del expediente
+    // desde el 17 de nov: la de con cuenta y la de sin cuenta- y dos
+    // pies, que siguen pegados a proposito.
+    expect(filas.filter(f => f[1]).length).toBe(5);
+    // Lo que de verdad se vigila: que ninguna fila con texto debajo
+    // se quede sin marcar. Las unicas sin marcar son los dos pies.
+    expect(filas.filter(f => !f[1]).length).toBe(2);
   });
 });
 

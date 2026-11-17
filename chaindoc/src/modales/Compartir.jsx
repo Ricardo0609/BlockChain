@@ -47,6 +47,7 @@ import { fmtFull } from "../nucleo/formato";
 import { fmtMonto } from "../smartContract";
 import { ROLES_OFRECIDOS } from "../nucleo/accesos";
 import { seVe } from "../nucleo/secciones";
+import { permiteEstado } from "../nucleo/acuerdo";
 import { esComprobante, porQueNoSale } from "../nucleo/comprobantes";
 import { renderBotonBio } from "../ui/BotonBio";
 
@@ -129,7 +130,23 @@ export function modalCompartir(ctx){
   //
   // Sólo en borrador: un contrato ya mandado tiene una otra parte, y
   // sólo una. A partir de ahí, compartir vuelve a ser compartir.
-  const enBorrador = esExpediente && (acu?.estado==="borrador") && puedo("editar");
+  // ── ¿SE PUEDE TODAVÍA ELEGIR «INVOLUCRADO»? (17 nov) ───────
+  //
+  // «Involucrado» es la otra parte del contrato, y elegirlo es
+  // mandárselo a firmar. Eso sólo cabe mientras el contrato se pueda
+  // poner en firme: una vez mandado, ya hay una otra parte.
+  //
+  // ← CAMBIADO: antes esto miraba `estado==="borrador"` a secas, y se
+  // dejaba fuera dos estados donde SÍ se puede volver a mandar: uno
+  // rechazado y uno que se quedó sin firmar. En esos dos el contrato
+  // vuelve a estar en tus manos, y la pantalla decía que no.
+  //
+  // Se pregunta con `permiteEstado(..., "poner-en-firme")`, que es
+  // literalmente la misma pregunta, contestada en el sitio donde ya
+  // está contestada para el servidor. Dos copias de una regla acaban
+  // discrepando; ésta ahora es una.
+  const puedeMandarse = esExpediente && puedo("editar")
+    && permiteEstado(acu?.estado || "borrador", "poner-en-firme");
 
   // ── LAS TRES FORMAS DE ESTE MODAL (15 nov) ─────────────────
   //
@@ -145,24 +162,105 @@ export function modalCompartir(ctx){
   const paraFirmar = !esExpediente && !comprobante && seVe(d, "firmas");
   const soloLectura = !esExpediente && !comprobante && !paraFirmar;
 
-  const rolesCompletos = esExpediente
-    ? (enBorrador ? ROLES_OFRECIDOS : ROLES_OFRECIDOS.filter(r=>r!=="involucrado"))
-    : COMPLETOS;
+  // ← CAMBIADO (17 nov): «Involucrado» YA NO SE QUITA DE LA LISTA.
+  //
+  // Lo pidió Ricardo —«añade el rol de involucrado en expedientes,
+  // aquí sí va»— y tenía razón en el fondo: el papel existe en un
+  // expediente, es el principal, y desaparecía de la pantalla sin
+  // decir nada. Un sitio donde antes había tres opciones y ahora hay
+  // dos no se lee como «esto ya no se puede»: se lee como un fallo.
+  //
+  // Así que se queda siempre y, cuando no se puede elegir, se
+  // enseña apagado con el motivo. La regla de fondo no cambia: un
+  // contrato ya mandado no se manda otra vez.
+  const rolesCompletos = esExpediente ? ROLES_OFRECIDOS : COMPLETOS;
+  /** Por qué «Involucrado» no se puede elegir ahora, o null si sí. */
+  const porQueNoInvolucrado = (!esExpediente || puedeMandarse) ? null
+    : !puedo("editar")
+      ? "Hace falta permiso para editar el contrato."
+      : acu?.estado === "en_firma"
+        ? `Ya mandaste este contrato a ${acu?.paraEmail || "la otra parte"}. Espera su respuesta, o retira el envío para mandárselo a alguien más.`
+        : acu?.estado === "cerrado"
+          ? "Este contrato está cerrado: las dos partes dijeron que estaba todo bien."
+          : "Las dos partes ya aceptaron este contrato, así que su otra parte ya está decidida.";
   // En un documento que se firma el papel no se elige: ver PARA_FIRMAR.
   // En un comprobante tampoco se elige: «lector» y punto. Quien lo
   // recibe está ahí para verlo, y cambiarlo no podría aunque se le
   // diera el papel de editor —ver `soloSuDueno` en comprobantes.js,
   // que deja la edición de un recibo sólo a su dueño—. Ofrecer
   // «Editor» seria prometer algo que la regla de abajo no cumple.
+  const elegibles = rolesCompletos.filter(
+    (r) => !(r === "involucrado" && porQueNoInvolucrado));
   const rol = paraFirmar ? PARA_FIRMAR
     : comprobante ? "lector"
-    : (rolesCompletos.includes(shareRol) ? shareRol : rolesCompletos[0]);
+    : (elegibles.includes(shareRol) ? shareRol : elegibles[0]);
   const reqs = d.requisitos || [];
 
   const modo = shareModo || "completo";
   // Compartir un contrato con la otra parte ES mandárselo a firmar.
   // No hace falta un modo aparte: el rol lo dice.
   const mandaAFirmar = esExpediente && modo==="completo" && rol==="involucrado";
+
+  // ── DÓNDE CABE EL ENLACE SIN CUENTA (17 nov) ───────────────
+  //
+  // En «sólo pedirle comprobantes», siempre: ese enlace deja subir
+  // archivos a una lista de pendientes y nada más.
+  //
+  // En «acceso completo», sólo para la otra parte del contrato. Lo
+  // decidió Ricardo al preguntárselo, y es la respuesta correcta: ese
+  // enlace va atado a un correo y a aceptar el contrato. Uno para
+  // «lector» dejaría leer el expediente entero —montos, historial y
+  // los comprobantes de todos— a cualquiera que lo reenviara, sin
+  // poder saber quién lo abrió ni retirárselo a quien ya lo tenga.
+  const sinCuentaAqui = esExpediente && (modo!=="completo" || mandaAFirmar);
+
+  // El mismo botón, dos caminos. En «entregar» crea un enlace de
+  // entrega; en «completo» pone el contrato en firme y devuelve el
+  // suyo. El `true` final es lo que le dice al servidor que el
+  // enlace se pidió a propósito y que no se niegue por no haber
+  // cuenta: ver `ponerEnFirme`.
+  const mandarSinCuenta = () => mandaAFirmar
+    ? mandarAFirmar(mIn, null, false, true)
+    : crearEnlace();
+
+  // ── UN MOTIVO POR BOTÓN, NO UNO PARA LOS DOS (17 nov) ──────
+  //
+  // Lo dijo Ricardo con el porqué dentro: «sólo el código, para que
+  // este enlace se lo puedas compartir por el medio que el usuario
+  // quiera y no esté atado al correo; el input de correo sólo se usa
+  // para el correo atado a la cuenta».
+  //
+  // Antes el campo de correo vacío apagaba LOS DOS botones, y por eso
+  // no pudo mandarle el contrato a alguien sin cuenta: la pantalla le
+  // pedía, para dárselo, el dato que precisamente no iba a usar.
+  //
+  // Son dos caminos y piden cosas distintas:
+  //   · Con cuenta: el correo —es a dónde llega— y el código.
+  //   · Sin cuenta: sólo el código. El enlace se lo manda él por
+  //     donde quiera.
+  //
+  // Y un botón apagado sin explicación es un callejón sin salida con
+  // el cartel por dentro, que es como él se lo encontró. Por eso cada
+  // camino dice el suyo.
+  const faltaElCodigo = mandaAFirmar
+    && !pass.trim() && !(bioOk && (bioCreds||[]).length);
+  const sinVerificar = !verificado
+    ? "Confirma tu correo antes de compartir. Te mandamos un enlace al registrarte, y puedes pedir otro desde tu perfil."
+    : null;
+  const porElCodigo = faltaElCodigo
+    ? "Escribe tu código de firma: al mandar el contrato lo estás firmando tú primero."
+    : null;
+  const motivoConCuenta = sinVerificar
+    || (!mIn.trim()
+      ? "Escribe arriba el correo de esa persona: es la cuenta de OCTAVIN a la que le va a llegar."
+      : porElCodigo);
+  const motivoSinCuenta = sinVerificar || porElCodigo;
+  // Cuando a los dos les falta LO MISMO —el código, o confirmar tu
+  // correo— se dice una vez debajo de los dos, no dos veces. Lo vi
+  // repetido en pantalla antes de entregarlo: dos carteles iguales
+  // no explican el doble, se leen como un fallo.
+  const motivoArriba = (sinCuentaAqui && motivoConCuenta === motivoSinCuenta)
+    ? null : motivoConCuenta;
 
   // Que el dueño ya lo haya firmado. Es lo que hace falta antes de
   // mandarlo a firmar, y lo pidió Ricardo con esas palabras: «primero
@@ -207,6 +305,16 @@ export function modalCompartir(ctx){
           podrá <b>leer el documento</b> y nada más, <b>sin crear ninguna cuenta</b>:
           no lo puede editar, ni firmar, ni ver su historial.
         </> : enlaceNuevo.paraFirmar ? <>
+          {/* ← AÑADIDO (17 nov): decir que esa persona NO tiene
+              cuenta, cuando el servidor lo ha comprobado. Es la
+              frase que le faltaba a Ricardo: vio esta pantalla
+              compartiendo a alguien que SÍ la tenía y entendió que
+              la plataforma no se lo había mandado. Ahora esta
+              pantalla sólo sale cuando el enlace es la única vía, y
+              lo dice. */}
+          {enlaceNuevo.sinCuenta && <><b>Esa persona no tiene cuenta en OCTAVIN</b>,
+          así que el contrato ya está firmado por ti y esperándola en este enlace: es
+          la única forma de que lo lea. </>}
           Mándaselo por donde quieras: correo, WhatsApp, lo que uses. Quien lo abra
           leerá el contrato y podrá aceptarlo o no aceptarlo, <b>sin crear ninguna
           cuenta</b>. Hasta que lo acepte no verá lo que hay que entregar.
@@ -368,14 +476,18 @@ export function modalCompartir(ctx){
             <div className="modo-det">
               <div className="rec-lbl">¿Quién es esta persona?</div>
               <div className="rol-lista">
-                {rolesCompletos.map(r=>(
-                  <label key={r} className={`rol-op ${rol===r?"on":""}`}>
-                    <input type="radio" name="rol" checked={rol===r}
+                {rolesCompletos.map(r=>{
+                  // Apagado y con el porqué, en vez de desaparecido.
+                  const no = r==="involucrado" ? porQueNoInvolucrado : null;
+                  return (
+                  <label key={r} className={`rol-op ${rol===r?"on":""} ${no?"off":""}`}>
+                    <input type="radio" name="rol" checked={rol===r} disabled={Boolean(no)}
                       onChange={()=>setShareRol(r)} />
                     <span className="rol-n">{ROL_TEXTO[r]}</span>
-                    <span className="rol-d">{ROL_AYUDA[r]}</span>
+                    <span className="rol-d">{no || ROL_AYUDA[r]}</span>
                   </label>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Lo que va a quedar fijo al firmar. Va antes del correo
@@ -445,7 +557,13 @@ export function modalCompartir(ctx){
           ))}
 
           {/* ── A quién ── */}
-          <div className="rec-lbl">¿A quién?</div>
+          {/* ← CAMBIADO (17 nov): la etiqueta dice para qué sirve el
+              campo. Era «¿A quién?» a secas, y desde hoy hay dos
+              caminos y sólo uno lo usa: el enlace sin cuenta ya no va
+              atado a ningún correo. Sin esta línea, un campo vacío
+              arriba parece algo que falta por rellenar aunque vayas a
+              mandar el enlace. */}
+          <div className="rec-lbl">¿A quién? <span className="rec-lbl-d">Su correo de OCTAVIN, si tiene cuenta</span></div>
           <input className="inp" type="email" placeholder="correo@ejemplo.com" value={mIn}
             disabled={shareBusy||saving||firmaBusy||!verificado}
             onChange={e=>{setMIn(e.target.value);setShareErr("");setShareFound(null);}}
@@ -564,12 +682,36 @@ export function modalCompartir(ctx){
               </div>
             )}
           </>) : (<>
+          {/* ── LOS DOS CAMINOS, IGUAL EN LOS DOS MODOS (17 nov) ──
+              Lo pidió Ricardo: «en ambas opciones, tanto en acceso
+              completo como en sólo pedir comprobantes, se pueda
+              compartir a alguien que no tiene cuenta».
+
+              Arriba el de con cuenta, una «O», y abajo el de sin
+              cuenta. Es la misma forma que ya tiene un documento de
+              texto, y ahora las tres pantallas de compartir del
+              producto se leen igual.
+
+              Y arregla de paso lo que él vio: «compartí a alguien que
+              tenía cuenta, pero me salió el modal como si le hubiera
+              dado a compartir a alguien sin cuenta». Pasaba porque
+              «Firmar y mandar» enseñaba SIEMPRE la pantalla del
+              enlace. Ahora cada botón hace una cosa y el servidor
+              sólo crea el enlace cuando va a servir. */}
           <div className="modal-row enmedio">
             {modo==="completo" ? (
               mandaAFirmar ? (
                 <button className={`btn btn-primary ${firmaBusy?"esperando":""}`}
                   onClick={()=>mandarAFirmar(mIn)}
-                  disabled={firmaBusy||!mIn.trim()||!verificado}>
+                  /* ← AÑADIDO (17 nov): el código. Lo dijo Ricardo —«el
+                     único requisito para desbloquear el poder mandar por
+                     correo o mandar a alguien que no tiene cuenta es
+                     colocar el código»— y lo vi en pantalla antes de
+                     entregarlo: debajo de este botón ENCENDIDO salía el
+                     cartel «escribe tu código de firma». El servidor ya
+                     se negaba; esto es no ofrecer un botón que va a
+                     fallar. */
+                  disabled={firmaBusy||!mIn.trim()||!verificado||faltaElCodigo}>
                   {firmaBusy ? "Mandando…" : "Firmar y mandar"}
                 </button>
               ) : (
@@ -581,23 +723,34 @@ export function modalCompartir(ctx){
                   {shareBusy ? "Verificando…" : "Dar acceso"}
                 </button>
               )
-            ) : (<>
-              <button className="btn btn-secondary" onClick={pedirConCuenta}
+            ) : (
+              <button className="btn btn-primary" onClick={pedirConCuenta}
                 disabled={shareBusy||!mIn.trim()||!verificado}>
                 {shareBusy ? "Verificando…" : "Pedírselo por correo"}
               </button>
-              <button className="btn btn-primary" disabled={saving||!verificado}
-                onClick={crearEnlace}>
-                {saving ? "Creando…" : "Copiar enlace sin cuenta"}
-              </button>
-            </>)}
+            )}
           </div>
+          {motivoArriba && <div className="enl-nota apagado">{motivoArriba}</div>}
+
+          {sinCuentaAqui && (<>
+            <div className="sign-or"><span>O</span></div>
+            <div className="modal-row enmedio">
+              {/* Sin `!mIn.trim()`: este enlace ya no va atado a
+                  ningún correo. Ver `motivoSinCuenta` arriba. */}
+              <button className="btn btn-secondary"
+                disabled={saving||firmaBusy||!verificado||faltaElCodigo}
+                onClick={mandarSinCuenta}>
+                {(saving||firmaBusy) ? "Creando…" : "Mandar a alguien sin cuenta"}
+              </button>
+            </div>
+            {motivoSinCuenta && <div className="enl-nota apagado">{motivoSinCuenta}</div>}
+          </>)}
 
           {modo==="completo" && (
             <div className="enl-nota">
               {mandaAFirmar
-                ? "Al mandarlo te damos un enlace para esa persona. Lo abre sin cuenta, lee el contrato entero y lo acepta o no lo acepta; hasta que lo acepte no ve lo que hay que entregar, y mientras tanto el contrato no cambia."
-                : "Para acceso completo hace falta cuenta y correo confirmado. Un enlace que deje leer todo sin identificar a nadie se reenvía y acaba donde no debía."}
+                ? "Con cuenta le llega aquí dentro y lo ve al entrar; para eso hace falta su correo. Sin cuenta te damos un enlace suelto, que le mandas por donde quieras: lo abre, lee el contrato entero y lo acepta o no lo acepta; hasta que lo acepte no ve lo que hay que entregar, y mientras tanto el contrato no cambia."
+                : "Para acceso completo hace falta cuenta y correo confirmado. Un enlace que deje leer todo sin identificar a nadie se reenvía y acaba donde no debía: el único enlace sin cuenta de un expediente es el de la otra parte, y lo primero que hace quien lo abre es decidir si acepta el contrato."}
             </div>
           )}
           </>)}
@@ -663,7 +816,7 @@ export function modalCompartir(ctx){
               acceso permanente que se regaló sin saberlo. */}
           <button className="btn btn-tertiary" onClick={verEnlaces}>Ver enlaces creados</button>
           <button className="btn btn-tertiary" onClick={()=>copyLink()}><IcoLink/> Copiar enlace del documento</button>
-          <button className="btn btn-warning" disabled={shareBusy} onClick={cerrar}>Cerrar</button>
+          <button className="btn btn-secondary" disabled={shareBusy} onClick={cerrar}>Cerrar</button>
         </div>
       </div>
     </div>

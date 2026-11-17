@@ -16,9 +16,41 @@ const FORZADO = () => process.env.GEMINI_MODELO || "";
 
 // Google renombra y retira modelos seguido. En vez de fijar uno,
 // preguntamos cuáles admite esta llave y elegimos el mejor.
+//
+// ── POR QUÉ «LITE» VA PRIMERO (17 nov) ────────────────────────
+//
+// Esta lista pedía los modelos MÁS NUEVOS primero, que es lo que
+// suena razonable y era exactamente el problema.
+//
+// El fallo, dicho por Ricardo: «me aparece mucho este error al
+// analizar los contratos: 503 Service Unavailable». Ese 503 no era
+// Google caído ni su conexión: era ESTA función devolviendo
+// «unavailable» porque Gemini contestaba 429 —cuota agotada—. Y la
+// cuota se agotaba en cuatro análisis.
+//
+// En el plan GRATUITO el cupo por día cambia muchísimo entre un
+// modelo y otro, y al revés de lo que uno esperaría: los «flash»
+// nuevos traen un cupo diario pequeño y los «flash-lite» uno mucho
+// mayor. Lecturas de terceros de octubre de 2026 daban unas 20
+// peticiones al día para los flash nuevos y unas 500 para los
+// flash-lite. Google no publica la tabla por modelo y avisa de que
+// «los límites no están garantizados», así que los números concretos
+// no hay que creérselos; lo que sí se sostiene es la forma: lite
+// rinde bastante más en el plan gratuito.
+//
+// Para lo que se hace aquí —sacar obligaciones, fechas e importes de
+// un contrato y devolverlas en JSON— «lite» va sobrado. Un modelo
+// mejor que sólo se puede usar cuatro veces al día no es mejor: es
+// uno que no se puede usar.
+//
+// CUANDO SE PASE AL PLAN DE PAGO, esto se da la vuelta: ahí el cupo
+// deja de ser el freno y conviene volver a pedir primero los
+// grandes. Se cambia moviendo las dos líneas de abajo, o sin tocar
+// código poniendo GEMINI_MODELO con el que se quiera.
 const PREFER = [
+  /flash-lite/,
   /^gemini-3\.5-flash$/, /^gemini-3-flash/, /^gemini-2\.5-flash$/,
-  /^gemini-2\.0-flash$/, /flash-lite/, /flash/,
+  /^gemini-2\.0-flash$/, /flash/,
 ];
 
 let resuelto = null;

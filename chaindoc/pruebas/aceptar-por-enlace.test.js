@@ -22,10 +22,15 @@
 //   3. Que se pueda leer el contrato, que es lo que se pidio.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { sinComentarios } from "./sinComentarios.js";
 import { resolve } from "node:path";
 import { vistaPublica, revisarNombre } from "../functions/lib/invitaciones.js";
 
 const leer = (r) => readFileSync(resolve(process.cwd(), r), "utf8");
+// Sin comentarios para lo que vigila que algo YA NO SE DIGA: el
+// porque de haberlo quitado vive en un comentario justo al lado, y
+// un `not.toMatch` sobre el archivo entero lo encontraria ahi.
+const codigo = (r) => sinComentarios(leer(r));
 
 const REGISTRO = { opId: "e1", creadaPor: "Ricardo", correo: "juan@proveedor.com",
                    expiraEn: "2026-12-01T00:00:00.000Z", reqIds: ["r1"], entregas: 0 };
@@ -336,9 +341,40 @@ describe("mandar a firmar entrega el enlace", () => {
     return s.slice(i, s.indexOf("\n});", i));
   };
 
-  it("LA QUE IMPORTA: se crea un enlace al poner el contrato en firme", () => {
-    expect(trozo()).toMatch(/armarInvitacion\(\{/);
-    expect(trozo()).toMatch(/return \{ doc, enlace \}/);
+  // ← CORREGIDA (17 nov). Decia «se crea un enlace SIEMPRE» y eso
+  // era el fallo, no la regla.
+  //
+  // Lo escribi el 12 de noviembre con este razonamiento: «el enlace
+  // no estorba a quien si tiene cuenta». Estorba. Ricardo mando el
+  // contrato a alguien CON cuenta, le salio la pantalla que dice
+  // «mandale esto para que lo firme» y entendio que la plataforma no
+  // se lo habia mandado. La pantalla del enlace solo tiene sentido
+  // cuando el enlace es la UNICA via.
+  it("LA QUE IMPORTA: el enlace se crea cuando va a servir, no siempre", () => {
+    const t = trozo();
+    expect(t).toMatch(/armarInvitacion\(\{/);
+    expect(t).toMatch(/const haceFaltaElEnlace = !correo \|\| !tieneCuenta \|\| conEnlace;/);
+    expect(t).toMatch(/if\(haceFaltaElEnlace\)\{/);
+    // Y el cliente recibe con que decidir que pantalla enseñar.
+    expect(t).toMatch(/return \{ doc, enlace, tieneCuenta \}/);
+  });
+
+  it("si no tiene cuenta y no se pidio el enlace, se niega ANTES de firmar", () => {
+    // Negarse despues seria peor: el contrato quedaria en firme y
+    // mandado a nadie. Y el mensaje dice que boton usar, que es lo
+    // unico util que puede decir un error aqui.
+    const t = trozo();
+    const iCheck = t.indexOf("if(correo && !tieneCuenta && !conEnlace)");
+    expect(iCheck).toBeGreaterThan(-1);
+    expect(iCheck).toBeLessThan(t.indexOf("comprobarIdentidad"));
+    expect(iCheck).toBeLessThan(t.indexOf("asentar"));
+    expect(t).toMatch(/Mandar a alguien sin cuenta/);
+  });
+
+  it("y la cuenta se mira en el directorio, igual que en el navegador", () => {
+    // Si el servidor mirara otra cosa, podria decir que no hay cuenta
+    // donde la pantalla dice que si, y al reves.
+    expect(trozo()).toMatch(/db\.doc\(`directorio\/\$\{correo\}`\)/);
   });
 
   it("y va a nombre del DESTINATARIO, que es lo que lo hace servir", () => {
@@ -369,7 +405,7 @@ describe("mandar a firmar entrega el enlace", () => {
   it("la pantalla lo ensena en vez de cerrarse sin mas", () => {
     const app = leer("src/App.jsx");
     expect(app).toMatch(/if\(r\.enlace\)\{/);
-    expect(app).toMatch(/paraFirmar: true, correo,/);
+    expect(app).toMatch(/paraFirmar: true, correo: correo \|\| null,/);
   });
 
   it("y el texto dice que primero se lee y se decide", () => {
@@ -417,12 +453,33 @@ describe("compartir tiene DOS opciones, no tres", () => {
       /const mandaAFirmar = esExpediente && modo==="completo" && rol==="involucrado"/);
   });
 
-  it("y el enlace sin cuenta sigue saliendo al mandarlo", () => {
-    // Esto es lo que de verdad faltaba, y se queda.
+  it("y el enlace sin cuenta sigue existiendo, para quien no la tiene", () => {
+    // La capacidad se queda: era lo que de verdad faltaba el 12 de
+    // noviembre. Lo que cambia es CUANDO se enseña -ver «el enlace se
+    // crea cuando va a servir»-, no si existe.
     const srv = leer("functions/index.js");
     const i = srv.indexOf("export const ponerEnFirme");
-    expect(srv.slice(i, srv.indexOf("\n});", i))).toMatch(/return \{ doc, enlace \}/);
-    expect(leer("src/App.jsx")).toMatch(/paraFirmar: true, correo,/);
+    expect(srv.slice(i, srv.indexOf("\n});", i))).toMatch(/return \{ doc, enlace, tieneCuenta \}/);
+    expect(leer("src/App.jsx")).toMatch(/paraFirmar: true, correo: correo \|\| null,/);
+  });
+
+  it("la pantalla del enlace sale SOLO si vino un enlace", () => {
+    // El fallo de Ricardo: compartio a alguien con cuenta y le salio
+    // la pantalla de copiar el link. «Ese modal para copiar el link
+    // es solo cuando se quiere compartir a alguien que no tiene
+    // cuenta».
+    const app = leer("src/App.jsx");
+    const i = app.indexOf("const mandarAFirmar = async(");
+    const c = app.slice(i, app.indexOf("\n  };", i));
+    expect(c).toMatch(/if\(r\.enlace\)\{/);
+    // Y el otro camino cierra el modal, no lo deja abierto.
+    // El `\s+` evita contar espacios a ojo, que es lo que pide eslint.
+    expect(c).toMatch(/\}else\{\s+setModal\(null\);/);
+    // El cuarto argumento es el que dice si se pidio el enlace: sin
+    // el, el servidor se niega para un correo sin cuenta.
+    expect(c).toMatch(/conEnlace: conEnlace === true,/);
+    expect(app).toMatch(
+      /const mandarAFirmar = async\(correoDe=null, nombreDe=null, conBio=false, conEnlace=false\)/);
   });
 });
 
@@ -481,7 +538,15 @@ describe("cuando no se puede aceptar, se dice por que", () => {
 
   it("las tres razones se dicen distinto, porque llevan a sitios distintos", () => {
     const s = pant();
-    expect(s).toMatch(/todavía no se manda a firmar/);   // borrador
+    // ← CAMBIADO (17 nov): la del borrador decia «este contrato
+    // todavia no se manda a firmar... y entonces te llegara para que
+    // lo leas y lo aceptes». Lo vio Ricardo: «puede ser que el unico
+    // involucrado no tenga cuenta». Un enlace de entrega no te hace
+    // parte del contrato, asi que ese aviso podia no llegar nunca.
+    // La propiedad que vigila esta prueba no cambia -tres carteles
+    // distintos-, solo el texto del primero.
+    expect(s).toMatch(/no hay nada que entregar aquí/);  // borrador
+    expect(codigo("src/pantallas/Entrega.jsx")).not.toMatch(/te llegar/);
     expect(s).toMatch(/es para entregar comprobantes/);  // no es parte
     expect(s).toMatch(/Ya no hay nada que responder/);   // fase pasada
   });
@@ -489,7 +554,7 @@ describe("cuando no se puede aceptar, se dice por que", () => {
   it("y cada una dice que SI se puede hacer", () => {
     // Un cartel que solo dice «no» deja a la persona igual de parada.
     const s = pant();
-    expect(s).toMatch(/Mientras tanto puedes leerlo aquí/);
+    expect(s).toMatch(/Puedes leerlo mientras tanto/);
     expect(s).toMatch(/Puedes leerlo para saber a/);
   });
 

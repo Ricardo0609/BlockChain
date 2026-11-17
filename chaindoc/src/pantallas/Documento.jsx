@@ -834,7 +834,7 @@ export function renderDocumento(ctx){
              (histTab==="Ediciones"?eds:histTab==="Firmas"?sigs:shs).length===0 &&
               <div className="empty">Sin registros en esta categoría.</div>}
           </div>
-          <button className="btn btn-warning" onClick={()=>setHist(false)}>Cerrar</button>
+          <button className="btn btn-secondary" onClick={()=>setHist(false)}>Cerrar</button>
         </div>
       </div>
     )}

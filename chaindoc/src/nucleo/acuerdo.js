@@ -299,7 +299,7 @@ function esPosterior(a, b) {
  * el dueño pudiera cambiar lo firmado, la firma no diría nada.
  */
 export const ACCIONES_POR_ESTADO = {
-  borrador:      ["editar", "poner-en-firme", "borrar"],
+  borrador:      ["editar", "poner-en-firme", "borrar", "pedir-mas"],
   en_firma:      ["aceptar", "rechazar", "retirar-envio"],
   // ← ACTUALIZADO (27 oct): entra «dar-conformidad». La primera firma
   // de las dos se da estando el contrato vigente —es la que dice «ya
@@ -307,12 +307,13 @@ export const ACCIONES_POR_ESTADO = {
   // darla eran dos puertas al mismo cuarto: ahora quien firma primero
   // abre el turno de la otra parte.
   vigente:       ["subir", "vincular", "retirar", "pedir-conformidad", "cerrar",
-                  "dar-conformidad"],
-  entregado:     ["subir", "vincular", "retirar", "dar-conformidad", "reportar-faltante"],
+                  "dar-conformidad", "pedir-mas"],
+  entregado:     ["subir", "vincular", "retirar", "dar-conformidad", "reportar-faltante",
+                  "pedir-mas"],
   cerrado:       [],
-  rechazado:     ["editar", "poner-en-firme", "borrar"],
-  sin_firmar:    ["editar", "poner-en-firme", "borrar"],
-  sin_respuesta: ["pedir-conformidad", "dar-conformidad"],
+  rechazado:     ["editar", "poner-en-firme", "borrar", "pedir-mas"],
+  sin_firmar:    ["editar", "poner-en-firme", "borrar", "pedir-mas"],
+  sin_respuesta: ["pedir-conformidad", "dar-conformidad", "pedir-mas"],
 };
 
 /** Lo que se puede hacer siempre, pase lo que pase. */
@@ -342,6 +343,7 @@ export const PERMISO_DE_ACCION = {
   cerrar: "editar",
   "dar-conformidad": "aprobar",
   "reportar-faltante": "aprobar",
+  "pedir-mas": "pedir-mas",
   ver: "ver",
   exportar: "exportar",
 };
@@ -372,7 +374,7 @@ export const PERMISO_DE_ACCION = {
 // escapaba del estado: a un contrato que nadie habia firmado todavia
 // no se le podia subir un PDF, pero si colgarle un documento. Dos
 // puertas al mismo cuarto otra vez, y una sin cerradura.
-export const GOBERNADAS = ["editar", "subir", "vincular", "retirar"];
+export const GOBERNADAS = ["editar", "subir", "vincular", "retirar", "pedir-mas"];
 
 /** Si el estado impide esta acción, al margen del rol. */
 export const estadoBloquea = (estado, accion) =>
@@ -465,6 +467,24 @@ export function motivoBloqueo(estado, accion) {
   }
   if (accion === "aceptar" || accion === "rechazar") {
     return "Este contrato no está esperando tu firma.";
+  }
+  // ── AÑADIR UN REQUISITO (17 nov) ───────────────────────────
+  //
+  // Se puede casi siempre, a propósito: es para lo que se olvidó o
+  // se le ocurrió después al dueño, y obligarle a rehacer el
+  // contrato por eso es justo lo que esto viene a evitar. Los dos
+  // estados donde NO se puede son los dos donde cambiaría algo que
+  // ya no es suyo:
+  if (accion === "pedir-mas") {
+    if (estado === "en_firma") {
+      return "La otra parte está leyendo este contrato ahora mismo para decidir si lo "
+        + "acepta, y esa lista es lo que está leyendo. Espera su respuesta, o retira el "
+        + "envío, añádelo y vuelve a mandarlo.";
+    }
+    if (estado === "cerrado") {
+      return "Este contrato está cerrado: las dos partes dijeron que estaba todo bien. "
+        + "Ya no se le puede pedir nada más.";
+    }
   }
   return "Esto no se puede hacer con el contrato como está ahora.";
 }

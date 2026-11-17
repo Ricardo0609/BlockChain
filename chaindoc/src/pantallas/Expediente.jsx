@@ -1,13 +1,15 @@
 // Vista del contrato inteligente: fases, montos, requisitos, línea de tiempo.
 
+import { Fragment } from "react";
 import { Icon, IcoEye } from "../ui/iconos";
 import { LIMITE_MB, isPreviewable } from "../storage";
 import { Timeline } from "../ui/Timeline";
 import { renderAccesos, cuantosAcceden } from "./Accesos";
 import { renderCuerpo } from "../ui/Cuerpo";
 import { estaVacio } from "../nucleo/texto";
-import { vanEnOrden, faseQueFalta, porQueEsperar, porQueEsperarLargo } from "../nucleo/fases";
-import { permiteEstado, firmasDe, firmaronLasDos, FUERZA_TEXTO, PARTES } from "../nucleo/acuerdo";
+import { vanEnOrden, faseQueFalta, porQueEsperar, porQueEsperarLargo,
+         ultimosDeCadaFase, cierraLaFase, numeroDeCada } from "../nucleo/fases";
+import { permiteEstado, motivoBloqueo, firmasDe, firmaronLasDos, FUERZA_TEXTO, PARTES } from "../nucleo/acuerdo";
 import {
   aidDe,
   archivosDe,
@@ -55,6 +57,8 @@ export function renderExpediente(ctx){
     // espera es mi firma. Lo segundo no se deduce del rol: ser
     // aprobador no basta, tiene que ser la persona a la que se mandó.
     acu, esperaMiFirma,
+    // ← NUEVO (17 nov): pedir un comprobante que no estaba en el contrato.
+    pedirRequisito, quitarEsteRequisito,
   } = ctx;
   const st = expedienteStatus(d);
   // ← NUEVO (16 oct): la vista con los importes al día. Los
@@ -79,6 +83,36 @@ export function renderExpediente(ctx){
   const porEsperarL=(r)=> porQueEsperarLargo(d, fases, r?.fase || null);
   const fActual = faseActual(d);         // ← NUEVO
   const faseSelOk = faseSel && fases.some(f=>f.id===faseSel) ? faseSel : null;
+
+  // ── EL BOTÓN DE PEDIR UNO MÁS (17 nov) ─────────────────────
+  //
+  // «Abajo del último requisito de evidencia en cada fase, o si sólo
+  // es una pues sólo ahí».
+  //
+  // La lista es PLANA y se filtra por fase, no se agrupa, así que
+  // «el último de su fase» no es el último de la lista: hay que
+  // calcularlo. Se guarda el índice del último visible de cada fase
+  // y luego cada fila se pregunta si es ella.
+  //
+  // Un expediente sin fases cae en un solo grupo -la clave
+  // SIN_FASE-, así que el botón sale una vez al final. Es el «si
+  // sólo es una» de Ricardo, y sale solo: no hace falta un caso
+  // aparte.
+  const ultimoDeFase = ultimosDeCadaFase(dv.requisitos, faseSelOk);
+  // El numero que se ve, que NO es el indice del array. Ver numeroDeCada.
+  const numero = numeroDeCada(dv.requisitos, faseSelOk);
+
+  // Quién puede pedir, y si no puede, por qué. El servidor lo vuelve
+  // a comprobar; esto es para no enseñar un botón que va a fallar.
+  const estadoAcu = acu?.estado || null;
+  const soyElDueno = d.ownerUid === uid;
+  const puedePedirMas = Boolean(
+    soyElDueno && (!puedo || puedo("pedir-mas"))
+    && (!estadoAcu || permiteEstado(estadoAcu, "pedir-mas")));
+  // El motivo sólo se enseña al dueño: a la otra parte no le sirve de
+  // nada saber por qué el dueño no puede pedirle algo ahora.
+  const motivoPedirMas = (!puedePedirMas && soyElDueno && estadoAcu)
+    ? motivoBloqueo(estadoAcu, "pedir-mas") : null;
   // ← NUEVO (14 oct): el expediente en pestañas.
   //
   // Antes todo iba en una sola columna: avance, montos, fases,
@@ -464,13 +498,17 @@ export function renderExpediente(ctx){
     {/* ← ACTUALIZADO: cada requisito admite varios comprobantes */}
     {(dv.requisitos||[]).map((r,i)=>{
       if(faseSelOk && r.fase!==faseSelOk) return null;   // ← NUEVO: filtro por fase
+      // ← NUEVO (17 nov): si éste es el último de su fase, debajo va
+      // el botón de pedir uno más. Ver `ultimoDeFase`, arriba.
+      const cierraFase = cierraLaFase(ultimoDeFase, r, i);
       const lista = archivosDe(r);
       const suma  = comprobadoDe(r);
       const listo = lista.length>0;
       const faseR = fases.find(f=>f.id===r.fase);          // ← NUEVO
       return (
-      <div key={r.id} className={`exp-item ${listo?"cumplido":"pendiente"}`}>
-        <div className="exp-check">{listo ? "✓" : i+1}</div>
+      <Fragment key={r.id}>
+      <div className={`exp-item ${listo?"cumplido":"pendiente"}`}>
+        <div className="exp-check">{listo ? "✓" : numero[r.id]}</div>
         <div className="exp-item-b">
           <div className="exp-item-t">{r.titulo}</div>
           <div className="exp-item-d">{r.descripcion}</div>
@@ -718,6 +756,33 @@ export function renderExpediente(ctx){
                 Pedir este comprobante
               </button>
             )}
+
+            {/* ── QUITAR ESTA SOLICITUD (17 nov) ────────────────
+                «Por si se añadió de más o ya no se necesita».
+
+                En rojo y el ÚLTIMO de la fila, separado de los
+                demás: los otros tres sirven para cumplir el
+                requisito, éste lo borra. Puestos al mismo peso y en
+                la misma tanda, un dedo gordo en un teléfono se
+                equivoca.
+
+                Y no sale cuando ya hay algo entregado: quitarlo haría
+                desaparecer de la lista la entrega de la otra persona.
+                El motivo se dice en el `title` y, sobre todo, lo
+                vuelve a decir el servidor con su mensaje entero. */}
+            {puedePedirMas && (
+              lista.length === 0 ? (
+                <button className="exp-up como-btn quitar-req" disabled={saving}
+                  onClick={()=>quitarEsteRequisito(r)}>
+                  Quitar esta solicitud
+                </button>
+              ) : (
+                <span className="exp-mas-no quitar-no">
+                  Ya tiene {lista.length === 1 ? "un archivo entregado" : `${lista.length} archivos entregados`},
+                  así que esta solicitud ya no se puede quitar.
+                </span>
+              )
+            )}
           </div>
 
           {enlReq===r.id && (
@@ -728,8 +793,61 @@ export function renderExpediente(ctx){
           )}
         </div>
       </div>
+
+      {/* ── PEDIR UNO MÁS (17 nov) ──────────────────────────────
+          «Un botón abajo del último requisito de evidencia en cada
+          fase, o si sólo es una pues sólo ahí». Va DENTRO de la
+          lista y no en una barra de acciones aparte a propósito: lo
+          que se está pidiendo es otro de estos, y el sitio donde se
+          entiende eso sin leer nada es justo debajo de ellos.
+
+          `puedePedirMas` ya tiene dentro el rol, el estado y que sea
+          el dueño; cuando no se puede, no sale el botón, sale el
+          motivo —apagado y sin explicación sería peor que nada—. */}
+      {cierraFase && (puedePedirMas || motivoPedirMas) && (
+        <div className="exp-mas">
+          {puedePedirMas ? (
+            <button className="exp-mas-b" onClick={()=>pedirRequisito(r.fase||null)}>
+              <Icon n="add_circle" size={18}/>
+              <span>Pedir otro comprobante{faseR ? ` en ${faseR.nombre||`la fase ${faseR.n}`}` : ""}</span>
+            </button>
+          ) : (
+            <p className="exp-mas-no">{motivoPedirMas}</p>
+          )}
+        </div>
+      )}
+      </Fragment>
       );
     })}
+
+    {/* ── CUANDO NO HAY NINGUNA FILA (17 nov) ─────────────────
+        El botón de arriba cuelga de un requisito: si no hay ninguno
+        visible, no sale. Y eso dejaba fuera los dos casos donde más
+        falta hace:
+
+          · un expediente al que todavía no se le ha pedido nada;
+          · y una FASE sin requisitos, filtrada. `revision.js` ya
+            avisa de esas fases —«no se puede comprobar»— y hasta
+            ahora el aviso no llevaba a ningún sitio donde
+            arreglarlo.
+
+        La fase sale del filtro, que es la que se está mirando. */}
+    {Object.keys(ultimoDeFase).length === 0 && (puedePedirMas || motivoPedirMas) && (
+      <div className="exp-mas solo">
+        {puedePedirMas ? (
+          <button className="exp-mas-b" onClick={()=>pedirRequisito(faseSelOk)}>
+            <Icon n="add_circle" size={18}/>
+            <span>
+              {faseSelOk
+                ? "Esta fase no pide nada todavía. Pedir el primer comprobante"
+                : "Pedir el primer comprobante"}
+            </span>
+          </button>
+        ) : (
+          <p className="exp-mas-no">{motivoPedirMas}</p>
+        )}
+      </div>
+    )}
 
     {d.analisis && (
       <p className="exp-foot">

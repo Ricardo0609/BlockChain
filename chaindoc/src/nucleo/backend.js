@@ -37,9 +37,39 @@ export function errorBackend(e){
     "internal":           "El servidor no pudo completar la operación.",
     "deadline-exceeded":  "El servidor tardó demasiado. Vuelve a intentarlo.",
   };
+
+  // ── ARREGLADO (17 nov): EL ORDEN ESTABA AL REVÉS ───────────
+  //
+  // El comentario de arriba dice «el mensaje del servidor manda sobre
+  // el genérico» y el código hacía justo lo contrario: miraba
+  // `DEL_TRANSPORTE` primero y se iba por ahí, tirando el mensaje que
+  // la función había escrito con cuidado.
+  //
+  // Lo que veía Ricardo: analizar un contrato con la cuota de Gemini
+  // agotada devuelve `unavailable` con el texto «Se agotó la cuota de
+  // análisis por ahora, espera un minuto», y en pantalla salía «No se
+  // pudo contactar al servidor. Revisa tu conexión». Su conexión
+  // estaba perfecta. Mandamos a revisar lo que no estaba roto y
+  // escondimos lo único que decía qué hacer.
+  //
+  // Ahora: si el mensaje lo escribió una función NUESTRA, esa gana.
+  //
+  // Y se sabe con certeza, no adivinando: la función lo marca al
+  // lanzarlo. Mi primer intento fue mirar el texto y decidir si
+  // «parecía» nuestro, y la primera prueba que corrió lo tumbó —«fetch
+  // failed» tampoco está en ninguna lista y es del SDK—. Una lista de
+  // frases ajenas que hay que mantener al día no es una regla: es una
+  // deuda que se descubre el día que el SDK cambia una palabra.
+  const propio = String(e?.message || "").trim();
+  if(e?.details?.deOctavin && propio) return propio;
+
   if(DEL_TRANSPORTE[codigo]) return DEL_TRANSPORTE[codigo];
 
-  const propio = String(e?.message || "").trim();
+  // Y lo de siempre para los demás códigos: `permission-denied`,
+  // `not-found` y compañía no están arriba, así que su mensaje -que
+  // SÍ lo escribimos nosotros- sigue pasando por aquí. Esta línea
+  // estaba y la quité sin querer al reordenar; la prueba que vigila
+  // «Sólo el dueño puede eliminarlo» la trajo de vuelta.
   if(propio && propio.toLowerCase() !== "internal") return propio;
 
   const RESPALDO = {

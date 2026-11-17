@@ -57,8 +57,27 @@ describe("qué puede cada rol", () => {
     for(const r of ROLES.filter((x) => x !== "propietario")) expect(puede(r, "borrar")).toBe(false);
   });
 
-  it("sólo el dueño reparte accesos", () => {
-    for(const r of ROLES.filter((x) => x !== "propietario")) expect(puede(r, "compartir")).toBe(false);
+  // ← CAMBIADO (17 nov): el dueño y el auditor. Lo pidió Ricardo:
+  // «el auditor puede repartir los accesos, compartir a otras
+  // personas, descargar los archivos adjuntos, no tiene que firmar el
+  // contrato ni nada más».
+  //
+  // La lista se escribe ENTERA, no sólo la excepción: si mañana otro
+  // rol se lleva «compartir» sin querer, esto lo dice.
+  it("el dueño y el auditor reparten accesos, nadie más", () => {
+    const reparten = ROLES.filter((r) => puede(r, "compartir")).sort();
+    expect(reparten).toEqual(["auditor", "propietario"]);
+  });
+
+  it("y el auditor mira y reparte, pero no se compromete", () => {
+    // Es lo que lo distingue de la otra parte: no firma ni aprueba,
+    // y no toca el contrato ni pide comprobantes.
+    expect(puede("auditor", "ver")).toBe(true);
+    expect(puede("auditor", "exportar")).toBe(true);
+    expect(puede("auditor", "compartir")).toBe(true);
+    for(const a of ["firmar", "aprobar", "editar", "pedir", "pedir-mas", "subir", "borrar"]){
+      expect(puede("auditor", a), a).toBe(false);
+    }
   });
 
   it("el aportador entrega, no edita ni retira", () => {

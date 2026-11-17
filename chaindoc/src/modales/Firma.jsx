@@ -101,7 +101,7 @@ export function modalFirma(ctx){
         onChange={e=>setPass(e.target.value)} autoFocus
         onKeyDown={e=>e.key==="Enter"&&pass.trim()&&setLock(pass.trim())} />
       <div className="modal-row">
-        <button className="btn btn-warning" onClick={()=>setModal(null)}>Cancelar</button>
+        <button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button>
         <button className="btn btn-primary" onClick={()=>pass.trim()&&setLock(pass.trim())}>Proteger</button>
       </div>
     </div></div>

@@ -382,8 +382,31 @@ describe("que acciones gobierna el estado", () => {
   // como evidencia es ENTREGAR, igual que subir un archivo, y se
   // escapaba del estado: a un contrato sin firmar no se le podia subir
   // un PDF, pero si colgarle un documento.
-  it("manda sobre editar, subir, vincular y retirar", () => {
-    expect(GOBERNADAS).toEqual(["editar", "subir", "vincular", "retirar"]);
+  // ← ACTUALIZADO (17 nov): entra «pedir-mas», que es añadir un
+  // requisito de evidencia a un contrato que ya existe. Tiene que
+  // estar gobernada por el estado porque los dos sitios donde NO se
+  // puede hacer son estados: «en firma» -la otra parte esta leyendo
+  // esa misma lista para decidir- y «cerrado».
+  it("manda sobre editar, subir, vincular, retirar y pedir-mas", () => {
+    expect(GOBERNADAS).toEqual(["editar", "subir", "vincular", "retirar", "pedir-mas"]);
+  });
+
+  it("añadir un requisito se puede en casi todos, pero no en esos dos", () => {
+    // LA QUE IMPORTA. Es para lo que se le olvido o se le ocurrio
+    // despues al dueño, asi que lo normal es que se PUEDA: obligarle
+    // a rehacer el contrato por eso es justo lo que viene a evitar.
+    for (const e of ["borrador", "vigente", "entregado", "rechazado",
+                     "sin_firmar", "sin_respuesta"]) {
+      expect(estadoBloquea(e, "pedir-mas"), e).toBe(false);
+    }
+    // Cerrado: las dos partes dijeron que estaba todo bien.
+    expect(estadoBloquea("cerrado", "pedir-mas")).toBe(true);
+    // En firma: la otra parte esta leyendo ESA lista ahora mismo para
+    // decidir si acepta. Añadirle algo seria hacerle aceptar algo
+    // distinto de lo que leyo.
+    expect(estadoBloquea("en_firma", "pedir-mas")).toBe(true);
+    expect(motivoBloqueo("en_firma", "pedir-mas")).toMatch(/retira el envío/i);
+    expect(motivoBloqueo("cerrado", "pedir-mas")).toMatch(/cerrado/i);
   });
 
   it("no se mete con lo que decide solo el rol", () => {

@@ -78,7 +78,15 @@ export const ROL_TEXTO = {
 /** Lo que se le explica a quien comparte, en una línea. */
 /** Qué puede hacer cada rol. Lo que no está aquí, no se puede. */
 export const PERMISOS = {
-  propietario: ["ver", "editar", "subir", "retirar", "firmar", "compartir", "pedir", "aprobar", "exportar", "proteger", "vincular", "borrar"],
+  // ← AÑADIDO (17 nov): «pedir-mas», que es añadir un requisito de
+  // evidencia a un expediente que ya existe. SÓLO el propietario, y
+  // es deliberado: a diferencia de «editar», esto funciona con el
+  // contrato ya firmado, así que es la única acción que cambia lo
+  // acordado después de acordarlo. Ricardo lo pidió con esas
+  // palabras —«el dueño y creador del expediente»— y un editor no
+  // es el dueño. El servidor lo vuelve a comprobar por ownerUid, no
+  // sólo por rol: ver `anadirRequisito` en functions/index.js.
+  propietario: ["ver", "editar", "subir", "retirar", "firmar", "compartir", "pedir", "aprobar", "exportar", "proteger", "vincular", "borrar", "pedir-mas"],
   // ← NUEVO (20 oct). Lleva «retirar» porque es quien sube: si se
   // equivoca de archivo tiene que poder quitarlo él, sin pedirle
   // permiso a nadie. No lleva «editar»: el contrato que aceptó no lo
@@ -93,7 +101,16 @@ export const PERMISOS = {
   editor:      ["ver", "editar", "subir", "retirar", "firmar", "pedir", "exportar", "proteger", "vincular"],
   aportador:   ["ver", "subir"],
   aprobador:   ["ver", "aprobar", "firmar", "exportar"],
-  auditor:     ["ver", "exportar"],
+  // ← CAMBIADO (17 nov): entra «compartir». Lo pidió Ricardo con
+  // esas palabras: «el auditor puede repartir los accesos, compartir
+  // a otras personas, descargar los archivos adjuntos, no tiene que
+  // firmar el contrato ni nada más».
+  //
+  // Sigue SIN «firmar» y sin «aprobar», que es lo que lo distingue
+  // de la otra parte: mira y reparte, no se compromete. Y sin
+  // «editar» ni «pedir», así que no puede mandar el contrato a
+  // firmar ni pedir comprobantes: eso lo sigue haciendo su dueño.
+  auditor:     ["ver", "exportar", "compartir"],
   lector:      ["ver"],
 };
 
@@ -173,6 +190,10 @@ export const puede = (rol, accion) => Boolean(rol && PERMISOS[rol]?.includes(acc
  */
 export const PERMISOS_QUE_CAMBIAN = new Set([
   "editar", "subir", "retirar", "vincular", "firmar", "aprobar", "pedir", "proteger", "borrar",
+  // ← NUEVO (17 nov): añadir un requisito cambia `requisitos`, asi que
+  // tiene que poder traer campos. Es un acto que modifica el
+  // documento -de los que SI pueden- y no mirar ni exportar.
+  "pedir-mas",
 ]);
 
 /** Traduce el evento que se quiere asentar al permiso que exige. */

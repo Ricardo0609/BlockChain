@@ -126,6 +126,54 @@ export function notificacionesDe(docs, { uid, email, descartes } = {}) {
       }
     }
 
+    // ── TE PIDIERON ALGO QUE NO ESTABA EN LO QUE FIRMASTE ──────
+    //
+    // ← NUEVO (17 nov). Pedido por Ricardo: «si el contrato ya se
+    // compartió y se firmó, le va a llegar una notificación a la otra
+    // u otras personas que ya firmaron de que tal persona añadió un
+    // campo extra para evidencia en tal fase».
+    //
+    // ES LA MITAD QUE HACE ACEPTABLE LA OTRA. Añadir un requisito a un
+    // contrato firmado es lo único que cambia lo acordado después de
+    // acordarlo; si además pasara en silencio, el que firmó podría
+    // quedar incumpliendo algo que nunca supo que se le pedía. El
+    // aviso no es cortesía: es lo que convierte un cambio unilateral
+    // en una petición.
+    //
+    // Se deriva del bloque, como todo lo demás aquí, así que no hay
+    // nada que guardar ni que limpiar. Y se apaga al abrir el
+    // documento —es un AVISO, no un PENDIENTE—: entrar y ver el
+    // requisito nuevo es exactamente lo que se pedía que hiciera.
+    const firmantes = d.acuerdo?.firmas || [];
+    const yoFirme = firmantes.some(
+      (f) => (f.uid && f.uid === uid) || String(f.email || "").toLowerCase() === mio);
+    if (!soyDueno && yoFirme) {
+      for (const b of d.chain || []) {
+        if (b.action !== "SOLICITUD") continue;
+        const quita = b.meta?.tipo === "requisito-quitado";
+        if (b.meta?.tipo !== "requisito-extra" && !quita) continue;
+        if (!sinVer(d, uid, b.timestamp)) continue;
+        const donde = b.meta.faseNombre ? ` en la fase «${corto(b.meta.faseNombre, 28)}»` : "";
+        const quien = b.author || d.owner || "Alguien";
+        const cual = `«${corto(b.meta.titulo || "sin título", 34)}»`;
+        mete({
+          // La clave lleva el tipo: si no, quitar un requisito que se
+          // habia añadido antes reusaria la clave del aviso de
+          // haberlo añadido, y descartar uno apagaria el otro.
+          clave: `${quita ? "reqm" : "reqx"}:${d.id}:${b.meta.reqId}`,
+          tipo: quita ? "requisito-quitado" : "requisito-extra",
+          fecha: b.timestamp || null,
+          texto: quita
+            // ← NUEVO (17 nov). Se avisa también al quitar, y no por
+            // simetría: quien firmó pudo estar preparando justo eso, o
+            // tenerlo a medias. Enterarse al ir a subirlo y no
+            // encontrar dónde es peor que un aviso de más.
+            ? `${quien} ya no pide ${cual}${donde} de «${titulo}».`
+            : `${quien} añadió un comprobante${donde} de «${titulo}»: ${cual}.`,
+        });
+      }
+    }
+
     // Lo que le pasó a TU contrato. Sólo al dueño: al que lo rechazó
     // no hay que recordarle que lo rechazó.
     if (soyDueno && d.acuerdo?.pedidoEn) {
@@ -172,4 +220,14 @@ export const ICONO = {
   compartido: "group_add",
   rechazado: "block",
   aceptado: "task_alt",
+  // `add_circle` y no `playlist_add`: el segundo diría mejor lo que
+  // pasó, pero no está en el subconjunto del index.html y un icono
+  // que falta no se dibuja, se escribe su nombre en crudo. Ver
+  // `pruebas/iconos.test.js`, que ya cazó eso tres veces.
+  "requisito-extra": "add_circle",
+  // `remove`/`do_not_disturb_on` dirian mejor «ya no se pide», pero no
+  // estan en el subconjunto del index.html. `close` si, y en una lista
+  // de avisos al lado de un texto que empieza por «ya no pide» se
+  // entiende. Ver `pruebas/iconos.test.js`.
+  "requisito-quitado": "close",
 };

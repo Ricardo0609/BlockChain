@@ -301,6 +301,9 @@ img,svg{max-width:100%}
 .avatar{width:32px;height:32px;border-radius:50%;background:var(--negro);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;flex-shrink:0}
 .contact-n{font-family:var(--f-p);font-size:16px;font-weight:500}
 .rec-lbl{font-size:14px;color:var(--gris-300);margin:16px 0 6px}
+/* La aclaracion que va DENTRO de una etiqueta, mas chica y mas suave:
+   lo que el campo es, no lo que hay que teclear. */
+.rec-lbl-d{font-size:12.5px;color:var(--gris-200)}
 
 /* ── HISTORY PANEL ── */
 .hist-ov{position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.4);backdrop-filter:blur(2px);display:flex;justify-content:flex-end;animation:fO .2s ease}
@@ -434,6 +437,61 @@ img,svg{max-width:100%}
 /* ── NUEVO (16 nov): EL ARCHIVO ORIGINAL DE UN COMPROBANTE ─────
    En el sitio de la x de retirar va una etiqueta, porque ese archivo
    no se retira nunca. Ver quitarImagen en functions/index.js. */
+/* ── NUEVO (17 nov): PEDIR UN COMPROBANTE MAS ──────────────────
+   Va debajo del ultimo requisito de cada fase, dentro de la lista.
+   Discreto a proposito: es una salida para lo que se olvido, no una
+   accion principal, y si pesara como los botones de entregar
+   competiria con ellos justo donde hay que entregar. */
+/* SIN SANGRIA, y es deliberado. Con la sangria del cuerpo de un
+   requisito -46px- el boton se alinea con el texto del de arriba y se
+   lee como una accion DE ESE requisito: "pedir otro comprobante" para
+   el contrato firmado. Lo que pide es otro de la FASE, asi que va al
+   margen, donde estan los numeros, que es el nivel al que pertenece. */
+.exp-mas{margin:2px 0 18px;padding-left:0}
+.exp-mas.solo{margin:6px 0 18px}
+.exp-mas-b{display:inline-flex;align-items:center;gap:8px;background:none;
+  border:1px dashed var(--gris-200);border-radius:10px;padding:9px 14px;
+  font:inherit;font-size:13.5px;font-weight:600;color:var(--gris-400);
+  cursor:pointer;transition:border-color .15s,color .15s,background .15s}
+.exp-mas-b:hover{border-color:var(--azul);color:var(--azul);background:var(--bg-soft)}
+.exp-mas-b .msym{color:inherit}
+.exp-mas-no{margin:0;font-size:12.5px;line-height:1.5;color:var(--gris-300)}
+
+/* ── NUEVO (17 nov): QUITAR UNA SOLICITUD ──────────────────────
+   En rojo, y el ultimo de la fila. Los otros botones de esa fila
+   sirven para CUMPLIR el requisito; este lo borra. En rojo pero sin
+   relleno: un boton rojo macizo al lado de «Adjuntar archivo»
+   competiria por el dedo justo donde hay que entregar, y lo que se
+   usa cien veces es adjuntar, no quitar. */
+/* Lleva las DOS clases en el selector, no solo quitar-req: el boton
+   tiene las dos puestas, exp-up vive mas abajo en este archivo y con la misma
+   especificidad gana la ultima. Resultado: el boton salia GRIS. Con
+   las dos clases juntas gana esta sin depender del orden, que es lo
+   que hay que hacer cuando se tiñe algo que ya tiene estilo propio. */
+.exp-up.quitar-req{color:var(--rojo);border-color:rgba(223,37,49,.3)}
+.exp-up.quitar-req:hover:not(:disabled){background:rgba(223,37,49,.07);
+  border-color:var(--rojo);color:var(--rojo)}
+/* Y cuando no se puede, el motivo escrito en su sitio, no un boton
+   apagado: lo que falta no es un permiso, es que ya hay algo
+   entregado, y eso hay que decirlo. */
+.quitar-no{display:block;margin-top:6px;max-width:420px}
+
+/* El boton de confirmar usa btn-warning, que ya era el rojo macizo
+   del producto. Llegue a escribir aqui un btn-peligro identico y lo
+   quite: dos nombres para el mismo rojo acaban en dos rojos. */
+
+/* El campo grande del modal: el de los detalles, que es opcional. */
+.req-area{resize:vertical;min-height:84px;line-height:1.55;font:inherit;
+  font-size:14.5px;padding:10px 12px}
+.rec-opt{font-weight:400;color:var(--gris-300)}
+/* A quien le va a llegar el aviso, dicho ANTES de pulsar. */
+.req-aviso{display:flex;align-items:flex-start;gap:9px;margin:14px 0 4px;
+  padding:12px 14px;border:1px solid var(--gris-100);background:var(--bg-soft);
+  border-radius:12px}
+.req-aviso .msym{flex:0 0 auto;margin-top:1px;color:var(--gris-300)}
+.req-aviso strong{display:block;font-size:13.5px;margin-bottom:3px}
+.req-aviso p{margin:0;font-size:12.5px;line-height:1.55;color:var(--gris-400)}
+
 .gal-org{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;
   color:var(--gris-400);background:var(--bg-soft);border:1px solid var(--gris-100);
   padding:3px 8px;border-radius:7px;white-space:nowrap}
@@ -994,6 +1052,14 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   text-align:left;padding:9px 11px;border:1px solid var(--bordes);border-radius:9px;cursor:pointer}
 .rol-op:hover{background:var(--bg-soft)}
 .rol-op.on{border-color:var(--negro);background:var(--bg-soft)}
+/* Un papel que ahora mismo no se puede elegir. Se queda a la vista,
+   apagado y con el motivo en su propia linea de ayuda: antes
+   desaparecia de la lista, y un sitio donde habia tres opciones y
+   ahora hay dos no se lee como "esto ya no se puede", se lee como un
+   fallo. Lo pidio Ricardo el 17 de nov con el rol Involucrado. */
+.rol-op.off{opacity:.5;cursor:not-allowed;background:none}
+.rol-op.off:hover{background:none}
+.rol-op.off .rol-d{color:var(--gris-400)}
 .rol-op input{grid-row:span 2;align-self:center;accent-color:var(--negro)}
 .rol-n{font-weight:600;font-size:14px;color:var(--negro)}
 .rol-d{grid-column:2;font-size:12px;color:var(--gris-300);line-height:1.4}
@@ -1171,6 +1237,11 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
    otra regla .enl-nota y es justo lo que esa no decia. Ver su comentario. */
 .enl-nota{display:block;font-size:12.5px;color:var(--gris-300);line-height:1.5;
   margin-top:6px;text-align:left}
+/* Por que el boton de arriba esta apagado. Va centrada y pegada a el
+   -no al margen izquierdo- porque pertenece a ese boton y no a la
+   seccion: puesta a la izquierda se lee como una nota mas del modal,
+   que es como paso desapercibida la primera vez. */
+.enl-nota.apagado{text-align:center;margin-top:8px;color:var(--gris-200)}
 .enl-plazos{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:6px}
 .enl-plazo{font-size:13px;padding:7px 14px;border-radius:99px;border:1px solid var(--bordes);
   background:transparent;color:var(--gris-400);cursor:pointer}

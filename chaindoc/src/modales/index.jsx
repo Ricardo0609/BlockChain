@@ -11,6 +11,7 @@ import { modalExpediente } from "./Expediente";
 import { modalFirma } from "./Firma";
 import { modalLegal } from "./Legal";
 import { modalRedaccion } from "./Redaccion";
+import { modalRequisito } from "./Requisito";
 import { modalSalir } from "./Salir";
 
 export function renderModales(ctx){
@@ -23,6 +24,7 @@ export function renderModales(ctx){
     ?? modalExpediente(ctx)
     ?? modalCompartir(ctx)
     ?? modalRedaccion(ctx)
+    ?? modalRequisito(ctx)
     ?? modalAjustes(ctx)
     ?? modalLegal(ctx)
     ?? modalSalir(ctx)
