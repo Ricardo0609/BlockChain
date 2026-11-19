@@ -36,7 +36,7 @@ import { anclajesDe, anclarAhora, paraElPaquete, porHash, resumenAnclaje } from 
 // ← NUEVO: aviso de privacidad y términos.
 import { aceptoVigente, selloDeAceptacion, VERSION as LEGAL_VERSION } from "./nucleo/legal";
 import { descargarPaquete, recogerAdjuntos } from "./paquete";
-import { FORMS, serializeForm } from "./ui/formularios";
+import { FORMS, serializeForm, etiquetaDe } from "./ui/formularios";
 import { TEMPLATES, esBorradorContrato } from "./nucleo/catalogos";
 import { ORDEN_POR_DEFECTO } from "./nucleo/orden";
 import { leerActivos } from "./ui/estiloActivo";
@@ -45,7 +45,8 @@ import { renderAccion } from "./pantallas/Accion";
 import { getUrlDoc, setUrlDoc } from "./nucleo/formato";
 import { folioConPrefijo, genId, sha256, siguienteFolio, tipoDeFolio, verifyChain } from "./nucleo/cadena";
 import { normalizarEnlace, nombreDeEnlace, textoFirmado } from "./nucleo/enlaces";
-import { parseFactura } from "./nucleo/extraccion";
+import { extraerCampos, marcarCorrecciones } from "./nucleo/extraccion";
+import { esComprobante } from "./nucleo/comprobantes";
 import {
   quitarArchivoViejo,
   store,
@@ -1029,7 +1030,23 @@ export default function Octavin(){
     // ← ACTUALIZADO: el tipo ya lo eligió el usuario en el paso 1.
     // El escaneo ya no decide qué es, sólo intenta llenar la plantilla.
     const formKey = t?.form || null;
-    const initial = (isImport && formKey==="factura") ? parseFactura(impText) : {};
+    // ── LOS DATOS SALEN DEL ARCHIVO (19 nov) ─────────────────
+    //
+    // Regla de Ricardo, con el porqué dentro: «para llenar la
+    // información se lee el archivo y no a mano; lo que puede hacer
+    // el usuario es corregir la información una vez llenada, y cómo
+    // sabremos que es verdadera: porque se adjunta sí o sí el archivo
+    // original y no se puede quitar».
+    //
+    // Antes esto decía `formKey==="factura" ? parseFactura(...) : {}`,
+    // y ese `: {}` era un recibo ENTERO escrito a mano —ni una línea
+    // leía su archivo—. Ahora `extraerCampos` decide qué lector toca,
+    // y de paso el XML de un CFDI pasa por `leerCFDI`, que da los
+    // datos EXACTOS en vez de reconocerlos en el texto.
+    const lectura = isImport
+      ? extraerCampos({ tplId: formKey, texto: impText })
+      : { campos: {}, origen: {}, exacto: false, nada: true };
+    const initial = lectura.campos;
     const filled  = Object.keys(initial).length;
 
     const body = formKey
@@ -1038,7 +1055,8 @@ export default function Octavin(){
 
     const origin = isImport
       ? (filled
-          ? `Creación desde ${method==="escanear"?"escaneo":"archivo"} con extracción automática: ${name}`
+          ? `Creación desde ${method==="escanear"?"escaneo":"archivo"} con `
+            + `${lectura.exacto ? "datos exactos del XML" : "extracción automática"}: ${name}`
           : method==="escanear"
             ? `Creación por escaneo (OCR): ${name}`
             : `Creación por importación de archivo «${impMeta?.name||name}»: ${name}`)
@@ -1048,6 +1066,9 @@ export default function Octavin(){
       id: genId(), ...folioNuevo({ tplId: formKey }), title:name, content:body, folder:mIn2||null,
       owner:user, ownerUid:uid, ownerEmail:acctEmail,
       tplId: formKey, fields: formKey ? initial : null,
+      // De dónde salió cada uno. Lo que se corrija después pasa a
+      // "mano" y queda asentado; ver `corregirCampo`.
+      origenCampos: formKey ? lectura.origen : null,
       source: isImport ? (method==="escanear"?"escaneo":"importado") : "nuevo",
       sourceFile: isImport ? (impMeta?.name||null) : null,
       password:null, sharedWith:[],
@@ -1087,9 +1108,32 @@ export default function Octavin(){
     }
 
     if(isImport && formKey){
+      // ── EL AVISO CUANDO NO SE PUDO LEER (19 nov) ───────────
+      //
+      // Lo pidió Ricardo así: «mandar un aviso que salga en pantalla
+      // que diga que no se puede leer el archivo por baja resolución
+      // o los datos no son legibles».
+      //
+      // Antes decía «No se reconocieron campos», que describe lo que
+      // le pasó al programa y no lo que le pasó a la persona. Ahora
+      // dice QUÉ archivo falló y POR QUÉ suele fallar, que es lo
+      // único que le permite hacer algo: volver a tomar la foto.
+      //
+      // Y no cierra la puerta: el comprobante existe, el original ya
+      // está pegado y puede escribir los datos él. Quedan marcados
+      // «a mano», que es el trato.
       notify(filled
-        ? `${filled} campo${filled===1?"":"s"} llenado${filled===1?"":"s"} automáticamente ✓`
-        : "No se reconocieron campos. Corrígelos mirando el original.", filled?"ok":"err");
+        ? (lectura.exacto
+            ? `${filled} campos leídos del XML, exactos ✓`
+            : `${filled} campo${filled===1?"":"s"} leído${filled===1?"":"s"} del archivo ✓ Revísalos contra el original.`)
+        : (impMeta?.kind === "ocr"
+            ? "No se pudieron leer los datos de esta imagen: suele ser por baja resolución, "
+              + "sombras o el papel torcido. Vuelve a tomar la foto, o escribe los datos tú: "
+              + "quedarán marcados como escritos a mano."
+            : "No se pudieron leer los datos de este archivo: no trae texto legible, "
+              + "o no tiene la forma de un comprobante. Si es una factura, sube el XML del CFDI. "
+              + "Si no, escribe los datos tú: quedarán marcados como escritos a mano."),
+        filled?"ok":"err");
     }
 
     closeCreate();
@@ -1169,9 +1213,39 @@ export default function Octavin(){
     const body = d.tplId
       ? serializeForm(d.tplId, fields)
       : cuerpoDelEditor();
-    const up = await aplicar(d,
-      { accion:"EDICIÓN", contenido:aTextoPlano(body).slice(0,200) },
+
+    // ── LO QUE SE CORRIGIÓ A MANO QUEDA DICHO (19 nov) ───────
+    //
+    // Ricardo: los datos los llena el archivo y «lo que puede hacer
+    // el usuario es corregir la información una vez llenada»; el
+    // original se queda pegado para que «la otra persona pueda
+    // corroborar los datos y que no fueron alterados».
+    //
+    // Corroborar exige saber QUÉ mirar. Un comprobante con doce
+    // campos iguales a su archivo y uno cambiado se lee igual que uno
+    // intacto, si nadie lo dice. Así que cada corrección mueve ese
+    // campo a «mano» y entra en la cadena con lo que decía antes.
+    //
+    // Y va en la cadena, no sólo en el documento, porque el documento
+    // se puede volver a editar y la cadena no. Si alguien corrige el
+    // total, lo firma, y luego lo deja como estaba, el documento no
+    // guarda rastro: el bloque sí.
+    const esComp = esComprobante(d);
+    const { origen: origenNuevo, corregidos } = esComp
+      ? marcarCorrecciones(d.fields || {}, fields, d.origenCampos || {})
+      : { origen: null, corregidos: [] };
+    const aMano = corregidos.filter((c) => c.era === "archivo");
+    const evento = aMano.length
+      ? { accion:"EDICIÓN",
+          contenido: `Corrección a mano de ${aMano.length} dato${aMano.length===1?"":"s"} `
+            + `que venía${aMano.length===1?"":"n"} del archivo original: `
+            + aMano.map((c) => `${etiquetaDe(d.tplId, c.k)} «${c.antes||"vacío"}» → «${c.ahora||"vacío"}»`).join("; "),
+          meta: { tipo:"correccion", campos: aMano.map((c) => ({ k:c.k, antes:c.antes, ahora:c.ahora })) } }
+      : { accion:"EDICIÓN", contenido:aTextoPlano(body).slice(0,200) };
+
+    const up = await aplicar(d, evento,
       { title, content:body, fields: d.tplId ? fields : null,
+        ...(esComp ? { origenCampos: origenNuevo } : {}),
         secciones: limpiarSecciones(secciones) },
       { autor:user, autorUid:uid });
     if(up){ setD(up); setContent(body); setDirty(false); setEdit(false); notify("Documento actualizado ✓"); }

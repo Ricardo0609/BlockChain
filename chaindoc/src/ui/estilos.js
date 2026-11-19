@@ -1486,6 +1486,14 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .fd-field.wide{flex-basis:100%}
 .fd-field:has(.area){align-items:flex-start}
 .fd-label{font-weight:600;color:var(--negro);white-space:nowrap;font-size:16px}
+/* «a mano»: este dato no salio del archivo adjunto.
+   Pequena y en ambar, no en rojo: no es un error ni una acusacion.
+   Corregir es algo que el producto INVITA a hacer; lo unico que hace
+   falta es que quien lea el comprobante sepa donde mirar el original.
+   Rojo diria «esto esta mal», y casi siempre no lo esta. */
+.fd-mano{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;
+  background:#fdf0d5;color:#8a5a00;font-size:11px;font-weight:600;
+  letter-spacing:.2px;vertical-align:middle;cursor:help}
 .fd-input{flex:1;min-width:0;border:1px solid var(--bordes);border-radius:9px;padding:9px 12px;
   font-family:var(--f-p);font-size:15px;color:var(--negro);background:#fff;outline:none;transition:border-color .15s}
 .fd-input:focus{border-color:var(--negro)}

@@ -10,10 +10,19 @@ import mammoth from "mammoth";
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 // ── Tipos aceptados ───────────────────────────────────────────
+// ← AÑADIDO .xml (19 nov). La pantalla de crear una factura lleva
+// semanas prometiendo «si traes el XML leemos los datos exactos», y
+// el XML no estaba en esta lista: el selector de archivos ni siquiera
+// lo ofrecia. La promesa no tenia por donde cumplirse.
+//
+// Van los dos tipos MIME a proposito. Windows reporta un .xml a veces
+// como text/xml y a veces como application/xml segun lo que haya
+// registrado la extension, y el segundo no empieza por "text/", que
+// es por donde pasaban antes los archivos de texto.
 export const ACCEPTED_DOCS =
-  ".pdf,.docx,.doc,.txt,.md,.rtf,application/pdf," +
+  ".pdf,.docx,.doc,.txt,.md,.rtf,.xml,application/pdf," +
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document," +
-  "text/plain,text/markdown";
+  "text/plain,text/markdown,text/xml,application/xml";
 
 export const ACCEPTED_IMAGES = "image/*";
 
@@ -178,10 +187,16 @@ export async function extractFromFile(file, onProgress) {
     type.startsWith("text/") ||
     name.endsWith(".txt") ||
     name.endsWith(".md") ||
-    name.endsWith(".rtf")
+    name.endsWith(".rtf") ||
+    // El XML de un CFDI es texto, y es el unico archivo del que los
+    // datos salen EXACTOS en vez de reconocidos. Se lee tal cual: no
+    // se le quitan saltos ni se normaliza, porque luego hay que
+    // encontrar sus atributos.
+    name.endsWith(".xml") ||
+    type === "application/xml"
   ) {
     return extractPlain(file, onProgress);
   }
 
-  throw new Error("Formato no soportado. Usa PDF, DOCX, TXT o una imagen.");
+  throw new Error("Formato no soportado. Usa PDF, DOCX, TXT, XML o una imagen.");
 }

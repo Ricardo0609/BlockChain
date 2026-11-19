@@ -359,6 +359,7 @@ export function renderDocumento(ctx){
         {d.kind==="expediente" ? renderExpediente(ctx)
         : d.tplId && FORMS[d.tplId] ? (
           <FormDoc formKey={d.tplId} fields={fields} editable={editMode}
+            origen={d.origenCampos}
             onChange={f=>{setFields(f);setDirty(true);}} />
         ) : editMode
           ? (

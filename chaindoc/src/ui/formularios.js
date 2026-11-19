@@ -58,3 +58,14 @@ export function serializeForm(formKey, fields){
   }
   return lines.join("\n");
 }
+
+/**
+ * La etiqueta que lee la persona, a partir del nombre interno.
+ *
+ * ← NUEVO (19 nov). Un bloque de la cadena que dijera «rfcEmisor
+ * «ABC» → «XYZ»» obliga a quien lo lee a traducir nombres de
+ * programador. Dice «RFC emisor», que es lo que pone en la pantalla
+ * donde se cambió.
+ */
+export const etiquetaDe = (formKey, k) =>
+  (FORMS[formKey] ? allFields(FORMS[formKey]) : []).find((f) => f.k === k)?.label || k;

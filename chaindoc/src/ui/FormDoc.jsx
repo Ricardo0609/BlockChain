@@ -7,7 +7,26 @@ import { errorDeRFC } from "../nucleo/rfc";
 // ← NUEVO: dibuja el esquema de FORMS como formulario.
 // En modo lectura muestra los valores; vacíos aparecen atenuados.
 
-export function FormDoc({ formKey, fields, onChange, editable }){
+// ── DE DÓNDE SALIÓ CADA DATO (19 nov) ─────────────────────────
+//
+// Regla de Ricardo: los campos los llena el archivo, el usuario sólo
+// corrige, y el original se queda pegado «para que la otra persona
+// pueda corroborar los datos y que no fueron alterados».
+//
+// Corroborar exige saber QUÉ mirar. Un comprobante con doce campos
+// iguales a su archivo y uno cambiado se lee igual que uno intacto.
+//
+// SÓLO SE MARCA LO ESCRITO A MANO, no lo que vino del archivo. Venir
+// del archivo es lo normal y lo esperado: marcarlo también sería
+// poner una etiqueta en cada línea, y doce avisos no avisan de nada.
+// Lo que destaca es la excepción.
+const marcaDeOrigen = (origen, k) => origen?.[k] === "mano" ? (
+  <span className="fd-mano" title="Este dato no salió del archivo: lo escribió una persona. Compáralo con el original adjunto.">
+    a mano
+  </span>
+) : null;
+
+export function FormDoc({ formKey, fields, onChange, editable, origen }){
   const s = FORMS[formKey];
   if(!s) return null;
   const set = (k,v)=>onChange({ ...fields, [k]:v });
@@ -30,7 +49,7 @@ export function FormDoc({ formKey, fields, onChange, editable }){
 
     if(f.type==="radio") return (
       <div key={f.k} className="fd-radio-wrap">
-        <span className="fd-label">{f.label}:</span>
+        <span className="fd-label">{f.label}:{marcaDeOrigen(origen, f.k)}</span>
         <div className="fd-radios">
           {f.options.map(o=>(
             <label key={o} className="fd-radio">
@@ -53,7 +72,7 @@ export function FormDoc({ formKey, fields, onChange, editable }){
 
     return (
       <div key={f.k} className={`fd-field ${f.w===2?"wide":""}`}>
-        <span className="fd-label">{f.label}:</span>
+        <span className="fd-label">{f.label}:{marcaDeOrigen(origen, f.k)}</span>
         {editable ? (
           f.type==="area"
             ? <textarea className="fd-input area" value={v} placeholder={f.placeholder||""}

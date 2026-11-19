@@ -69,6 +69,12 @@ export const CAMPOS_EDITABLES = [
   "destino",
   "fechaLimite", "montoTotal", "moneda", "partes", "resumen", "analisis",
   "convertidoDe", "source", "sourceFile",
+  // ← NUEVO (19 nov): de dónde salió cada campo de un comprobante,
+  // "archivo" o "mano". Va junto a `fields` porque sin él `fields` no
+  // se puede comprobar: quien lee el recibo ve números y no sabe
+  // cuáles venía en el papel adjunto y cuáles se escribieron encima.
+  // Ver nucleo/extraccion.js.
+  "origenCampos",
 ];
 
 const soloEditables = (cambios = {}) => {

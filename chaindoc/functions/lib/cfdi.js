@@ -66,6 +66,23 @@ const numero = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
+/**
+ * Un total de impuestos del nodo «Impuestos», o null si no está.
+ *
+ * Nace separado de `numero` a propósito: `numero` convierte lo que
+ * le den y un atributo ausente le llega como cadena vacía, que
+ * `Number` vuelve CERO. Para un importe cualquiera da igual; para
+ * esto no, porque una factura exenta y una con IVA de cero se
+ * cuentan distinto y la pantalla enseñaría «$0.00» como si lo
+ * hubiera leído.
+ */
+function impuesto(xml, nombre) {
+  const imp = atributosDe(xml, "Impuestos");
+  if (!imp) return null;
+  const v = at(imp, nombre);
+  return v === undefined || v === null || String(v).trim() === "" ? null : numero(v);
+}
+
 /** ¿Este texto es un CFDI? Barato, para decidir antes de intentar leerlo. */
 export function esCFDI(texto) {
   if (typeof texto !== "string" || texto.length < 40) return false;
@@ -120,6 +137,27 @@ export function leerCFDI(xml) {
     subtotal:    numero(at(c, "SubTotal")),
     descuento:   numero(at(c, "Descuento")) ?? 0,
     total:       numero(at(c, "Total")),
+    // ── LOS IMPUESTOS, LEÍDOS Y NO CALCULADOS (19 nov) ────────
+    //
+    // Hacen falta para llenar el campo «IVA» de la pantalla de
+    // factura desde el XML. La tentación era sacarlo restando
+    // —total menos subtotal— y está MAL: esa resta da el número
+    // correcto sólo si no hay retenciones. En cuanto la factura
+    // lleva una retención de ISR o de IVA (honorarios, fletes,
+    // arrendamiento: justo lo de las constructoras), la resta da de
+    // menos y nadie se entera, porque el número sigue pareciendo un
+    // IVA creíble.
+    //
+    // Así que se lee el nodo «Impuestos», que es donde el SAT lo
+    // pone. Si no está —una factura exenta, o a tasa cero—, queda
+    // `null` y el campo se deja vacío: mejor vacío que inventado.
+    // Cuidado con `numero` aquí: para un atributo que no existe
+    // devuelve CERO, no null —`Number("")` es 0—, y un cero es un
+    // dato: diría que esta factura trae IVA de $0.00 cuando lo que
+    // pasa es que no trae el nodo. Por eso se pregunta primero si
+    // está escrito.
+    trasladados: impuesto(xml, "TotalImpuestosTrasladados"),
+    retenidos:   impuesto(xml, "TotalImpuestosRetenidos"),
     moneda:      at(c, "Moneda") || "MXN",
     tipo:        at(c, "TipoDeComprobante"),
     metodoPago:  at(c, "MetodoPago"),
