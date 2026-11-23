@@ -174,6 +174,73 @@ export function notificacionesDe(docs, { uid, email, descartes } = {}) {
       }
     }
 
+    // ── TE RECHAZARON LO QUE SUBISTE ──────────────────────────
+    //
+    // ← NUEVO (23 nov). Pedido por Ricardo: «si el dueño rechaza
+    // algo, le aparece una notificación a quien lo adjuntó de que su
+    // archivo adjunto fue rechazado y los motivos, si el dueño puso
+    // un motivo».
+    //
+    // ES UN PENDIENTE, NO UN AVISO, y la diferencia es la regla de
+    // arriba de este archivo: un aviso se apaga al abrir el
+    // documento, y abrir el documento no arregla que te hayan
+    // rechazado una factura. Lo que lo arregla es volver a subir
+    // algo, y eso es justo lo que lo apaga: en cuanto el requisito
+    // deja de estar «pendiente», esto desaparece solo.
+    //
+    // Y el motivo va DENTRO del texto. Un «te rechazaron algo» que
+    // obliga a entrar a buscar por qué es media notificación.
+    for (const b of d.chain || []) {
+      if (b.action !== "EVIDENCIA" || b.meta?.tipo !== "rechazo") continue;
+      if (!b.meta.subidoPorUid || b.meta.subidoPorUid !== uid) continue;
+      const r = (d.requisitos || []).find((x) => x.id === b.meta.requisito);
+      // Ya entregó otra cosa: el problema está resuelto y recordarlo
+      // sería hacerle perder el tiempo a quien ya lo arregló.
+      if (r && r.estado !== "pendiente") continue;
+      mete({
+        clave: `rechazo:${d.id}:${b.meta.aid}`, tipo: "entrega-rechazada",
+        pendiente: true, grave: true, fecha: b.timestamp || null,
+        texto: `${b.author || d.owner || "El dueño"} no aceptó «${corto(b.meta.archivo || "lo que subiste", 30)}»`
+          + ` en «${corto(b.meta.reqTitulo || "un comprobante", 26)}» de «${titulo}»`
+          + `${b.meta.motivo ? `: ${b.meta.motivo}` : "."}`,
+      });
+    }
+
+    // ── ALGUIEN ADJUNTÓ ALGO A LO TUYO ────────────────────────
+    //
+    // ← NUEVO (23 nov). Pedido por Ricardo: «cada vez que adjunten
+    // algo, al dueño le aparece una notificación de que se adjuntó
+    // algo de tal persona, porque es importante que quede el
+    // registro de cuándo alguien adjuntó algo».
+    //
+    // El registro ya existía —el bloque está en la cadena desde
+    // siempre—; lo que faltaba era que se enterara sin ir a mirar.
+    //
+    // ES UN AVISO: se apaga al abrir el documento, porque entrar y
+    // ver lo que subieron es exactamente lo que se pedía que
+    // hiciera. Salvo que espere su visto bueno, y entonces lo dice:
+    // ahí sí hay algo que hacer, y quien lo hace es él.
+    if (soyDueno) {
+      for (const b of d.chain || []) {
+        if (b.action !== "EVIDENCIA" || b.meta?.tipo !== "alta") continue;
+        // Lo que subió él mismo no es noticia para él.
+        if (b.meta?.uid === uid) continue;
+        if (!sinVer(d, uid, b.timestamp)) continue;
+        const r = (d.requisitos || []).find((x) => x.id === b.meta.requisito);
+        const espera = r?.estado === "por-revisar";
+        mete({
+          clave: `adj:${d.id}:${b.meta.requisito}:${b.timestamp}`,
+          tipo: espera ? "por-revisar" : "entrega-nueva",
+          // Si espera su visto bueno hay algo que hacer, así que no
+          // se apaga por mirarlo: se apaga al revisarlo.
+          pendiente: espera, fecha: b.timestamp || null,
+          texto: `${b.author || "Alguien"} adjuntó «${corto(b.meta.archivo || "un archivo", 30)}»`
+            + ` en «${corto(r?.titulo || b.meta.requisito, 26)}» de «${titulo}»`
+            + `${espera ? ". Espera tu visto bueno." : "."}`,
+        });
+      }
+    }
+
     // Lo que le pasó a TU contrato. Sólo al dueño: al que lo rechazó
     // no hay que recordarle que lo rechazó.
     if (soyDueno && d.acuerdo?.pedidoEn) {
@@ -230,4 +297,14 @@ export const ICONO = {
   // de avisos al lado de un texto que empieza por «ya no pide» se
   // entiende. Ver `pruebas/iconos.test.js`.
   "requisito-quitado": "close",
+  // ← NUEVOS (23 nov). `attach_file` y `rule` están los dos en el
+  // subconjunto del index.html; lo comprobé antes de escribirlos,
+  // porque un icono que falta no se dibuja: se escribe su nombre en
+  // crudo en medio de la lista. Ver `pruebas/iconos.test.js`.
+  "entrega-nueva": "attach_file",
+  "por-revisar": "rule",
+  // El mismo que el contrato rechazado, y a propósito: para quien lo
+  // recibe es la misma noticia —dijeron que no a algo tuyo— y dos
+  // iconos distintos para eso serían dos cosas que aprender.
+  "entrega-rechazada": "block",
 };

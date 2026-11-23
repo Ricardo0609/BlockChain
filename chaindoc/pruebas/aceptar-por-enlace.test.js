@@ -410,7 +410,12 @@ describe("mandar a firmar entrega el enlace", () => {
 
   it("y el texto dice que primero se lee y se decide", () => {
     // El mismo modal sirve para los dos enlaces y no dicen lo mismo.
-    const m = leer("src/modales/Compartir.jsx");
+    // ← REAPUNTADA (23 nov): esto vive ahora en
+    // CompartirExpediente.jsx. Compartir un expediente y compartir un
+    // documento de texto se separaron en dos archivos, a peticion de
+    // Ricardo. Lo que vigila esta prueba no cambia; cambia donde
+    // mirar.
+    const m = leer("src/modales/CompartirExpediente.jsx");
     expect(m).toMatch(/enlaceNuevo\.paraFirmar/);
     expect(m).toMatch(/aceptarlo o no aceptarlo/);
     expect(m).toMatch(/Hasta que lo acepte no verá lo que hay que entregar/);
@@ -435,7 +440,8 @@ describe("mandar a firmar entrega el enlace", () => {
 // Lo que si se queda de aquella tanda: el enlace que sale al
 // mandarlo, y el texto corregido de la segunda opcion.
 describe("compartir tiene DOS opciones, no tres", () => {
-  const m = () => leer("src/modales/Compartir.jsx");
+  // ← REAPUNTADA (23 nov): a CompartirExpediente.jsx. Ver arriba.
+  const m = () => leer("src/modales/CompartirExpediente.jsx");
 
   it("la tercera no esta", () => {
     expect(m()).not.toMatch(/Mandárselo para que lo firme/);
@@ -450,7 +456,10 @@ describe("compartir tiene DOS opciones, no tres", () => {
     // intentaria mandar a firmar por la via del acuerdo, que un
     // documento de texto no tiene.
     expect(m()).toMatch(
-      /const mandaAFirmar = esExpediente && modo==="completo" && rol==="involucrado"/);
+      // ← ACTUALIZADA (23 nov): sin el `esExpediente &&`. Este archivo
+      // ya SOLO dibuja expedientes, asi que preguntarlo era preguntar
+      // algo que siempre es verdad.
+      /const mandaAFirmar = modo==="completo" && rol==="involucrado"/);
   });
 
   it("y el enlace sin cuenta sigue existiendo, para quien no la tiene", () => {
@@ -490,13 +499,23 @@ describe("lo que se promete al compartir es verdad", () => {
     // le prometia a quien comparte una privacidad que el producto ya
     // no da. Un texto obsoleto en una pantalla de permisos no es un
     // detalle: es una promesa falsa.
-    const m = leer("src/modales/Compartir.jsx");
+    // ← REAPUNTADA (23 nov): esto vive ahora en
+    // CompartirExpediente.jsx. Compartir un expediente y compartir un
+    // documento de texto se separaron en dos archivos, a peticion de
+    // Ricardo. Lo que vigila esta prueba no cambia; cambia donde
+    // mirar.
+    const m = leer("src/modales/CompartirExpediente.jsx");
     expect(m).not.toMatch(/No ve el contenido,\s*\n?\s*ni los montos/);
     expect(m).toMatch(/Lee el contrato y sube lo que le toca/);
   });
 
   it("y dice lo que si sigue sin ver", () => {
-    const m = leer("src/modales/Compartir.jsx");
+    // ← REAPUNTADA (23 nov): esto vive ahora en
+    // CompartirExpediente.jsx. Compartir un expediente y compartir un
+    // documento de texto se separaron en dos archivos, a peticion de
+    // Ricardo. Lo que vigila esta prueba no cambia; cambia donde
+    // mirar.
+    const m = leer("src/modales/CompartirExpediente.jsx");
     expect(m).toMatch(/No ve la historia\s*\n?\s*del documento ni lo que subieron los demás/);
     expect(m).toMatch(/No firma\s*\n?\s*nada/);
   });

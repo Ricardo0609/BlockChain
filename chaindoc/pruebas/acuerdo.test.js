@@ -387,8 +387,23 @@ describe("que acciones gobierna el estado", () => {
   // estar gobernada por el estado porque los dos sitios donde NO se
   // puede hacer son estados: «en firma» -la otra parte esta leyendo
   // esa misma lista para decidir- y «cerrado».
-  it("manda sobre editar, subir, vincular, retirar y pedir-mas", () => {
-    expect(GOBERNADAS).toEqual(["editar", "subir", "vincular", "retirar", "pedir-mas"]);
+  it("manda sobre editar, subir, vincular, retirar, pedir-mas y revisar", () => {
+    // ← ACTUALIZADA (23 nov): entra «revisar», dar o negar el visto
+    // bueno a un comprobante. Esta en la lista porque los sitios
+    // donde NO se puede son estados: un contrato cerrado no admite
+    // ya ningun cambio, y en uno que todavia no aceptan no hay nada
+    // entregado que mirar.
+    expect(GOBERNADAS).toEqual(["editar", "subir", "vincular", "retirar", "pedir-mas", "revisar"]);
+  });
+
+  it("y revisar se puede exactamente donde se puede subir", () => {
+    // No es una coincidencia que convenga vigilar: se revisa lo que
+    // se entrega, asi que el dia que uno de los dos cambie de
+    // estados sin el otro, habria entregas imposibles de aprobar o
+    // aprobaciones de cosas que nadie pudo entregar.
+    for (const e of ESTADOS) {
+      expect(permiteEstado(e, "revisar"), e).toBe(permiteEstado(e, "subir"));
+    }
   });
 
   it("añadir un requisito se puede en casi todos, pero no en esos dos", () => {

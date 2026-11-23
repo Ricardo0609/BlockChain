@@ -541,8 +541,13 @@ describe("la numeracion va seguida", () => {
   it("y la pantalla usa eso, no el indice del array", () => {
     const s = codigo("src/pantallas/Expediente.jsx");
     expect(s).toMatch(/const numero = numeroDeCada\(dv\.requisitos, faseSelOk\);/);
-    expect(s).toMatch(/\{listo \? "✓" : numero\[r\.id\]\}/);
+    // ← ACTUALIZADA (23 nov): delante entro un tercer caso, el de
+    // «espera tu visto bueno». Lo que vigila esta prueba no cambia:
+    // que el numero salga de `numero[r.id]` y no del indice del
+    // array, que es lo que se descuadraba al quitar un requisito.
+    expect(s).toMatch(/listo \? "✓" : numero\[r\.id\]/);
     expect(s).not.toMatch(/\{listo \? "✓" : i\+1\}/);
+    expect(s).toMatch(/esperaVisto\(r\) \? <Icon n="rule"/);
   });
 
   it("sin lista, sin numeros, sin reventar", () => {

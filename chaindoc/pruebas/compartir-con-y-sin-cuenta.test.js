@@ -109,7 +109,8 @@ describe("la pantalla de copiar el link", () => {
     // correo el servidor no busco a nadie, asi que decir «esa persona
     // no tiene cuenta» seria inventarselo.
     expect(s).toMatch(/sinCuenta: Boolean\(correo\) && r\.tieneCuenta === false/);
-    expect(codigo("src/modales/Compartir.jsx"))
+    // ← REAPUNTADA (23 nov): a CompartirExpediente.jsx.
+    expect(codigo("src/modales/CompartirExpediente.jsx"))
       .toMatch(/\{enlaceNuevo\.sinCuenta && <><b>Esa persona no tiene cuenta/);
   });
 
@@ -130,13 +131,16 @@ describe("la pantalla de copiar el link", () => {
 // 3. SIN CUENTA EN LOS DOS MODOS
 // ══════════════════════════════════════════════════════════════
 describe("sin cuenta cabe en los dos modos", () => {
-  const m = () => codigo("src/modales/Compartir.jsx");
+  // ← REAPUNTADA (23 nov): a CompartirExpediente.jsx.
+  const m = () => codigo("src/modales/CompartirExpediente.jsx");
 
   it("siempre en «solo pedirle comprobantes»", () => {
     // Ese enlace deja subir archivos a una lista de pendientes y
     // nada mas: si se filtra, lo peor que permite es un PDF de mas
     // que el dueño ve y retira.
-    expect(m()).toMatch(/const sinCuentaAqui = esExpediente && \(modo!=="completo" \|\| mandaAFirmar\);/);
+    // ← ACTUALIZADA (23 nov): sin el `esExpediente &&`, que en este
+    // archivo ya es siempre verdad.
+    expect(m()).toMatch(/const sinCuentaAqui = modo!=="completo" \|\| mandaAFirmar;/);
   });
 
   it("en «acceso completo», SOLO para la otra parte", () => {
@@ -154,7 +158,12 @@ describe("sin cuenta cabe en los dos modos", () => {
     // Un documento de texto ya se compartia asi desde el 15 de nov.
     // Que las tres pantallas de compartir se lean igual no es
     // estetica: es que quien aprendio una no tenga que aprender otra.
-    const s = m();
+    // ← ACTUALIZADA (23 nov): se cuentan en LOS DOS archivos. Antes
+    // los dos caminos estaban en uno solo; al separarlos, cada
+    // pantalla se quedo con el suyo. Lo que se vigila es lo mismo, y
+    // asi es mas fuerte: que las dos sigan teniendo esa forma, cada
+    // una por su cuenta.
+    const s = m() + codigo("src/modales/Compartir.jsx");
     const oes = [...s.matchAll(/<div className="sign-or"><span>O<\/span><\/div>/g)];
     expect(oes.length, "una O en texto y otra en expediente").toBe(2);
     const botones = [...s.matchAll(/Mandar a alguien sin cuenta/g)];
@@ -232,11 +241,15 @@ describe("sin cuenta cabe en los dos modos", () => {
 // tres opciones y ahora hay dos no se lee como «esto ya no se
 // puede», se lee como un fallo.
 describe("el rol Involucrado en un expediente", () => {
-  const m = () => codigo("src/modales/Compartir.jsx");
+  // ← REAPUNTADA (23 nov): a CompartirExpediente.jsx.
+  const m = () => codigo("src/modales/CompartirExpediente.jsx");
 
   it("nunca se quita de la lista", () => {
     const s = m();
-    expect(s).toMatch(/const rolesCompletos = esExpediente \? ROLES_OFRECIDOS : COMPLETOS;/);
+    // ← ACTUALIZADA (23 nov): el ternario se fue con la separacion.
+    // Un expediente siempre ofrece los seis papeles; los dos de un
+    // documento de texto viven en el otro archivo.
+    expect(s).toMatch(/const rolesCompletos = ROLES_OFRECIDOS;/);
     // La version de antes lo filtraba fuera.
     expect(s).not.toMatch(/ROLES_OFRECIDOS\.filter\(r=>r!=="involucrado"\)/);
   });

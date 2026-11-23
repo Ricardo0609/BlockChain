@@ -34,6 +34,7 @@ import { fmtFecha, fmtFull, fmtShort } from "../nucleo/formato";
 import { SelloFiscal } from "../ui/SelloFiscal";
 import { CampoEnlace } from "../ui/CampoEnlace";
 import { esEnlace } from "../nucleo/enlaces";
+import { pideVisto, esperaVisto, vivos } from "../nucleo/entregas";
 
 export function renderExpediente(ctx){
   const {
@@ -43,6 +44,7 @@ export function renderExpediente(ctx){
     setFilesOpen, setFocoDup, setMIn, setModal, setMontoReq, setPass,
     uid, verifVin, vinculos,
     puedo, puedoSubirA, verificarFiscal, verificandoFiscal, setEnlaceNuevo,
+    revisando, aprobarEntrega, pedirRechazo,
     setShareModo, setShareTodo, setShareReqs, setShareRol, anclajesPorHash,
     // ← NUEVO (21 oct): la pestaña de quién más entra.
     accesos,
@@ -503,12 +505,25 @@ export function renderExpediente(ctx){
       const cierraFase = cierraLaFase(ultimoDeFase, r, i);
       const lista = archivosDe(r);
       const suma  = comprobadoDe(r);
-      const listo = lista.length>0;
+      // ← CAMBIADO (23 nov): «listo» no es «tiene algo encima». Lo vi
+      // en pantalla: un requisito cuyo ÚNICO archivo había sido
+      // rechazado salía con la palomita verde, o sea diciendo que
+      // estaba cumplido justo después de decir que no se aceptó.
+      // Un archivo rechazado es un intento, y uno que espera visto
+      // bueno está mandado, no entregado.
+      const listo = vivos(lista).length>0 && !esperaVisto(r);
       const faseR = fases.find(f=>f.id===r.fase);          // ← NUEVO
       return (
       <Fragment key={r.id}>
-      <div className={`exp-item ${listo?"cumplido":"pendiente"}`}>
-        <div className="exp-check">{listo ? "✓" : numero[r.id]}</div>
+      {/* ← CAMBIADO (23 nov): tres estados, no dos. Un requisito
+          entregado y esperando visto bueno no es «cumplido» -no lo
+          está- ni «pendiente» -ya entregaron-. Pintarlo como
+          cualquiera de los dos miente a alguien: al dueño le diría
+          que no hay nada que hacer, o a quien subió que no subió. */}
+      <div className={`exp-item ${esperaVisto(r)?"revisar":listo?"cumplido":"pendiente"}`}>
+        <div className="exp-check">
+          {esperaVisto(r) ? <Icon n="rule" size={18}/> : listo ? "✓" : numero[r.id]}
+        </div>
         <div className="exp-item-b">
           <div className="exp-item-t">{r.titulo}</div>
           <div className="exp-item-d">{r.descripcion}</div>
@@ -518,6 +533,8 @@ export function renderExpediente(ctx){
             {r.fechaLimite && <span className="tag">{r.fechaLimite}</span>}
             {!r.obligatorio && <span className="tag">opcional</span>}
             {lista.length>1 && <span className="tag">{lista.length} comprobantes</span>}
+            {esperaVisto(r) && <span className="tag t-revisar">espera tu visto bueno</span>}
+            {pideVisto(r) && !listo && <span className="tag">necesita visto bueno</span>}
             {/* ← NUEVO */}
             {faseR && <span className={`tag t-fase ${faseR.vencida && !listo ? "mal":""}`}>
               Fase {faseR.n} · {faseR.titulo}</span>}
@@ -685,6 +702,46 @@ export function renderExpediente(ctx){
               {(!puedo || puedo("retirar")) && (
                 <button className="btn btn-tertiary"
                   onClick={()=>removeEvidence(r.id, aid)}>Retirar</button>
+              )}
+
+              {/* ── EL VISTO BUENO (23 nov) ──────────────────────
+                  Sólo aparece donde hace falta: en un requisito que
+                  su dueño marcó, mirándolo su dueño, y sobre un
+                  archivo que todavía no ha juzgado. En todo lo demás
+                  no hay nada que decidir y un par de botones ahí
+                  sería ruido en cada fila. */}
+              {pideVisto(r) && (!puedo || puedo("revisar")) && !a.visto && !a.rechazo && (
+                <div className="vb-fila">
+                  <button className="btn btn-primary vb-si"
+                    disabled={revisando===aid}
+                    onClick={()=>aprobarEntrega(r.id, aid)}>
+                    {revisando===aid ? "Guardando…" : "Dar visto bueno"}
+                  </button>
+                  <button className="btn btn-secondary"
+                    disabled={revisando===aid}
+                    onClick={()=>pedirRechazo(r.id, aid, a.nombre)}>
+                    Rechazar
+                  </button>
+                </div>
+              )}
+
+              {/* Lo ya juzgado se dice, no se borra. Quien subió el
+                  archivo necesita ver QUÉ le rechazaron para poder
+                  mandar otra cosa; un hueco no explica nada. */}
+              {a.visto && (
+                <div className="vb-sello ok">
+                  <Icon n="task_alt" size={16}/>
+                  <span>Visto bueno de {a.visto.por || "el dueño"} · {fmtFull(a.visto.fecha)}</span>
+                </div>
+              )}
+              {a.rechazo && (
+                <div className="vb-sello no">
+                  <Icon n="block" size={16}/>
+                  <span>
+                    No aceptado por {a.rechazo.por || "el dueño"} · {fmtFull(a.rechazo.fecha)}
+                    {a.rechazo.motivo && <><br/><b>{a.rechazo.motivo}</b></>}
+                  </span>
+                </div>
               )}
             </div>
             );

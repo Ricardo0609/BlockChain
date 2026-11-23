@@ -14,6 +14,7 @@ import { enServidor } from "./nucleo/datos";
 import { llamar, errorBackend } from "./nucleo/backend";
 import { esEnlace } from "./nucleo/enlaces";
 import { firmaronLasDos, todoEntregado } from "./nucleo/acuerdo";
+import { esperaVisto, vivos } from "./nucleo/entregas";
 
 const ENV = (typeof import.meta !== "undefined" && import.meta.env) || {};
 const API_KEY = ENV.VITE_GEMINI_API_KEY || "";
@@ -679,7 +680,11 @@ export function estadoFases(exp) {
   return fases.map((f, i) => {
     const reqs   = (exp.requisitos || []).filter((r) => r.fase === f.id);
     const oblig  = reqs.filter((r) => r.obligatorio !== false);
-    const hechos = oblig.filter((r) => archivosDe(r).length > 0);
+    // ← CAMBIADO (23 nov): entregado no es «tiene un archivo». Uno
+    // que espera el visto bueno de su dueño está mandado, no
+    // entregado, y uno rechazado es un intento. Si contaran, una fase
+    // se daría por completa con comprobantes que nadie aceptó.
+    const hechos = oblig.filter(entregadoDeVerdad);
     const completa = oblig.length > 0 && hechos.length === oblig.length;
 
     // Se cumplió cuando el ÚLTIMO requisito recibió su PRIMER comprobante.
@@ -715,6 +720,14 @@ export function faseActual(exp) {
 }
 
 /** La fase incumplida con la fecha más apremiante (las vencidas primero). */
+/**
+ * Entregado de verdad: con algún comprobante vivo y sin esperar
+ * visto bueno. La misma regla que `todoEntregado` en acuerdo.js,
+ * dicha aquí porque esto cuenta y aquello decide.
+ */
+const entregadoDeVerdad = (r) =>
+  vivos(archivosDe(r)).length > 0 && !esperaVisto(r);
+
 export function faseCritica(exp) {
   const pendientes = estadoFases(exp).filter((f) => !f.completa && f.dias != null);
   if (!pendientes.length) return null;
@@ -724,8 +737,11 @@ export function faseCritica(exp) {
 export function expedienteStatus(exp) {
   const reqs = exp?.requisitos || [];
   const obligatorios = reqs.filter((r) => r.obligatorio);
-  // ← ACTUALIZADO: se deriva de los comprobantes, no del campo guardado
-  const cumplidos = obligatorios.filter((r) => archivosDe(r).length > 0).length;
+  // ← ACTUALIZADO: se deriva de los comprobantes, no del campo
+  // guardado. ← Y DESDE EL 23 nov descuenta los que esperan visto
+  // bueno y los rechazados: la barra decía «todo entregado» con una
+  // factura que su dueño no había mirado.
+  const cumplidos = obligatorios.filter(entregadoDeVerdad).length;
   const total = obligatorios.length;
 
   // ← NUEVO (27 oct): firmar es el último paso, y cuenta como paso.

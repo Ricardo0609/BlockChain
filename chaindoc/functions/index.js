@@ -23,6 +23,7 @@ import { armarBloqueV2, verificarCadena, sha256Bytes } from "./lib/bloques.js";
 import {
   agregarArchivo, quitarArchivo, cerrarSolicitudes,
 } from "./lib/expediente.js";
+import { pideVisto, revisarArchivo } from "./lib/entregas.js";
 import { normalizarEnlace, nombreDeEnlace, textoFirmado } from "./lib/enlaces.js";
 import { claveDeSello, semillaDeOrden, VERSION_SELLO } from "./lib/sello.js";
 import {
@@ -625,6 +626,36 @@ function exigirCorreoVerificado(req){
     "Confirma tu correo antes de invitar a alguien. Te enviamos un enlace al registrarte; puedes pedir otro desde tu perfil.");
 }
 
+/**
+ * Nadie reparte sobre sí mismo.
+ *
+ * ── POR QUÉ, Y QUÉ TAPA (23 nov) ─────────────────────────────
+ *
+ * Lo pidió Ricardo del Auditor: «el auditor sólo puede cambiar el de
+ * las otras personas, no el suyo ni el del dueño o creador del
+ * expediente».
+ *
+ * El del dueño ya estaba cerrado —`ponerAcceso` se niega a darle un
+ * papel a quien ya es dueño, y `quitarAcceso` no lo encuentra en la
+ * lista porque el dueño no vive ahí—. Lo que faltaba era lo primero:
+ * quien puede repartir accesos podía dárselos A SÍ MISMO.
+ *
+ * Y eso es una escalera, no un detalle: un Auditor se ponía de
+ * Involucrado y con ello ganaba «firmar». El Auditor existe justo
+ * para mirar sin comprometerse, así que ese camino vacía el rol.
+ *
+ * SE APLICA A TODOS, NO SÓLO AL AUDITOR. El Editor tiene «compartir»
+ * desde hace semanas y la misma escalera; arreglar uno y dejar el
+ * otro sería arreglar el que se vio. El dueño no se entera: no tiene
+ * papel que cambiarse.
+ */
+function exigirQueNoSeaUnoMismo(email, correo, accion){
+  if(String(email || "").toLowerCase() !== String(correo || "").toLowerCase()) return;
+  throw new HttpsError("permission-denied", accion === "quitar"
+    ? "No puedes quitarte el acceso desde aquí. Usa «Dejar de ver este documento»."
+    : "No puedes cambiarte el papel a ti mismo. Pídeselo a quien sea dueño del documento.");
+}
+
 /** Escribe el acceso y devuelve lo que había antes, para el bloque. */
 async function ponerAcceso(opId, correo, rol){
   const refOp = db.doc(`${OPS}/${opId}`);
@@ -671,6 +702,7 @@ export const compartirOperacion = onCall(OPCIONES, async (req) => {
   const op = (await db.doc(`${OPS}/${opId}`).get()).data();
   if(!op) throw new HttpsError("not-found", "La operación no existe.");
   exigir(op, uid, email, "compartir");
+  exigirQueNoSeaUnoMismo(email, correo, "cambiar");
 
   const { antes } = await ponerAcceso(opId, correo, rol);
   const autor = await nombreDe(uid, email);
@@ -700,6 +732,11 @@ export const quitarAcceso = onCall(OPCIONES, async (req) => {
   const op = (await refOp.get()).data();
   if(!op) throw new HttpsError("not-found", "La operación no existe.");
   exigir(op, uid, email, "compartir");
+  // Quitarse a uno mismo no es peligroso -salir es salir- pero ya
+  // existe «Dejar de ver este documento», que es donde la gente lo
+  // busca. Dos puertas al mismo cuarto es el error que este producto
+  // ya ha cometido tres veces.
+  exigirQueNoSeaUnoMismo(email, correo, "quitar");
 
   const antes = rolDe(op, null, correo);
   if(!antes) return { doc: await leerOperacion(opId) };
@@ -950,6 +987,10 @@ export const registrarArchivo = onCall(OPCIONES, async (req) => {
   const nuevo = {
     aid: id, path: id, ruta, nombre: nombre || "archivo",
     tipo, tam, hash, subidoEn: new Date().toISOString(), subidoPor: autor,
+    // ← NUEVO (23 nov): el uid, no sólo el nombre. Hace falta para
+    // avisarle a quien subió esto si se lo rechazan, y un nombre no
+    // identifica una cuenta: hay dos Juan Pérez.
+    subidoPorUid: uid,
     ...(fiscal ? { fiscal } : {}),
   };
 
@@ -1017,7 +1058,7 @@ export const registrarEnlace = onCall(OPCIONES, async (req) => {
     aid: id, origen: "enlace",
     url: revisado.url, host: revisado.host,
     nombre: nombreDeEnlace(nombre, revisado.host),
-    hash, subidoEn: new Date().toISOString(), subidoPor: autor,
+    hash, subidoEn: new Date().toISOString(), subidoPor: autor, subidoPorUid: uid,
   };
 
   const { requisitos, encontrado } = agregarArchivo(actual.requisitos || [], reqId, nuevo);
@@ -1071,6 +1112,10 @@ export const entregarEnlacePorInvitacion = onCall(OPCIONES, async (req) => {
     aid: id, origen: "enlace",
     url: revisado.url, host: revisado.host,
     nombre: nombreDeEnlace(nombre, revisado.host),
+    // Sin `subidoPorUid` a propósito: quien entrega por un enlace no
+    // tiene cuenta, así que no hay a quién avisarle dentro de la
+    // aplicación si se le rechaza. Lo que sí queda es su correo, en
+    // `invitacionA`, para el día que los avisos salgan por correo.
     hash, subidoEn: new Date().toISOString(), subidoPor: autor,
     porInvitacion: true, invitacionA: registro.correo || null,
   };
@@ -1101,6 +1146,93 @@ export const entregarEnlacePorInvitacion = onCall(OPCIONES, async (req) => {
 });
 
 // ── Retirar un comprobante ────────────────────────────────────
+/**
+ * Dar o negar el visto bueno a un comprobante.
+ *
+ * ── POR QUÉ EXISTE (23 nov) ──────────────────────────────────
+ *
+ * Hasta hoy subir un archivo daba el requisito por cumplido en el
+ * acto y nadie miraba nada. Lo pidió Ricardo:
+ *
+ *   «Que se aprueben las cosas importantes o decisivas para cada
+ *    fase, si es por fases. Y si el dueño rechaza algo, le aparece
+ *    una notificación a quien lo adjuntó de que su archivo adjunto
+ *    fue rechazado y los motivos, si el dueño puso un motivo.»
+ *
+ * RECHAZAR NO BORRA NADA, y es lo que hace que esto sirva de algo.
+ * El archivo se queda donde está, marcado, para que quien lo subió
+ * vea QUÉ le rechazaron y pueda mandar otra cosa. Borrarlo dejaría a
+ * esa persona mirando un hueco, sin saber qué estaba mal.
+ *
+ * El motivo es OPCIONAL —«los motivos, SI el dueño puso un motivo»—
+ * y por eso no se exige aquí. Pero si lo hay, viaja hasta el aviso.
+ */
+export const revisarEntrega = onCall(OPCIONES, async (req) => {
+  const { uid, email } = quien(req);
+  const { opId, reqId, aid } = req.data || {};
+  if(!opId || !reqId || !aid) throw new HttpsError("invalid-argument", "Faltan datos.");
+  // Booleano estricto: lo que no sea exactamente `true` es un
+  // rechazo. Al revés -«lo que no sea false aprueba»- un fallo del
+  // navegador aprobaría entregas solo.
+  const ok = req.data?.ok === true;
+  const motivo = String(req.data?.motivo || "").trim().slice(0, 400) || null;
+
+  const actual = await leerOperacion(opId);
+  if(!actual) throw new HttpsError("not-found", "El expediente no existe.");
+  if(actual.kind !== "expediente"){
+    throw new HttpsError("failed-precondition",
+      "Sólo un expediente lleva comprobantes que revisar.");
+  }
+
+  // Rol y estado, en la única puerta que hay.
+  exigir(actual, uid, email, "revisar");
+  // Y además el dueño, igual que al añadir un requisito: aprobar lo
+  // que entrega la otra parte no es algo que la otra parte pueda
+  // hacerse a sí misma. El rol ya lo impide; esto lo vuelve a
+  // comprobar por `ownerUid`, que es más estricto.
+  if(actual.ownerUid !== uid){
+    throw new HttpsError("permission-denied",
+      "Sólo quien creó este expediente puede dar el visto bueno.");
+  }
+
+  const req0 = (actual.requisitos || []).find((r) => r.id === reqId);
+  if(!req0) throw new HttpsError("not-found", "Ese requisito no existe en el expediente.");
+  if(!pideVisto(req0)){
+    throw new HttpsError("failed-precondition",
+      "Este comprobante no necesita visto bueno: quedó entregado al subirlo.");
+  }
+
+  const autor = await nombreDe(uid, email);
+  const fecha = new Date().toISOString();
+  const res = revisarArchivo(actual.requisitos || [], reqId, aid,
+    { ok, motivo, por: autor, porUid: uid, fecha });
+  if(!res) throw new HttpsError("not-found", "Ese comprobante ya no está en el requisito.");
+
+  const quien0 = res.archivo?.subidoPor || "quien lo subió";
+  const { doc } = await asentar({
+    opId, uid, email, autor, permiso: "revisar",
+    evento: {
+      accion: "EVIDENCIA",
+      contenido: ok
+        ? `Visto bueno a «${res.archivo.nombre || aid}» en «${req0.titulo || reqId}»`
+        : `Rechazado «${res.archivo.nombre || aid}» en «${req0.titulo || reqId}»`
+          + (motivo ? `: ${motivo}` : ""),
+      meta: {
+        tipo: ok ? "visto-bueno" : "rechazo",
+        requisito: reqId, reqTitulo: req0.titulo || null,
+        aid, archivo: res.archivo.nombre || null,
+        motivo: ok ? null : motivo,
+        // Para saber a quién avisar sin tener que rebuscar en la
+        // cadena quién subió este archivo.
+        subidoPor: quien0, subidoPorUid: res.archivo?.subidoPorUid || null,
+      },
+    },
+    cambios: { requisitos: res.requisitos },
+  });
+
+  return { doc, estado: res.requisito.estado };
+});
+
 export const quitarArchivoDeRequisito = onCall(OPCIONES, async (req) => {
   const { uid, email } = quien(req);
   const { opId, reqId, aid } = req.data || {};
@@ -1657,6 +1789,11 @@ export const anadirRequisito = onCall(OPCIONES, async (req) => {
   const { uid, email } = quien(req);
   const { opId, titulo, descripcion, fase } = req.data || {};
   if(!opId) throw new HttpsError("invalid-argument", "Falta el expediente.");
+  // ← NUEVO (23 nov): «necesita mi visto bueno». Booleano estricto y
+  // no lo que llegue: un string, un 1 o un objeto son truthy, y
+  // guardar el valor tal cual dejaría un `requiereVisto: "no"`
+  // contando como sí.
+  const requiereVisto = req.data?.requiereVisto === true;
 
   const op = await leerOperacion(opId);
   if(!op) throw new HttpsError("not-found", "El expediente no existe.");
@@ -1716,6 +1853,10 @@ export const anadirRequisito = onCall(OPCIONES, async (req) => {
     // un pago. No se pregunta porque Ricardo pidió dos campos, no
     // tres, y adivinar mal un tipo no rompe nada.
     tipo: "documento", fase: faseId, obligatorio: true, archivos: [],
+    // Sólo se escribe cuando es true: un `false` en cada requisito
+    // ensucia los expedientes viejos al compararlos, y `pideVisto`
+    // ya trata lo ausente como «no».
+    ...(requiereVisto ? { requiereVisto: true } : {}),
     anadidoEn: new Date().toISOString(), anadidoPor: autor, anadidoPorUid: uid,
   };
 
@@ -1723,11 +1864,13 @@ export const anadirRequisito = onCall(OPCIONES, async (req) => {
     opId, uid, email, autor, permiso: "pedir-mas",
     evento: {
       accion: "SOLICITUD",
-      contenido: laFase
+      contenido: (laFase
         ? `Requisito añadido en «${laFase.nombre || laFase.id}»: ${t}`
-        : `Requisito añadido: ${t}`,
+        : `Requisito añadido: ${t}`)
+        + (requiereVisto ? " (necesita visto bueno)" : ""),
       meta: { tipo: "requisito-extra", reqId: nuevo.id, titulo: t,
-              fase: faseId, faseNombre: laFase?.nombre || null },
+              fase: faseId, faseNombre: laFase?.nombre || null,
+              requiereVisto },
     },
     cambios: { requisitos: [...previos, nuevo] },
   });

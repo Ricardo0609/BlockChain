@@ -22,6 +22,8 @@ import { Icon } from "../ui/iconos";
 
 export function modalRequisito(ctx){
   const { modal, setModal, d, reqTitulo, setReqTitulo, reqDesc, setReqDesc,
+          reqVisto, setReqVisto,
+          revisando, confirmarRechazo, rechMotivoAdj, setRechMotivoAdj,
           reqBusy, reqErr, guardarRequisito, confirmarQuitarRequisito } = ctx;
 
   // ── QUITARLO: LA CONFIRMACION (17 nov) ─────────────────────
@@ -58,6 +60,61 @@ export function modalRequisito(ctx){
             <button className={`btn btn-warning ${reqBusy?"esperando":""}`}
               disabled={reqBusy} onClick={confirmarQuitarRequisito}>
               {reqBusy ? "Quitando…" : "Quitar"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── RECHAZAR UN ADJUNTO: EL MOTIVO (23 nov) ────────────────
+  //
+  // Lo pidió Ricardo: «si el dueño rechaza algo, le aparece una
+  // notificación a quien lo adjuntó de que su archivo adjunto fue
+  // rechazado y los motivos, si el dueño puso un motivo».
+  //
+  // El motivo es OPCIONAL -eso del «si»- y aun así se pregunta. No
+  // es lo mismo: un no sin explicación obliga a la otra persona a
+  // adivinar qué estaba mal, y lo más probable es que vuelva a subir
+  // lo mismo. Preguntarlo sin exigirlo es lo que hace que casi
+  // siempre lo escriban.
+  //
+  // Y se dice lo que NO pasa: el archivo no se borra. Es lo que
+  // despeja el miedo a pulsar y lo que hace que quien lo subió pueda
+  // ver qué le rechazaron.
+  if(modal?.t === "rechazar-adjunto"){
+    const cerrar = ()=>{ if(!revisando) setModal(null); };
+    return (
+      <div className="ov" onClick={cerrar}>
+        <div className="modal" onClick={e=>e.stopPropagation()} role="alertdialog">
+          <h2>¿Rechazar este comprobante?</h2>
+          <p className="sub">
+            No se acepta <b>{modal.nombre || "este archivo"}</b>. A quien lo subió le
+            llega un aviso y el requisito vuelve a quedar pendiente.
+          </p>
+
+          <label className="rec-lbl" htmlFor="rech-m">
+            ¿Por qué? <span className="rec-opt">(opcional, pero ayuda)</span>
+          </label>
+          <textarea id="rech-m" className="inp req-area" value={rechMotivoAdj || ""}
+            disabled={Boolean(revisando)} maxLength={400} rows={3} autoFocus
+            placeholder="Ej.: La factura es de otro mes, o la foto no deja ver el folio."
+            onChange={e=>setRechMotivoAdj(e.target.value)}/>
+          <p className="aviso-detalle">
+            Lo que escribas aquí se lo mandamos tal cual. Si lo dejas en blanco sólo
+            verá que no lo aceptaste, y tendrá que adivinar qué cambiar.
+          </p>
+          <p className="aviso-detalle">
+            El archivo <b>no se borra</b>: se queda marcado para que vea qué rechazaste.
+          </p>
+
+          <div className="modal-row">
+            <button className="btn btn-secondary" disabled={Boolean(revisando)} onClick={cerrar}>
+              Cancelar
+            </button>
+            <button className={`btn btn-warning ${revisando?"esperando":""}`}
+              disabled={Boolean(revisando)} onClick={confirmarRechazo}>
+              {revisando ? "Rechazando…" : "Rechazar"}
             </button>
           </div>
         </div>
@@ -105,6 +162,26 @@ export function modalRequisito(ctx){
           maxLength={600} rows={4}
           placeholder="Explica qué tiene que verse, en qué formato, o por qué hace falta."
           onChange={e=>setReqDesc(e.target.value)}/>
+
+        {/* ── EL VISTO BUENO (23 nov) ──────────────────────────
+            Lo pidió Ricardo —«que se aprueben las cosas importantes o
+            decisivas para cada fase»— y al preguntarle quién decide
+            cuáles son importantes eligió esto: que lo marque él al
+            pedirlas.
+
+            Apagado por omisión, y es deliberado. Encendido por
+            omisión convertiría al dueño en cuello de botella de cada
+            factura, que es justo la opción que descartó. */}
+        <label className={`req-visto ${reqVisto?"on":""}`}>
+          <input type="checkbox" checked={Boolean(reqVisto)} disabled={reqBusy}
+            onChange={e=>setReqVisto(e.target.checked)} />
+          <span className="req-visto-t">Necesita mi visto bueno</span>
+          <span className="req-visto-d">
+            {reqVisto
+              ? "No contará como entregado hasta que lo mires y lo apruebes. A quien lo suba le avisaremos si lo rechazas."
+              : "Si lo marcas, no contará como entregado hasta que lo apruebes tú."}
+          </span>
+        </label>
 
         {/* El aviso, antes de pulsar. Sólo si hay a quién avisar: en un
             borrador que nadie ha firmado todavía esto no viene a

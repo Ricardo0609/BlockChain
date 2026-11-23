@@ -2,6 +2,8 @@
 // requisitos al adjuntar o retirar un comprobante. Son las mismas que
 // usa la interfaz, aquí sin depender de nada de Firebase.
 
+import { estadoDe } from "./entregas.js";
+
 /** Un requisito admite varios comprobantes; los expedientes viejos traían uno solo. */
 export const archivosDe = (r) =>
   Array.isArray(r?.archivos) ? r.archivos : (r?.archivo ? [r.archivo] : []);
@@ -18,7 +20,12 @@ export function agregarArchivo(requisitos = [], reqId, nuevo){
   const out = requisitos.map((r) => {
     if(r.id !== reqId) return r;
     encontrado = true;
-    return { ...sinArchivoViejo(r), estado: "cumplido", archivos: [...archivosDe(r), nuevo] };
+    // ← CAMBIADO (23 nov): el estado ya no es siempre «cumplido».
+    // Si su dueño marcó este requisito como «necesita mi visto
+    // bueno», queda en «por-revisar» hasta que lo mire. Ver
+    // `entregas.js`, que es el gemelo donde vive la regla.
+    const archivos = [...archivosDe(r), nuevo];
+    return { ...sinArchivoViejo(r), estado: estadoDe(r, archivos), archivos };
   });
   return { requisitos: out, encontrado };
 }
@@ -31,8 +38,11 @@ export function quitarArchivo(requisitos = [], reqId, aid){
     const lista = archivosDe(r);
     quitado = lista.find((a) => aidDe(a) === aid) || null;
     const restantes = lista.filter((a) => aidDe(a) !== aid);
+    // Quitar el último archivo devuelve el requisito a «pendiente»;
+    // quitar uno de varios recalcula, que con visto bueno pedido no
+    // es lo mismo que «hay archivos, luego está cumplido».
     return { ...sinArchivoViejo(r), archivos: restantes,
-             estado: restantes.length ? "cumplido" : "pendiente" };
+             estado: estadoDe(r, restantes) };
   });
   return { requisitos: out, quitado };
 }

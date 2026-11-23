@@ -1065,6 +1065,12 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .rol-d{grid-column:2;font-size:12px;color:var(--gris-300);line-height:1.4}
 .rol-tag{font-size:11px;padding:2px 9px;border-radius:99px;
   background:var(--gris-100);color:var(--gris-400);flex:0 0 auto}
+/* «tu», donde las demas filas llevan la «x» de retirar. Ocupa ese
+   hueco a proposito: sin nada, la fila propia parece la unica a la
+   que le falta un boton, y eso se lee como un fallo en vez de como
+   una regla. */
+.rol-yo{font-size:11px;color:var(--gris-300);flex:0 0 auto;
+  padding:2px 6px;font-style:italic}
 .lnk{background:none;border:0;padding:0;font:inherit;color:inherit;
   text-decoration:underline;cursor:pointer}
 .lnk:disabled{opacity:.5;cursor:default}
@@ -1394,6 +1400,26 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .exp-sum{font-size:15px;color:var(--gris-400);margin-bottom:14px;line-height:1.5}
 .exp-item{display:flex;gap:12px;align-items:flex-start;padding:16px 0;border-top:1px solid var(--bordes)}
 .exp-item.cumplido .exp-check{background:#14825a;color:#fff}
+/* ── EL VISTO BUENO (23 nov) ────────────────────────────────
+   Ambar, no verde ni rojo: no esta ni bien ni mal, esta esperando.
+   Es el mismo ambar que marca un dato escrito a mano en un
+   comprobante, y por la misma razon: «mira esto», no «esto falla». */
+.exp-item.revisar .exp-check{background:#fdf0d5;color:#8a5a00;
+  display:flex;align-items:center;justify-content:center}
+.tag.t-revisar{background:#fdf0d5;color:#8a5a00}
+/* Los dos botones, juntos y separados del resto de la fila: son una
+   decision, no una accion mas de las de arriba. */
+.vb-fila{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;
+  padding-top:12px;border-top:1px dashed var(--bordes)}
+.vb-si{background:#14825a;border-color:#14825a}
+.vb-si:hover:not(:disabled){background:#0f6b4a;border-color:#0f6b4a}
+/* Lo ya juzgado. Se queda a la vista, con quien y cuando: quien subio
+   el archivo necesita ver QUE le rechazaron para mandar otra cosa. */
+.vb-sello{display:flex;gap:8px;align-items:flex-start;margin-top:10px;
+  padding:9px 12px;border-radius:9px;font-size:13px;line-height:1.5}
+.vb-sello.ok{background:rgba(20,130,90,.08);color:#14825a}
+.vb-sello.no{background:rgba(194,65,12,.1);color:#c2410c}
+.vb-sello b{display:inline-block;margin-top:3px;font-weight:600}
 .exp-up{display:inline-block;margin-top:10px;border:1px dashed var(--bordes);border-radius:9px;
   padding:9px 14px;font-size:14px;color:var(--gris-400);cursor:pointer;transition:border-color .15s,color .15s}
 .exp-up:hover{border-color:var(--negro);color:var(--negro)}

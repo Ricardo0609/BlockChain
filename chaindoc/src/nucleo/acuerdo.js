@@ -111,6 +111,31 @@ const ARCHIVOS_DE = (r) =>
   Array.isArray(r?.archivos) ? r.archivos : (r?.archivo ? [r.archivo] : []);
 
 /**
+ * ¿Este requisito está entregado de verdad?
+ *
+ * ── CAMBIADO (23 nov) ────────────────────────────────────────
+ *
+ * Antes bastaba con que tuviera un archivo encima. Desde hoy un
+ * requisito puede estar marcado con «necesita mi visto bueno», y
+ * entonces tener un archivo NO es haberlo entregado: es haberlo
+ * mandado. Entre las dos cosas está la decisión del dueño.
+ *
+ * Importa aquí más que en ningún otro sitio porque de esto cuelga
+ * `dar-conformidad`: firmar «conforme». Contar como entregado algo
+ * que su dueño todavía no ha aceptado sería dejarle firmar que todo
+ * está bien sin haberlo mirado, que es exactamente lo contrario del
+ * visto bueno.
+ *
+ * Y se descuentan los RECHAZADOS: un archivo que el dueño no aceptó
+ * no es una entrega, es un intento. La regla vive aquí, escrita a
+ * mano y no importada de `entregas.js`, porque este archivo es
+ * gemelo del del servidor y los dos tienen que ser idénticos: una
+ * ruta de import distinta los separaría.
+ */
+const ENTREGADO = (r) =>
+  ARCHIVOS_DE(r).some((a) => !a?.rechazo) && r?.estado !== "por-revisar";
+
+/**
  * Si ya se entregó todo lo que el contrato obliga a entregar.
  *
  * ← NUEVO (27 oct): la puerta de la firma final. Firmar es el último
@@ -124,7 +149,7 @@ const ARCHIVOS_DE = (r) =>
 export function todoEntregado(exp) {
   return (exp?.requisitos || [])
     .filter((r) => r?.obligatorio)
-    .every((r) => ARCHIVOS_DE(r).length > 0);
+    .every(ENTREGADO);
 }
 
 /**
@@ -306,10 +331,14 @@ export const ACCIONES_POR_ESTADO = {
   // entregué todo»— y antes sólo cabía después de pedirla. Pedirla y
   // darla eran dos puertas al mismo cuarto: ahora quien firma primero
   // abre el turno de la otra parte.
+  // ← ACTUALIZADO (23 nov): entra «revisar», dar o negar el visto
+  // bueno a un comprobante. Va en los dos estados donde se puede
+  // SUBIR, y en ningún otro: no se revisa lo que todavía no se puede
+  // entregar, y en un contrato cerrado ya no se toca nada.
   vigente:       ["subir", "vincular", "retirar", "pedir-conformidad", "cerrar",
-                  "dar-conformidad", "pedir-mas"],
+                  "dar-conformidad", "pedir-mas", "revisar"],
   entregado:     ["subir", "vincular", "retirar", "dar-conformidad", "reportar-faltante",
-                  "pedir-mas"],
+                  "pedir-mas", "revisar"],
   cerrado:       [],
   rechazado:     ["editar", "poner-en-firme", "borrar", "pedir-mas"],
   sin_firmar:    ["editar", "poner-en-firme", "borrar", "pedir-mas"],
@@ -344,6 +373,7 @@ export const PERMISO_DE_ACCION = {
   "dar-conformidad": "aprobar",
   "reportar-faltante": "aprobar",
   "pedir-mas": "pedir-mas",
+  revisar: "revisar",
   ver: "ver",
   exportar: "exportar",
 };
@@ -374,7 +404,11 @@ export const PERMISO_DE_ACCION = {
 // escapaba del estado: a un contrato que nadie habia firmado todavia
 // no se le podia subir un PDF, pero si colgarle un documento. Dos
 // puertas al mismo cuarto otra vez, y una sin cerradura.
-export const GOBERNADAS = ["editar", "subir", "vincular", "retirar", "pedir-mas"];
+// ← ACTUALIZADA (23 nov): entra «revisar». Tiene que estar aquí
+// porque los sitios donde NO se puede dar el visto bueno son
+// estados: un contrato cerrado no admite ya ningún cambio, y en uno
+// que todavía no han aceptado no hay nada entregado que mirar.
+export const GOBERNADAS = ["editar", "subir", "vincular", "retirar", "pedir-mas", "revisar"];
 
 /** Si el estado impide esta acción, al margen del rol. */
 export const estadoBloquea = (estado, accion) =>

@@ -92,7 +92,16 @@ export const PERMISOS = {
   // palabras —«el dueño y creador del expediente»— y un editor no
   // es el dueño. El servidor lo vuelve a comprobar por ownerUid, no
   // sólo por rol: ver `anadirRequisito` en functions/index.js.
-  propietario: ["ver", "editar", "subir", "retirar", "firmar", "compartir", "pedir", "aprobar", "exportar", "proteger", "vincular", "borrar", "pedir-mas"],
+  // ← AÑADIDO (23 nov): «revisar», que es dar o negar el visto bueno
+  // a un comprobante que alguien subió. SÓLO el propietario, como
+  // «pedir-mas», y por la misma razón: Ricardo pidió que lo aprobara
+  // «el dueño», y aprobar lo que entrega la otra parte no es algo que
+  // la otra parte pueda hacerse a sí misma.
+  //
+  // No se reusó «aprobar», que ya existe: ése es aceptar el CONTRATO
+  // y lo tienen el involucrado y el aprobador. Si se mezclaran, la
+  // otra parte podría aprobar sus propias entregas.
+  propietario: ["ver", "editar", "subir", "retirar", "firmar", "compartir", "pedir", "aprobar", "exportar", "proteger", "vincular", "borrar", "pedir-mas", "revisar"],
   // ← NUEVO (20 oct). Lleva «retirar» porque es quien sube: si se
   // equivoca de archivo tiene que poder quitarlo él, sin pedirle
   // permiso a nadie. No lleva «editar»: el contrato que aceptó no lo

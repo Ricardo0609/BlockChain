@@ -273,7 +273,10 @@ describe("un comprobante solo se comparte con cuenta", () => {
     expect(m).toMatch(/const comprobante = esComprobante\(d\);/);
     const i = m.indexOf("{comprobante ? (<>");
     expect(i).toBeGreaterThan(-1);
-    const dentro = m.slice(i, m.indexOf("</>) : !esExpediente ? (<>", i));
+    // ← ACTUALIZADA (23 nov): el limite era «</>) : !esExpediente ?
+    // (<>». Al separar los dos modales, el camino del expediente se
+    // fue de este archivo y ese `!esExpediente` ya no hace falta.
+    const dentro = m.slice(i, m.indexOf("</>) : (<>", i));
     expect(dentro).toMatch(/Dar acceso/);
     expect(dentro).not.toMatch(/Mandar a alguien sin cuenta/);
     expect(dentro).not.toMatch(/sign-or/);

@@ -47,6 +47,7 @@ import { folioConPrefijo, genId, sha256, siguienteFolio, tipoDeFolio, verifyChai
 import { normalizarEnlace, nombreDeEnlace, textoFirmado } from "./nucleo/enlaces";
 import { extraerCampos, marcarCorrecciones } from "./nucleo/extraccion";
 import { esComprobante } from "./nucleo/comprobantes";
+import { estadoDe } from "./nucleo/entregas";
 import {
   quitarArchivoViejo,
   store,
@@ -205,6 +206,7 @@ export default function Octavin(){
   // ← NUEVO (17 nov): pedir un comprobante que no estaba en el contrato.
   const [reqTitulo,setReqTitulo]     = useState("");
   const [reqDesc,setReqDesc]         = useState("");
+  const [reqVisto,setReqVisto]       = useState(false);  // ← NUEVO: «necesita mi visto bueno»
   const [reqBusy,setReqBusy]         = useState(false);
   const [reqErr,setReqErr]           = useState("");
   const [invSubiendo,setInvSubiendo] = useState(null);
@@ -573,7 +575,10 @@ export default function Octavin(){
    * de escribir junto con el mensaje de error.
    */
   const pedirRequisito = (fase)=>{
-    setReqTitulo(""); setReqDesc(""); setReqErr("");
+    // Se reinicia también el visto bueno: lo que marcaste para un
+    // requisito no tiene por qué valer para el siguiente, y
+    // arrastrarlo es cómo se pide revisión de algo sin querer.
+    setReqTitulo(""); setReqDesc(""); setReqErr(""); setReqVisto(false);
     setModal({ t:"requisito", fase: fase || null });
   };
 
@@ -607,6 +612,41 @@ export default function Octavin(){
     finally{ setReqBusy(false); }
   };
 
+  // ── DAR O NEGAR EL VISTO BUENO (23 nov) ────────────────────
+  //
+  // Dos entradas a la misma llamada, porque son dos actos distintos
+  // para quien los hace: aprobar es un clic y rechazar pide explicar.
+  //
+  // RECHAZAR PREGUNTA, aprobar no. No por simetría: rechazar es lo
+  // único de los dos que le llega a otra persona como un no, y un no
+  // sin motivo obliga a esa persona a adivinar qué estaba mal. El
+  // motivo es opcional -lo dijo Ricardo, «los motivos, si el dueño
+  // puso un motivo»- pero se pide, que no es lo mismo que exigirlo.
+  const [revisando,setRevisando]   = useState(null);   // aid que se está revisando
+  const [rechMotivoAdj,setRechMotivoAdj] = useState("");
+
+  const revisar = async(reqId, aid, ok, motivo)=>{
+    if(!enServidor()){ notify("Esto necesita el servidor activo","err"); return; }
+    setRevisando(aid);
+    try{
+      const r = await llamar("revisarEntrega", { opId:d.id, reqId, aid, ok, motivo: motivo || null });
+      setD(r.doc);
+      setModal(null); setRechMotivoAdj("");
+      notify(ok
+        ? "Visto bueno dado \u2713"
+        : "Comprobante rechazado \u2713 Le avisamos a quien lo subió.");
+    }catch(e){ notify(errorBackend(e),"err"); }
+    finally{ setRevisando(null); }
+  };
+
+  const aprobarEntrega = (reqId, aid)=> revisar(reqId, aid, true);
+  const pedirRechazo = (reqId, aid, nombre)=>{
+    setRechMotivoAdj("");
+    setModal({ t:"rechazar-adjunto", reqId, aid, nombre });
+  };
+  const confirmarRechazo = ()=>
+    revisar(modal?.reqId, modal?.aid, false, rechMotivoAdj.trim() || null);
+
   const guardarRequisito = async()=>{
     if(!enServidor()){ notify("Esto necesita el servidor activo","err"); return; }
     const titulo = reqTitulo.trim().replace(/\s+/g," ");
@@ -617,10 +657,15 @@ export default function Octavin(){
         opId: d.id, titulo,
         descripcion: reqDesc.trim() || null,
         fase: modal?.fase || null,
+        requiereVisto: reqVisto === true,
       });
       setD(r.doc);
       setModal(null);
-      notify("Comprobante añadido \u2713");
+      // El aviso dice QUÉ va a pasar con lo que suban, no sólo que se
+      // guardó: es lo que acaba de elegir y lo que va a notar después.
+      notify(reqVisto
+        ? "Comprobante añadido \u2713 Lo que suban esperará tu visto bueno."
+        : "Comprobante añadido \u2713");
     }catch(e){ setReqErr(errorBackend(e)); }
     finally{ setReqBusy(false); }
   };
@@ -1600,9 +1645,17 @@ export default function Octavin(){
     const aid  = genId();
     const nuevo = { aid, path:aid, ruta, nombre:file.name, tipo:file.type||"application/octet-stream",
                     tam:file.size, hash, thumb:thumb||null,
-                    subidoEn:new Date().toISOString(), subidoPor:user };
+                    // ← NUEVO (23 nov): el uid, no sólo el nombre. Hace falta
+                    // para avisarle a quien subió esto si se lo rechazan, y un
+                    // nombre no identifica una cuenta: hay dos Juan Pérez.
+                    subidoEn:new Date().toISOString(), subidoPor:user, subidoPorUid:uid };
+    // ← CAMBIADO (23 nov): el estado ya no es siempre «cumplido». Si
+    // su dueño marcó este requisito con «necesita mi visto bueno»,
+    // queda en «por-revisar». La regla vive en `nucleo/entregas.js`,
+    // gemela de la del servidor.
     const requisitos = d.requisitos.map(r=> r.id!==reqId ? r : {
-      ...quitarArchivoViejo(r), estado:"cumplido", archivos:[...archivosDe(r), nuevo],
+      ...quitarArchivoViejo(r), archivos:[...archivosDe(r), nuevo],
+      estado: estadoDe(r, [...archivosDe(r), nuevo]),
     });
     const { solicitudes, cerradas } = cerrarSolicitudes(d, reqId, user);
     const doc = await aplicar(d, {
@@ -1619,9 +1672,10 @@ export default function Octavin(){
     const aid   = genId();
     const hash  = await sha256(textoFirmado(url));
     const nuevo = { aid, origen:"enlace", url, host, nombre,
-                    hash, subidoEn:new Date().toISOString(), subidoPor:user };
+                    hash, subidoEn:new Date().toISOString(), subidoPor:user, subidoPorUid:uid };
     const requisitos = d.requisitos.map(r=> r.id!==reqId ? r : {
-      ...quitarArchivoViejo(r), estado:"cumplido", archivos:[...archivosDe(r), nuevo],
+      ...quitarArchivoViejo(r), archivos:[...archivosDe(r), nuevo],
+      estado: estadoDe(r, [...archivosDe(r), nuevo]),
     });
     const { solicitudes, cerradas } = cerrarSolicitudes(d, reqId, user);
     const doc = await aplicar(d, {
@@ -1642,7 +1696,7 @@ export default function Octavin(){
     const restantes = lista.filter(a=>aidDe(a)!==aid);
     const requisitos = d.requisitos.map(r=> r.id!==reqId ? r : {
       ...quitarArchivoViejo(r), archivos:restantes,
-      estado: restantes.length ? "cumplido" : "pendiente",
+      estado: estadoDe(r, restantes),
     });
     const doc = await aplicar(d, {
       accion:"EVIDENCIA",
@@ -2380,10 +2434,15 @@ export default function Octavin(){
                       tipo:d.kind==="expediente"?"expediente":(d.tplId||"documento"),
                       hash:cabeza.hash, bloques:d.chain.length,
                       monto: montoDeDocumento(d),   // leído de su plantilla
-                      subidoEn:new Date().toISOString(), subidoPor:user };
+                      subidoEn:new Date().toISOString(), subidoPor:user, subidoPorUid:uid };
+      // Vincular un documento propio ES entregar, así que pasa por la
+      // misma regla: si el requisito pide visto bueno, queda
+      // «por-revisar» igual que un PDF suelto. Dejarlo fuera habría
+      // premiado la versión con menos revisión.
       const requisitos = exp.requisitos.map(r=> r.id!==reqId ? r : {
-        ...quitarArchivoViejo(r), estado:"cumplido",
+        ...quitarArchivoViejo(r),
         archivos:[...archivosDe(r), nuevo],
+        estado: estadoDe(r, [...archivosDe(r), nuevo]),
       });
 
       // ← NUEVO: cierra las solicitudes que este documento atiende
@@ -2947,6 +3006,9 @@ export default function Octavin(){
     invClave, setInvClave, abrirConClave, invClaveBusy, invClaveErr,
     reqTitulo, setReqTitulo, reqDesc, setReqDesc, reqBusy, reqErr,
     pedirRequisito, guardarRequisito, quitarEsteRequisito, confirmarQuitarRequisito,
+    reqVisto, setReqVisto,
+    revisando, aprobarEntrega, pedirRechazo, confirmarRechazo,
+    rechMotivoAdj, setRechMotivoAdj,
     firmarInvitacion,
     crearEnlace, verEnlaces, revocarEnlace, copiarEnlace, enlaces,
     enlaceNuevo, setEnlaceNuevo, invDias, setInvDias, avisos,

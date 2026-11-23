@@ -122,21 +122,30 @@ describe("estilos.js sigue siendo un solo texto", () => {
     // en el JSX porque una regla CSS no puede saber cual es el pie:
     // `:last-child` no sirve -debajo del pie hay mas elementos- y
     // `:last-of-type` mira la etiqueta, que es `div` en todas.
-    const m = codigo("src/modales/Compartir.jsx");
+    // ← ACTUALIZADO (23 nov): los dos archivos. Al separar compartir
+    // en expediente y documento de texto, las filas se repartieron.
+    // Siguen siendo las mismas siete y se cuentan juntas, porque lo
+    // que se vigila es la regla, no el archivo.
+    const m = codigo("src/modales/Compartir.jsx")
+      + codigo("src/modales/CompartirExpediente.jsx");
     const filas = [...m.matchAll(/className="modal-row( enmedio)?"/g)];
-    // ← ACTUALIZADO (16 nov): seis, con la de «dar acceso» de un
-    // comprobante. Lo que se vigila no es el numero sino que NINGUNA
-    // fila con texto debajo se quede sin marcar, asi que se cuentan
-    // las dos clases por separado y no solo el total.
-    expect(filas.length).toBe(7);
+    // Lo que se vigila no es el numero sino que NINGUNA fila con
+    // texto debajo se quede sin marcar, asi que se cuentan las dos
+    // clases por separado y no solo el total.
+    // Nueve desde la separacion: las siete de antes mas las dos que
+    // se duplicaron al partir el archivo en dos, porque cada modal
+    // tiene ahora su propio pie y su propia pantalla de «enlace
+    // listo». Ninguna de esas dos lleva texto debajo.
+    expect(filas.length).toBe(9);
     // Cinco de enmedio -dar acceso de texto, mandar sin cuenta de
-    // texto, dar acceso de comprobante, y las DOS del expediente
-    // desde el 17 de nov: la de con cuenta y la de sin cuenta- y dos
-    // pies, que siguen pegados a proposito.
+    // texto, dar acceso de comprobante, y las DOS del expediente: la
+    // de con cuenta y la de sin cuenta- y cuatro pies, dos por modal
+    // -el del «enlace listo» y el de abajo-, que siguen pegados a
+    // proposito.
     expect(filas.filter(f => f[1]).length).toBe(5);
     // Lo que de verdad se vigila: que ninguna fila con texto debajo
     // se quede sin marcar. Las unicas sin marcar son los dos pies.
-    expect(filas.filter(f => !f[1]).length).toBe(2);
+    expect(filas.filter(f => !f[1]).length).toBe(4);
   });
 });
 
@@ -458,12 +467,14 @@ describe("compartir un documento de texto", () => {
     // de expediente». Era el nombre de un modo que solo existia
     // porque al lado habia otro -«solo pedirle comprobantes»- que en
     // un documento de texto no existe.
-    const s = m();
-    const i = s.indexOf("Acceso completo");
-    expect(i).toBeGreaterThan(-1);
-    // Esta dentro de la rama de los expedientes: el `soloLectura ?`
-    // de arriba elige los papeles y deja esto en el `else`.
-    expect(s.slice(0, i)).toMatch(/\{soloLectura \? rolesCompletos\.map/);
+    // ← REFORZADA (23 nov). Antes comprobaba que «Acceso completo»
+    // estuviera DESPUES del `soloLectura ?`, o sea en la rama del
+    // expediente del mismo archivo. Desde la separacion no esta en
+    // este archivo EN ABSOLUTO, que es mas fuerte: ya no hay rama
+    // donde pueda reaparecer por descuido.
+    expect(m()).not.toMatch(/Acceso completo/);
+    // Y sigue existiendo donde si va.
+    expect(codigo("src/modales/CompartirExpediente.jsx")).toMatch(/Acceso completo/);
   });
 
   it("auditor fuera: dos papeles, editor y lector", () => {
@@ -477,21 +488,28 @@ describe("compartir un documento de texto", () => {
     const s = m();
     expect(s).toMatch(/¿Cómo quieres compartirlo\?/);
     const i = s.indexOf("¿Cómo quieres compartirlo?");
-    expect(s.slice(i, i + 700)).toMatch(/rolesCompletos\.map/);
+    // ← ACTUALIZADA (23 nov): `COMPLETOS.map`. Era `rolesCompletos`,
+    // que era el ternario que elegia entre los seis papeles del
+    // expediente y los dos de aqui. Sin expediente en este archivo,
+    // el ternario sobraba.
+    expect(s.slice(i, i + 700)).toMatch(/COMPLETOS\.map/);
   });
 
   it("y en la version 2 no hay ninguna pregunta de papel", () => {
     // «Para la version 2 vas a quitar todas las opciones de antes y
     // solo vas a dejar la pregunta: a quien».
     const s = m();
-    // ← ACTUALIZADO (16 nov): lleva `&& !comprobante` desde que una
-    // factura dejo de caer en esta rama por descarte.
-    expect(s).toMatch(/\{!paraFirmar && !comprobante && \(<>/);
-    // ← ACTUALIZADO (16 nov): tambien excluye a los comprobantes. Sin
-    // ese `!comprobante`, una factura -que tampoco es expediente-
-    // caia aqui por descarte y se le ofrecia enlace sin cuenta.
-    expect(s).toMatch(
-      /const paraFirmar = !esExpediente && !comprobante && seVe\(d, "firmas"\);/);
+    // ← ACTUALIZADA (23 nov): la pregunta cuelga ahora de
+    // `soloLectura`, que es lo mismo dicho en positivo: ni se firma,
+    // ni es comprobante. Antes se decia por descarte -«ni esto ni lo
+    // otro»- porque en el mismo archivo habia una tercera cosa, el
+    // expediente, que ya no esta.
+    expect(s).toMatch(/\{soloLectura && \(<>/);
+    // Y el `!comprobante` sigue siendo imprescindible: sin el, una
+    // factura caeria aqui por descarte y se le ofreceria enlace sin
+    // cuenta. El `!esExpediente` ya lo hace la puerta del archivo.
+    expect(s).toMatch(/const paraFirmar = !comprobante && seVe\(d, "firmas"\);/);
+    expect(s).toMatch(/d\.kind === "expediente"\) return null;/);
     // El papel no se elige: se deduce.
     expect(s).toMatch(/const PARA_FIRMAR = "aprobador";/);
     expect(s).toMatch(/const rol = paraFirmar \? PARA_FIRMAR/);
