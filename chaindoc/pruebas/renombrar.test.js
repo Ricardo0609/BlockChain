@@ -25,7 +25,12 @@ import {
 } from "../src/nucleo/acuerdo";
 
 const SE_PUEDE   = ["borrador", "rechazado", "sin_firmar"];
-const NO_SE_PUEDE = ["en_firma", "vigente", "entregado", "cerrado", "sin_respuesta"];
+// ← ACTUALIZADO (23 nov): entra «terminado». Va con los de NO, y no
+// hay nada que pensar: es un contrato firmado por las dos partes y
+// con todo entregado. Si ahi se pudiera cambiar el nombre, la firma
+// no diria nada sobre que se firmo.
+const NO_SE_PUEDE = ["en_firma", "vigente", "terminado", "entregado",
+                     "cerrado", "sin_respuesta"];
 
 describe("renombrar un contrato", () => {
   it("se puede mientras nadie lo tenga delante", () => {

@@ -13,7 +13,7 @@ import { renderCuerpo } from "../ui/Cuerpo";
 import { estaVacio, normalizar, ID_PAPEL } from "../nucleo/texto";
 import { esBorradorContrato } from "../nucleo/catalogos";
 import { esComprobante, faltanDatos, sePuedeFirmar, puedeSalir, soloSuDueno,
-         porQueNoSale, faltaRespaldo, sinOriginalViejo } from "../nucleo/comprobantes";
+         porQueNoSale, faltaRespaldo, sinOriginalViejo, originalDe } from "../nucleo/comprobantes";
 import { renderExpediente } from "./Expediente";
 import { botonCampana, renderCampana } from "./Campana";
 import { renderMenu } from "./MenuLateral";
@@ -27,7 +27,9 @@ import { SECCIONES, motivoOcupada } from "../nucleo/secciones";
 import { ESTILOS } from "../ui/estilos";
 export function renderDocumento(ctx){
   const {
-    MAX_IMGS, abrirProtegido, acctEmail, addImage, adjuntarOriginal, bioBusy, bioCreds, bioOk, convOculto, d, doVerify,
+    MAX_IMGS, abrirProtegido, acctEmail, addImage, adjuntarOriginal,
+    corregirOriginal, corrigiendo,
+    bioBusy, bioCreds, bioOk, convOculto, d, doVerify,
     docs, editMode, exportarPaquete, fields, getFile, goHome, histOpen, histTab, ocupado,
     iniciarConversion, lockInput, menuOpen, modal, notif, openDoc, openExpedientes,
     ocultarConvertir, puedeConvertir, removeImage, renombrar, save, saving, setDirty, setEdit, setFields,
@@ -85,6 +87,9 @@ export function renderDocumento(ctx){
   const porQue     = porQueNoSale(d);
   // Uno de los de antes: dice de donde salio, pero el archivo no esta.
   const viejoSinOriginal = sinOriginalViejo(d);
+  // ← NUEVO (24 nov): para el botón «Corregir». Se corrige lo que ya
+  // existe; lo que falta se adjunta, que es otra cosa y otro botón.
+  const tieneOriginal = Boolean(originalDe(d));
 
   // ← NUEVO (21 oct): quién más ve este documento, para las pestañas.
   // ← ACTUALIZADO (28 oct): cuenta personas Y enlaces vivos. Un
@@ -360,7 +365,20 @@ export function renderDocumento(ctx){
         : d.tplId && FORMS[d.tplId] ? (
           <FormDoc formKey={d.tplId} fields={fields} editable={editMode}
             origen={d.origenCampos}
-            onChange={f=>{setFields(f);setDirty(true);}} />
+            onChange={f=>{setFields(f);setDirty(true);}}
+            /* ← NUEVO (24 nov): sólo en modo lectura y sólo a quien
+               puede editar. En modo edición estás cambiando los datos
+               a mano; ofrecer ahí «vuelve a leerlos del archivo»
+               sería ofrecer tirar lo que acabas de escribir. Y sólo
+               si YA hay original: si no lo hay, lo que toca es
+               adjuntarlo, que es otro botón y está más abajo. */
+            corregir={!editMode && puede("editar") && tieneOriginal ? {
+              ocupado: corrigiendo,
+              acepta: d.tplId === "factura"
+                ? ".xml,.pdf,image/*,text/xml,application/xml,application/pdf"
+                : ".pdf,image/*,application/pdf",
+              alElegir: corregirOriginal,
+            } : null} />
         ) : editMode
           ? (
             /* ← ACTUALIZADO (24 oct): era un <textarea>, que no sabe de
@@ -584,7 +602,10 @@ export function renderDocumento(ctx){
           </div>
         </div>
       )}
-      <div className="sign-bar">
+      {/* ← NUEVO (24 nov): el identificador es el destino del botón
+          «Ir a firmar el cierre» de la banda del expediente. Firmar
+          no está en ninguna pestaña: está aquí abajo. */}
+      <div className="sign-bar" id="sign-bar">
         {/* ← ACTUALIZADO (3 nov): mientras editas no se ofrece firmar.
             No es sólo por el orden de los botones: la firma sella lo
             último que se guardó, así que firmar con cambios en

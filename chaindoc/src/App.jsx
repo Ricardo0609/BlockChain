@@ -2086,6 +2086,109 @@ export default function Octavin(){
     finally{ setSaving(false); }
   };
 
+  // ── CORREGIR EL ARCHIVO ORIGINAL (24 nov) ──────────────────
+  //
+  // Ricardo: «¿qué tal si subí el que no era?». Hasta hoy la única
+  // salida era borrar el comprobante entero y registrarlo de nuevo,
+  // porque el original no se puede quitar.
+  //
+  // Esto no lo quita, lo SUSTITUYE, y hace exactamente el mismo
+  // recorrido que al crearlo: se lee el archivo, se sacan los datos
+  // de él, y se escriben encima. Gana el archivo nuevo en TODO,
+  // también donde alguien hubiera corregido a mano: si el documento
+  // estaba equivocado, sus correcciones también lo estaban.
+  //
+  // El motivo de por qué esto sí se puede, y quitarlo no, está en
+  // `corregirOriginal` de functions/index.js.
+  const [corrigiendo, setCorrigiendo] = useState(false);
+  const corregirOriginal = async(file)=>{
+    if(!file || !d || !d.tplId) return;
+    setCorrigiendo(true);
+    let ruta = null;
+    try{
+      // 1 · Leerlo. Igual que al importar: una foto va por OCR y lo
+      //     demás por el lector de archivos.
+      const esImagen = (file.type||"").startsWith("image/");
+      const res = await (esImagen ? ocrImage : extractFromFile)(file, ()=>{});
+      const lectura = extraerCampos({ tplId:d.tplId, texto:res.text });
+      const campos = lectura.campos || {};
+      if(!Object.keys(campos).length){
+        // Ni un dato. Puede ser una foto borrosa o el archivo
+        // equivocado; en cualquier caso cambiar el original por algo
+        // ilegible deja el comprobante peor que antes.
+        notify("No se pudo leer ningún dato de ese archivo. Revisa que sea el comprobante y que se lea bien.","err");
+        return;
+      }
+
+      // 2 · Subirlo y pedirle al servidor el cambio. El bloque lo
+      //     escribe él, que es quien tiene las dos huellas.
+      const thumb = esImagen ? await makeThumb(file) : null;
+      ({ ruta } = await subirArchivo({ uid, docId:d.id, file }));
+      const datos = {
+        opId:d.id, ruta, nombre:file.name, thumb,
+        campos, origen:lectura.origen || {},
+        contenido: serializeForm(d.tplId, campos),
+        etiquetas: Object.fromEntries(
+          Object.keys(campos).map(k=>[k, etiquetaDe(d.tplId, k)])),
+      };
+      const r = enServidor()
+        ? await llamar("corregirOriginal", datos)
+        : await corregirOriginalLocal(d, { file, ruta, thumb, ...datos });
+      setD(r.doc);
+      setFields(r.doc.fields || {});
+      setContent(r.doc.content || "");
+      setDirty(false);
+      const n = (r.cambiados || []).length;
+      notify(n
+        ? `Archivo corregido ✓ · ${n} dato${n===1?"":"s"} cambió${n===1?"":"n"}`
+        : "Archivo corregido ✓ · los datos que se leen son los mismos");
+    }catch(e){
+      console.error(e);
+      if(ruta) await descartarSubida(ruta);
+      notify(errArchivo(e),"err");
+    }
+    finally{ setCorrigiendo(false); }
+  };
+
+  // Sin servidor no hay quien compare las huellas, así que la
+  // comparación se hace aquí. Es la misma puerta, con la única
+  // cerradura que hay en este modo.
+  const corregirOriginalLocal = async(doc0, { file, ruta, thumb, campos, origen, contenido, etiquetas })=>{
+    const viejo = (doc0.imagenes||[]).find(x=>x.esOriginal);
+    if(!viejo) throw new Error("Este comprobante todavía no tiene archivo original: adjúntalo en vez de corregirlo.");
+    const hash = await hashFile(file);
+    if(hash === viejo.hash) throw new Error("Ese es el mismo archivo que ya estaba. Si querías cambiarlo, elige otro.");
+
+    const antes = doc0.fields || {};
+    const cambiados = [...new Set([...Object.keys(antes), ...Object.keys(campos)])]
+      .filter(k=>String(antes[k] ?? "") !== String(campos[k] ?? ""))
+      .map(k=>({ k, antes:antes[k] ?? "", ahora:campos[k] ?? "" }));
+    const frase = cambiados.length
+      ? ` Al releerlo cambia${cambiados.length===1?"":"n"} ${cambiados.length} dato${cambiados.length===1?"":"s"}: `
+        + cambiados.map(c=>`${etiquetas?.[c.k] || c.k} «${c.antes||"vacío"}» → «${c.ahora||"vacío"}»`).join("; ")
+      : " Los datos que se leen son los mismos.";
+
+    const nuevo = {
+      path:genId(), ruta, nombre:file.name, tipo:file.type, tam:file.size, hash, thumb,
+      subidoEn:new Date().toISOString(), subidoPor:user, esOriginal:true,
+    };
+    const doc = await aplicar(doc0, {
+      accion:"EVIDENCIA",
+      contenido:`Archivo original corregido: «${viejo.nombre}» (${String(viejo.hash||"").slice(0,16)}…) `
+        + `pasa a «${nuevo.nombre}» (${hash.slice(0,16)}…).${frase}`,
+      meta:{ tipo:"original-corregido",
+        antes:{ archivo:viejo.nombre||null, huella:viejo.hash||null },
+        ahora:{ archivo:nuevo.nombre, huella:hash, tam:file.size, mime:file.type },
+        campos:cambiados },
+    }, {
+      imagenes:[...(doc0.imagenes||[]).filter(x=>!x.esOriginal), nuevo],
+      fields:campos, content:contenido, origenCampos:origen, sourceFile:file.name,
+    }, { autor:user, autorUid:uid });
+    if(!doc) throw new Error("No se pudo corregir el archivo original.");
+    if(viejo.ruta) await descartarSubida(viejo.ruta);
+    return { doc, imagen:nuevo, cambiados };
+  };
+
   // ← NUEVO: quitar una imagen también se asienta en la cadena
   const removeImage = async(path)=>{
     try{
@@ -2959,6 +3062,7 @@ export default function Octavin(){
     irADuplicado, linkBusy, linkErr, linkExp, linkSitios, linkToExpediente, lockInput,
     mIn, mIn2, menuOpen, method, modal, notif, notify, ocultarConvertir, ocupado, onDrop, openCreate, openDoc,
     openExpedientes, openSec, pass, puedeConvertir, removeEvidence,
+    corregirOriginal, corrigiendo,
     removeImage, resetImport, revokeShare, runAnalysis, save, saveSettings, saving,
     setContent, setCreateStep, setD, setDirty, setDragOver, setDrop, setEdit, setEmail,
     setFaseSel, setFields, setFilesOpen, setFilterF, setFocoDup, setFolders, setHist,

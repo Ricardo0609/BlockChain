@@ -1,6 +1,6 @@
 // Dibuja una plantilla visual como formulario.
 
-import { FORMS } from "./formularios";
+import { FORMS, dinero, fechaLegible } from "./formularios";
 import { errorDeRFC } from "../nucleo/rfc";
 
 // ── PLANTILLA VISUAL ──────────────────────────────────────────
@@ -26,7 +26,7 @@ const marcaDeOrigen = (origen, k) => origen?.[k] === "mano" ? (
   </span>
 ) : null;
 
-export function FormDoc({ formKey, fields, onChange, editable, origen }){
+export function FormDoc({ formKey, fields, onChange, editable, origen, corregir }){
   const s = FORMS[formKey];
   if(!s) return null;
   const set = (k,v)=>onChange({ ...fields, [k]:v });
@@ -85,7 +85,11 @@ export function FormDoc({ formKey, fields, onChange, editable, origen }){
                 onChange={e=>set(f.k, esRFC ? e.target.value.toUpperCase() : e.target.value)} />
         ) : (
           <span className={`fd-value ${!v?"empty":""} ${f.mono?"mono":""}`}>
-            {v ? (f.type==="money" ? `$${v}` : v) : (f.placeholder || "—")}
+            {v
+              ? (f.type==="money" ? dinero(v)
+                : f.type==="date" ? fechaLegible(v)
+                : v)
+              : (f.placeholder || "—")}
           </span>
         )}
         {avisoRFC && <span className="fd-aviso">{avisoRFC}</span>}
@@ -109,6 +113,32 @@ export function FormDoc({ formKey, fields, onChange, editable, origen }){
             {row.map(field)}
           </div>
         ))}
+        {/* ── CORREGIR EL ARCHIVO (24 nov) ────────────────────
+            Donde estaba «Enviar periódicamente», que no encendía
+            nada. Ricardo: «¿qué tal si subí el que no era?».
+
+            Antes la única salida era borrar el comprobante entero y
+            registrarlo de nuevo, porque el original NO se puede
+            quitar. Eso sigue en pie: esto no lo quita, lo
+            SUSTITUYE, y el cambio queda asentado en la cadena con
+            la huella del que estaba. Quitar sin rastro es lo que no
+            se puede; cambiar diciéndolo, sí. */}
+        {corregir && (
+          <div className="fd-acts">
+            <label className={`fd-corregir ${corregir.ocupado?"ocupado":""}`}>
+              <span>{corregir.ocupado
+                ? "Leyendo el archivo…"
+                : `Corregir ${formKey === "factura" ? "factura" : "recibo"}`}</span>
+              <input type="file" style={{display:"none"}} disabled={corregir.ocupado}
+                accept={corregir.acepta}
+                onChange={e=>{ corregir.alElegir(e.target.files?.[0]); e.target.value=""; }} />
+            </label>
+            <span className="fd-corregir-n">
+              Sube el archivo bueno: los datos se vuelven a leer de él
+              y el cambio queda asentado, con la huella del anterior.
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

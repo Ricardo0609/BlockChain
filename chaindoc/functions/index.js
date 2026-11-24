@@ -1434,6 +1434,132 @@ export const registrarOriginal = onCall(OPCIONES, async (req) => {
   return { doc, imagen };
 });
 
+/**
+ * CORREGIR EL ARCHIVO ORIGINAL — ← NUEVO (24 nov)
+ *
+ * Ricardo: «en lugar del botón enviar periódicamente coloca uno que
+ * diga corregir recibo, esto para poder subir uno nuevo, por que qué
+ * tal si subí el que no era, y vuelve a hacer el mismo proceso de
+ * leerlo; peeero en la cadena o en el historial se registra que se
+ * hizo ese cambio para que quede transparencia de que se cambió».
+ *
+ * ── POR QUÉ ESTO NO CONTRADICE LA REGLA DE AL LADO ──────────
+ *
+ * `quitarImagen` se niega a quitar el original, y con razón escrita:
+ * sin él el comprobante vuelve a ser un papel que alguien escribió
+ * sobre sí mismo, y poder quitarlo convertiría el respaldo en un
+ * trámite de paso —lo subes, firmas, lo borras—.
+ *
+ * El motivo de aquella negativa es que QUITAR NO DEJA RASTRO. Esto
+ * no quita: sustituye, y lo dice. El comprobante nunca se queda sin
+ * original ni un instante, y en la cadena queda la huella del que
+ * estaba, así que nadie puede cambiar el respaldo por otro y fingir
+ * que siempre fue ése. Esa es la diferencia, y es toda.
+ *
+ * El archivo viejo SÍ se borra del almacén —decisión de Ricardo—, y
+ * de él quedan su nombre, su huella y la fecha. Se puede demostrar
+ * que existió y que era otro; no se puede volver a abrir.
+ */
+export const corregirOriginal = onCall(OPCIONES, async (req) => {
+  const { uid, email } = quien(req);
+  const { opId, ruta, nombre, thumb, campos, origen, contenido, etiquetas } = req.data || {};
+  if(!opId || !ruta) throw new HttpsError("invalid-argument", "Faltan datos del archivo.");
+  rutaValida(ruta, uid, opId);
+
+  const actual = await leerOperacion(opId);
+  if(!actual) throw new HttpsError("not-found", "La operación no existe.");
+  exigir(actual, uid, email, "editar");
+
+  if(actual.tplId !== "recibo" && actual.tplId !== "factura"){
+    throw new HttpsError("failed-precondition",
+      "Sólo un recibo o una factura llevan archivo original.");
+  }
+  const viejo = (actual.imagenes || []).find((x) => x.esOriginal);
+  if(!viejo){
+    throw new HttpsError("failed-precondition",
+      "Este comprobante todavía no tiene archivo original: adjúntalo en vez de corregirlo.");
+  }
+
+  const { hash, tam, tipo } = await leerYHashear(ruta);
+  if(!TIPOS_ORIGINAL.some((t) => tipo.startsWith(t))){
+    throw new HttpsError("invalid-argument",
+      "El original tiene que ser el XML, un PDF o una foto.");
+  }
+  // El mismo archivo otra vez no es una corrección: es un viaje de
+  // ida y vuelta que ensuciaría la cadena con un cambio que no
+  // cambia nada. Se dice y no se asienta.
+  if(hash === viejo.hash){
+    await bucket().file(ruta).delete().catch(() => {});
+    throw new HttpsError("failed-precondition",
+      "Ese es el mismo archivo que ya estaba. Si querías cambiarlo, elige otro.");
+  }
+
+  const autor = await nombreDe(uid, email);
+  const id = `${opId}-org-${Math.random().toString(36).slice(2, 10)}`;
+  const imagen = {
+    path: id, ruta, nombre: nombre || "original", tipo, tam, hash,
+    thumb: thumb || null, subidoEn: new Date().toISOString(), subidoPor: autor,
+    esOriginal: true,
+  };
+  await db.doc(`${META}/${id}`).set({
+    id, ownerUid: uid, docId: opId, reqId: "org", ruta,
+    nombre: imagen.nombre, tipo, tam, hash, thumb: thumb || null, creadoEn: imagen.subidoEn,
+  });
+
+  // QUÉ CAMBIÓ, CONTADO POR EL SERVIDOR. Los datos los lee el
+  // navegador —es donde está el archivo— pero la comparación la hace
+  // aquí, contra lo que ya había guardado. Las etiquetas que manda el
+  // navegador sólo sirven para la frase; los nombres y los valores de
+  // `meta` salen de este lado.
+  const antes = actual.fields || {};
+  const ahora = (campos && typeof campos === "object") ? campos : {};
+  const rotulo = (k) => {
+    const e = etiquetas && typeof etiquetas === "object" ? etiquetas[k] : null;
+    return typeof e === "string" && e.length < 60 ? e : k;
+  };
+  const cambiados = [...new Set([...Object.keys(antes), ...Object.keys(ahora)])]
+    .filter((k) => String(antes[k] ?? "") !== String(ahora[k] ?? ""))
+    .map((k) => ({ k, antes: antes[k] ?? "", ahora: ahora[k] ?? "" }));
+
+  const frase = cambiados.length
+    ? ` Al releerlo cambia${cambiados.length === 1 ? "" : "n"} ${cambiados.length} `
+      + `dato${cambiados.length === 1 ? "" : "s"}: `
+      + cambiados.map((c) => `${rotulo(c.k)} «${c.antes || "vacío"}» → «${c.ahora || "vacío"}»`).join("; ")
+    : " Los datos que se leen son los mismos.";
+
+  const { doc } = await asentar({
+    opId, uid, email, autor,
+    evento: {
+      accion: "EVIDENCIA",
+      contenido: `Archivo original corregido: «${viejo.nombre}» (${String(viejo.hash || "").slice(0, 16)}…) `
+        + `pasa a «${imagen.nombre}» (${hash.slice(0, 16)}…).${frase}`,
+      meta: {
+        tipo: "original-corregido",
+        antes: { archivo: viejo.nombre || null, huella: viejo.hash || null },
+        ahora: { archivo: imagen.nombre, huella: hash, tam, mime: tipo },
+        campos: cambiados,
+      },
+    },
+    cambios: {
+      imagenes: [...(actual.imagenes || []).filter((x) => !x.esOriginal), imagen],
+      fields: ahora,
+      ...(typeof contenido === "string" ? { content: contenido } : {}),
+      ...(origen && typeof origen === "object" ? { origenCampos: origen } : {}),
+      sourceFile: imagen.nombre,
+    },
+  });
+
+  // El archivo viejo se va del almacén DESPUÉS de que el bloque esté
+  // asentado. Si se borrara antes y algo fallara al escribir, el
+  // comprobante se quedaría sin original y sin constancia de por qué.
+  const metaVieja = await db.doc(`${META}/${viejo.path}`).get();
+  const rutaVieja = metaVieja.data()?.ruta || viejo.ruta;
+  if(rutaVieja) await bucket().file(rutaVieja).delete().catch(() => {});
+  await metaVieja.ref.delete().catch(() => {});
+
+  return { doc, imagen, cambiados };
+});
+
 export const quitarImagen = onCall(OPCIONES, async (req) => {
   const { uid, email } = quien(req);
   const { opId, path } = req.data || {};

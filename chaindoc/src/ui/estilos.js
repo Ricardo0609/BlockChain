@@ -1539,7 +1539,21 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .fd-switch::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;transition:transform .18s}
 .fd-toggle.on .fd-switch{background:var(--negro)}
 .fd-toggle.on .fd-switch::after{transform:translateX(14px)}
+/* El boton de corregir el archivo original. Va separado del
+   formulario por una linea: no es un campo mas del recibo, es algo
+   que se le hace al recibo entero. */
+.fd-acts{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  margin-top:18px;padding-top:16px;border-top:1px solid var(--bordes)}
+.fd-corregir{display:inline-flex;align-items:center;gap:8px;border:1px dashed var(--bordes);
+  border-radius:9px;padding:8px 14px;font-size:13px;font-weight:600;color:var(--negro);
+  cursor:pointer;background:#fff;transition:border-color .15s,background .15s;flex:0 0 auto}
+.fd-corregir:hover{border-color:var(--negro);background:#fafafa}
+.fd-corregir.ocupado{opacity:.55;cursor:default;border-style:solid}
+.fd-corregir.ocupado:hover{border-color:var(--bordes);background:#fff}
+.fd-corregir-n{font-size:12.5px;color:var(--gris);line-height:1.45;flex:1 1 260px;min-width:0}
 @media(max-width:760px){
+  .fd-acts{flex-direction:column;align-items:stretch;gap:9px}
+  .fd-corregir{justify-content:center}
   .fd-row{flex-direction:column;gap:14px}
   .fd-field,.fd-radio-wrap{min-width:0;width:100%}
   .fd-field{flex-direction:column;align-items:flex-start;gap:6px}

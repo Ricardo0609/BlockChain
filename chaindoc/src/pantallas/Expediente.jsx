@@ -9,7 +9,9 @@ import { renderCuerpo } from "../ui/Cuerpo";
 import { estaVacio } from "../nucleo/texto";
 import { vanEnOrden, faseQueFalta, porQueEsperar, porQueEsperarLargo,
          ultimosDeCadaFase, cierraLaFase, numeroDeCada } from "../nucleo/fases";
-import { permiteEstado, motivoBloqueo, firmasDe, firmaronLasDos, FUERZA_TEXTO, PARTES } from "../nucleo/acuerdo";
+import { permiteEstado, motivoBloqueo, firmasDe, firmaronLasDos, parteDe,
+         FUERZA_TEXTO, PARTES } from "../nucleo/acuerdo";
+import { sePuedeFirmar } from "../nucleo/comprobantes";
 import {
   aidDe,
   archivosDe,
@@ -43,6 +45,9 @@ export function renderExpediente(ctx){
     focoDup, getFile, irADuplicado, openDoc, removeEvidence, saving, setFaseSel,
     setFilesOpen, setFocoDup, setMIn, setModal, setMontoReq, setPass,
     uid, verifVin, vinculos,
+    // ← NUEVO (24 nov): para saber qué parte del contrato soy yo, y
+    // si el botón de firmar de más abajo va a estar ahí.
+    user, acctEmail,
     puedo, puedoSubirA, verificarFiscal, verificandoFiscal, setEnlaceNuevo,
     revisando, aprobarEntrega, pedirRechazo,
     setShareModo, setShareTodo, setShareReqs, setShareRol, anclajesPorHash,
@@ -141,6 +146,28 @@ export function renderExpediente(ctx){
   // firmó y con qué fuerza. La cadena entera sigue en Línea de tiempo.
   const firmas  = firmasDe(d);
   const cerrado = firmaronLasDos(d, "conformidad");
+
+  // ── QUIÉN SOY YO EN ESTE CONTRATO (24 nov) ──────────────────
+  //
+  // Hace falta para la banda de «Terminado». Sin esto, la pantalla
+  // hablaba como si quien mira fuera SIEMPRE quien mandó el
+  // contrato: a la otra parte le decía «falta que firmes tú» cuando
+  // ya había firmado, y le ponía su propio nombre como el de la
+  // persona que falta. Se vio al abrirla con la otra cuenta.
+  const miParte = parteDe(d, acctEmail);
+  const faltaDe = { emisor: !acu?.conformidadEmisor, receptor: !acu?.conformidadReceptor };
+  const nombreDe = {
+    emisor: d.owner || "quien mandó el contrato",
+    receptor: acu?.paraNombre || acu?.paraEmail || "la otra parte",
+  };
+  const faltaQue = (parte) =>
+    parte === miParte ? "firmes tú" : `firme ${nombreDe[parte]}`;
+  // Y si el botón de firmar va a estar ahí abajo. Las mismas
+  // condiciones que usa la barra de firmas de `Documento.jsx`: si se
+  // separan, la banda ofrecerá un camino que no lleva a ningún
+  // botón.
+  const yaFirme = (d.chain || []).some((b) => b.action === "FIRMA" && b.author === user);
+  const puedoFirmarYa = !yaFirme && puedo("firmar") && sePuedeFirmar(d);
   const PESTANAS = [
     { id:"expediente", txt:"Expediente" },
     { id:"tiempo",     txt:"Línea de tiempo" },
@@ -210,10 +237,45 @@ export function renderExpediente(ctx){
                 ya no es lo que cierra el plazo de firma: lo cierra el
                 silencio del destinatario. */}
             {acu.estado==="sin_firmar" && `Se mandó a firmar y nadie contestó en ${acu.plazos?.silencio||14} días. Puedes corregirlo y mandarlo otra vez.`}
+            {/* ── TERMINADO: LO QUE FALTA, DICHO (23 nov) ──────
+                Lo pidió Ricardo con la condición dentro: «que quede
+                pendiente y que avise o se note que falta por firmar
+                de cerrado».
+
+                Así que no dice «terminado» y ya: dice QUIÉN falta.
+                Un cartel que sólo celebrara el final haría que nadie
+                diera nunca las firmas de cierre, y el estado
+                «Cerrado» existiría en el código y no en la vida. */}
+            {acu.estado==="terminado" && (<>
+              Ya está todo entregado y aprobado. Falta que {
+                faltaDe.emisor && faltaDe.receptor
+                  ? "las dos partes firmen"
+                  : faltaQue(faltaDe.emisor ? "emisor" : "receptor")
+              } para cerrarlo. Mientras tanto se puede seguir subiendo lo que haga falta.
+            </>)}
             {acu.estado==="entregado" && "Esperando la conformidad final."}
             {acu.estado==="sin_respuesta" && "Se pidió la conformidad y no hubo respuesta. Lo entregado y las fechas quedan asentados."}
             {acu.estado==="cerrado" && "Terminado y aceptado por las dos partes."}
           </div>
+          {/* Y el camino, no sólo el aviso: un cartel que dice «falta
+              firmar» sin decir dónde deja a la persona buscando.
+              ← CORREGIDO (24 nov). Antes esto saltaba a la pestaña
+              «Contrato», que es el texto del contrato y nada más: no
+              se firma ahí. El botón de firmar está más abajo, en la
+              barra de firmas, FUERA de las pestañas. Así que ahora
+              baja hasta él en vez de cambiar de pestaña, y sólo sale
+              cuando ese botón va a estar. Se vio siguiendo el clic,
+              no leyendo el código. */}
+          {acu.estado==="terminado" && miParte && faltaDe[miParte] && puedoFirmarYa && (
+            <div className="acu-banda-acts">
+              <button className="btn btn-primary" onClick={()=>{
+                document.getElementById("sign-bar")
+                  ?.scrollIntoView({ behavior:"smooth", block:"center" });
+              }}>
+                Ir a firmar el cierre
+              </button>
+            </div>
+          )}
           {esperaMiFirma && (
             <div className="acu-banda-acts">
               <button className="btn btn-primary" onClick={()=>{setPass("");setModal({t:"aceptar"});}}>

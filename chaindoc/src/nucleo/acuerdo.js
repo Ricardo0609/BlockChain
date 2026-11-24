@@ -26,6 +26,8 @@ export const ESTADOS = [
   "borrador",
   "en_firma",
   "vigente",
+  // Todo entregado, pendiente de las firmas de cierre. Ver ETIQUETA.
+  "terminado",
   "entregado",
   "cerrado",
   // salidas
@@ -39,6 +41,18 @@ export const ETIQUETA = {
   borrador:      "Borrador",
   en_firma:      "Esperando firma",
   vigente:       "Vigente",
+  // ← NUEVO (23 nov): «Terminado» no es «Cerrado», y Ricardo los
+  // separó con estas palabras: «terminado cuando ya se adjuntaron
+  // todos los archivos y finalizaron todas las fases; cerrado cuando
+  // los dos firmaron para concluir y aceptar de que ya está todo
+  // bien».
+  //
+  // La etiqueta lleva dentro lo que falta, y no por adorno: él lo
+  // pidió así —«que quede pendiente y que avise o se note que falta
+  // por firmar de cerrado»—. Un «Terminado» a secas se lee como el
+  // final, y entonces nadie daría nunca las firmas de cierre: el
+  // estado «Cerrado» existiría en el código y no en la vida.
+  terminado:     "Terminado · falta firmar el cierre",
   entregado:     "Entregado · esperando conformidad",
   cerrado:       "Cerrado",
   rechazado:     "No aceptado",
@@ -51,6 +65,9 @@ export const TONO = {
   borrador:      "neutro",
   en_firma:      "espera",
   vigente:       "bien",
+  // «espera» y no «bien»: está todo hecho menos lo que falta, y lo
+  // que falta es justo lo que esto tiene que recordar.
+  terminado:     "espera",
   entregado:     "espera",
   cerrado:       "bien",
   rechazado:     "mal",
@@ -266,6 +283,33 @@ export function estadoAcuerdo(exp, { hoy = new Date() } = {}) {
   }
 
   if (!a.conformidadPedidaEn) {
+    // ── TERMINADO: TODO ENTREGADO, FALTA FIRMAR (23 nov) ────
+    //
+    // Lo pidió Ricardo, y pidió también que llegara solo: «la opción
+    // uno, o sea el que dice llega solo».
+    //
+    // OJO CON LO QUE DICE EL COMENTARIO DE ARRIBA de esta función
+    // —que el estado no mira los requisitos a propósito—. Sigue
+    // siendo verdad para todo lo demás, y la razón era buena: el 18
+    // de octubre esto se intentó y cerró la puerta por dentro.
+    //
+    // La diferencia es que aquello MOVÍA EL CONTRATO A «CERRADO», y
+    // cerrado no deja subir nada. Esto no: «terminado» tiene
+    // exactamente los mismos permisos que «vigente» —ver
+    // ACCIONES_POR_ESTADO, donde está dicho y probado—. Es un cartel,
+    // no una puerta. Si mañana entrega algo más, el expediente lo
+    // acepta igual y el cartel se queda.
+    // Y con algo que entregar. `todoEntregado` de una lista VACÍA es
+    // `true` —«todos» de ninguno—, así que sin esto un expediente sin
+    // un solo requisito nacería «Terminado» sin que nadie hubiera
+    // entregado nada. Para firmar la conformidad eso sí vale, y por
+    // eso la condición está aquí y no dentro de `todoEntregado`: un
+    // contrato sin nada que entregar se puede cerrar, pero no se
+    // puede dar por terminado.
+    const hayQueEntregar = (exp?.requisitos || []).some((r) => r?.obligatorio);
+    if (hayQueEntregar && todoEntregado(exp)) {
+      return armar("terminado", { exp, plazos, hoy });
+    }
     return armar("vigente", { exp, plazos, hoy });
   }
 
@@ -336,6 +380,23 @@ export const ACCIONES_POR_ESTADO = {
   // SUBIR, y en ningún otro: no se revisa lo que todavía no se puede
   // entregar, y en un contrato cerrado ya no se toca nada.
   vigente:       ["subir", "vincular", "retirar", "pedir-conformidad", "cerrar",
+                  "dar-conformidad", "pedir-mas", "revisar"],
+  // ── TERMINADO NO CIERRA NINGUNA PUERTA (23 nov) ──────────
+  //
+  // Esta lista es, a propósito, IDÉNTICA a la de «vigente». Hay una
+  // prueba que lo comprueba, y existe por algo que ya pasó:
+  //
+  // El 18 de octubre se intentó que el contrato se cerrara solo al
+  // estar todo entregado, y cerró la puerta por dentro. «Entregado
+  // todo» lo decide la lista de requisitos, así que en cuanto
+  // cuadraba ya no se podía adjuntar nada más: ni la segunda factura
+  // del mismo requisito, ni la corrección de la primera.
+  //
+  // «Terminado» evita esa trampa siendo un CARTEL y no una puerta.
+  // Dice que ya está todo y que falta firmar; no impide nada. El día
+  // que alguien le quite una acción a esta lista, el expediente se
+  // congelará solo en cuanto cuadren las cuentas.
+  terminado:     ["subir", "vincular", "retirar", "pedir-conformidad", "cerrar",
                   "dar-conformidad", "pedir-mas", "revisar"],
   entregado:     ["subir", "vincular", "retirar", "dar-conformidad", "reportar-faltante",
                   "pedir-mas", "revisar"],
@@ -532,12 +593,18 @@ export function motivoBloqueo(estado, accion) {
 export const TRANSICIONES = {
   borrador:      ["en_firma"],
   en_firma:      ["vigente", "rechazado", "sin_firmar", "borrador"],
-  vigente:       ["entregado", "cerrado"],
-  entregado:     ["cerrado", "vigente", "sin_respuesta"],
+  // ← ACTUALIZADA (23 nov): entra «terminado», y se puede ir y venir
+  // entre él y «vigente». Volver NO es raro: basta con que el dueño
+  // añada un requisito nuevo, o rechace un comprobante, para que
+  // deje de estar todo entregado. Que el camino sea de ida y vuelta
+  // es justo lo que hace que «terminado» no congele nada.
+  vigente:       ["terminado", "entregado", "cerrado"],
+  terminado:     ["vigente", "entregado", "cerrado"],
+  entregado:     ["cerrado", "vigente", "terminado", "sin_respuesta"],
   cerrado:       [],
   rechazado:     ["borrador", "en_firma"],
   sin_firmar:    ["borrador", "en_firma"],
-  sin_respuesta: ["cerrado", "entregado"],
+  sin_respuesta: ["cerrado", "entregado", "terminado"],
 };
 
 export const transicionValida = (de, a) =>
