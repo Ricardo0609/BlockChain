@@ -358,33 +358,47 @@ describe("los RFC de un expediente", () => {
   });
 });
 
-// ── ¿Qué comprobante lleva importe? (10 oct) ──────────────────
+// ── ¿Qué comprobante lleva importe? ───────────────────────────
 //
-// El campo «Importe» salía en todo lo adjunto. En un entregable o un
-// enlace no significa nada, y además engordaba el aviso de «N
-// comprobantes sin importe anotado» con cosas que nunca van a tener
-// uno: un reproche imposible de quitar.
+// (10 oct) El campo «Importe» salía en todo lo adjunto. En un
+// entregable o un enlace no significa nada, y además engordaba el
+// aviso de «N comprobantes sin importe anotado» con cosas que nunca
+// van a tener uno: un reproche imposible de quitar.
+//
+// (25 nov) Y AHORA, ADEMÁS, SÓLO LO LLEVA UN DOCUMENTO DE OCTAVIN.
+//
+// Ricardo lo pidió viendo una foto que había subido la otra parte:
+// «ese campo de importe no debería estar porque lo podrían alterar».
+// El problema no era sólo equivocarse al teclear. Esa cifra entra en
+// `comprobado`, que se compara con lo pactado, así que una cantidad
+// TECLEADA sobre la foto de otra persona acababa sosteniendo el
+// «faltan $3,000» del expediente. Un número escrito encima de una
+// imagen no prueba nada y aquí pesaba como si probara.
+//
+// Quien necesite que su foto cuente la convierte en recibo: ahí el
+// importe se LEE del archivo y el original queda adjunto.
 import { llevaImporte } from "../src/smartContract";
 
 describe("llevaImporte", () => {
-  const archivo = { aid: "a1", nombre: "factura.pdf" };
-  const enlace  = { aid: "a2", origen: "enlace", url: "https://x.com/", nombre: "Sitio" };
+  const interno = { aid: "a1", nombre: "factura.pdf", origen: "interno", docId: "d1" };
+  const suelto  = { aid: "a2", nombre: "factura.pdf" };
+  const enlace  = { aid: "a3", origen: "enlace", url: "https://x.com/", nombre: "Sitio" };
 
-  it("sí, cuando el requisito es la prueba de un pago", () => {
-    expect(llevaImporte({ tipo: "comprobante" }, archivo)).toBe(true);
+  it("sí, cuando es un documento de OCTAVIN en un requisito de pago", () => {
+    expect(llevaImporte({ tipo: "comprobante" }, interno)).toBe(true);
+  });
+
+  it("NO cuando es un archivo suelto, aunque el requisito sea un pago", () => {
+    // La foto de un recibo de la ferretería ya no lleva campo: no hay
+    // de dónde leer la cifra, y teclearla no la hace cierta.
+    expect(llevaImporte({ tipo: "comprobante" }, suelto)).toBe(false);
+    expect(llevaImporte({ tipo: "comprobante" },
+      { aid: "a4", nombre: "recibo.jpg", tipo: "image/jpeg" })).toBe(false);
   });
 
   it("no, cuando el requisito es un entregable o un papel", () => {
-    expect(llevaImporte({ tipo: "entregable" }, archivo)).toBe(false);
-    expect(llevaImporte({ tipo: "documento" },  archivo)).toBe(false);
-  });
-
-  it("la foto de un recibo conserva su campo", () => {
-    // Lo que manda es PARA QUÉ sirve el requisito, no si la evidencia
-    // es una imagen. En obra, el recibo de la ferretería llega como
-    // foto del teléfono y su importe hay que poder anotarlo.
-    const foto = { aid: "a3", nombre: "recibo.jpg", tipo: "image/jpeg" };
-    expect(llevaImporte({ tipo: "comprobante" }, foto)).toBe(true);
+    expect(llevaImporte({ tipo: "entregable" }, interno)).toBe(false);
+    expect(llevaImporte({ tipo: "documento" },  interno)).toBe(false);
   });
 
   it("un enlace nunca, ni en un requisito de pago", () => {
@@ -392,14 +406,17 @@ describe("llevaImporte", () => {
   });
 
   it("un importe ya anotado no se esconde jamás", () => {
-    // Esconder un dato que alguien capturó es perderlo sin avisar.
-    expect(llevaImporte({ tipo: "entregable" }, { ...archivo, monto: 500 })).toBe(true);
+    // Esconder un dato que alguien capturó es perderlo sin avisar, y
+    // además el expediente ya se cuadró con él. Se sigue viendo; lo
+    // que cambia es que la pantalla dice que lo escribió una persona.
+    expect(llevaImporte({ tipo: "entregable" }, { ...interno, monto: 500 })).toBe(true);
+    expect(llevaImporte({ tipo: "comprobante" }, { ...suelto, monto: 500 })).toBe(true);
     expect(llevaImporte({ tipo: "comprobante" }, { ...enlace, monto: 500 })).toBe(true);
   });
 
-  it("sin tipo (expedientes viejos) se enseña", () => {
-    expect(llevaImporte({}, archivo)).toBe(true);
-    expect(llevaImporte(undefined, archivo)).toBe(true);
+  it("sin tipo (expedientes viejos) se enseña, si es un documento", () => {
+    expect(llevaImporte({}, interno)).toBe(true);
+    expect(llevaImporte(undefined, interno)).toBe(true);
   });
 });
 
@@ -408,20 +425,29 @@ describe("el aviso de «sin importe anotado»", () => {
     moneda: "MXN", montoTotal: 1000,
     requisitos: [{ id: "r1", titulo: "X", tipo, monto: 1000, archivos }],
   });
+  const doc = (extra = {}) => ({ aid: "a3", nombre: "factura.pdf",
+    origen: "interno", docId: "d1", ...extra });
 
   it("no cuenta lo que no puede llevar importe", () => {
-    expect(calcularMontos(exp("entregable", [{ aid: "a1", nombre: "obra.jpg" }])).sinImporte).toBe(0);
+    expect(calcularMontos(exp("entregable", [doc()])).sinImporte).toBe(0);
     expect(calcularMontos(exp("comprobante",
       [{ aid: "a2", origen: "enlace", url: "https://x.com/" }])).sinImporte).toBe(0);
   });
 
-  it("y sí cuenta la factura a la que de verdad le falta", () => {
-    expect(calcularMontos(exp("comprobante", [{ aid: "a3", nombre: "factura.pdf" }])).sinImporte).toBe(1);
+  it("y tampoco da la lata con las fotos sueltas", () => {
+    // Ésta es la otra mitad de quitar el campo. Si el aviso siguiera
+    // contándolas, cada foto reprocharía para siempre un importe que
+    // ya no hay forma de anotar.
+    expect(calcularMontos(exp("comprobante",
+      [{ aid: "a5", nombre: "recibo.jpg", tipo: "image/jpeg" }])).sinImporte).toBe(0);
   });
 
-  it("deja de contarla en cuanto se anota", () => {
-    expect(calcularMontos(exp("comprobante",
-      [{ aid: "a3", nombre: "factura.pdf", monto: 1000 }])).sinImporte).toBe(0);
+  it("y sí cuenta el documento al que de verdad le falta", () => {
+    expect(calcularMontos(exp("comprobante", [doc()])).sinImporte).toBe(1);
+  });
+
+  it("deja de contarlo en cuanto trae su importe", () => {
+    expect(calcularMontos(exp("comprobante", [doc({ monto: 1000 })])).sinImporte).toBe(0);
   });
 });
 

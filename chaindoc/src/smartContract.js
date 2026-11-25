@@ -937,18 +937,40 @@ export function duplicados(docs = []) {
  *   - «entregable»  → el producto o servicio final. No lleva.
  *   - «documento»   → un papel que debe existir (permiso, póliza). No lleva.
  *
- * Por eso la foto de un recibo de la ferretería SÍ conserva su campo:
- * lo que manda es para qué sirve el requisito, no si la evidencia es
- * una imagen. Un enlace es la excepción: una dirección no es un pago,
- * esté donde esté.
+ * ── Y DE DÓNDE SALE LA CIFRA (25 nov) ───────────────────────
  *
- * Y un importe ya anotado no se esconde nunca, aunque hoy la regla
- * diga que no debería estar: esconder un dato que alguien capturó es
- * perderlo sin avisar.
+ * Sólo de un documento de OCTAVIN. Un archivo suelto —la foto de un
+ * recibo, un PDF— ya NO lleva importe.
+ *
+ * Hasta hoy se escribía a mano, y Ricardo lo vio en una foto que
+ * había subido la otra parte: «ese campo de importe no debería estar
+ * porque lo podrían alterar». Tiene razón, y el problema no es sólo
+ * que se pueda equivocar. Esa cifra entra en la suma de lo
+ * comprobado y se compara con lo pactado, así que una cantidad
+ * TECLEADA sobre la foto de otra persona acababa sosteniendo el
+ * «faltan $3,000» del expediente. Un número escrito a mano encima de
+ * una imagen no prueba nada, y aquí pesaba como si probara.
+ *
+ * Quien necesite que su foto cuente la convierte en recibo: ahí el
+ * importe se LEE del archivo, el original queda adjunto, y cualquier
+ * corrección deja su bloque en la cadena.
+ *
+ * Un enlace tampoco lleva, como antes: una dirección no es un pago.
+ *
+ * Y un importe YA ANOTADO no se esconde nunca, aunque la regla de
+ * hoy diga que no debería estar. Esconder un dato que alguien
+ * capturó es perderlo sin avisar, y además el expediente ya se
+ * cuadró con él. Se sigue viendo, y se dice que lo escribió una
+ * persona.
  */
 export function llevaImporte(requisito, archivo){
   if(typeof archivo?.monto === "number") return true;
   if(esEnlace(archivo)) return false;
+  // Sólo un documento de OCTAVIN tiene de dónde leer la cifra. Esto
+  // es también lo que decide si el expediente avisa de «sin importe
+  // anotado»: sin esta línea, cada foto suelta daría la lata para
+  // siempre por un campo que ya no existe.
+  if(archivo?.origen !== "interno") return false;
   // Sin tipo (expedientes viejos) se enseña: mejor un campo de más que
   // esconderle a alguien el que ya usaba.
   return (requisito?.tipo || "comprobante") === "comprobante";

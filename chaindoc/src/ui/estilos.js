@@ -1381,6 +1381,12 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .tag.t-entregable{background:rgba(99,102,241,.12);color:#4f46e5}
 .tag.t-comprobante{background:rgba(234,88,12,.12);color:#c2410c}
 .tag.t-documento{background:rgba(20,130,90,.12);color:#14825a}
+/* Un importe que escribio una persona, no uno leido de un
+   documento. En ambar, como todo lo que pide una segunda mirada:
+   la cifra esta ahi y cuenta, pero nadie debe confundirla con una
+   que salga del archivo. Desde el 25 de noviembre ya no se pueden
+   escribir nuevos; esta marca es para los que quedaron. */
+.tag.t-mano{background:rgba(180,120,10,.12);color:#92610a}
 .smart-x{background:none;border:none;font-size:22px;line-height:1;color:var(--gris-300);cursor:pointer;padding:0 4px}
 .smart-x:hover{color:#c2410c}
 
@@ -1701,6 +1707,9 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   .doc-title{font-size:24px}
   .paper{padding:20px 16px;min-height:400px;border-radius:10px;margin-bottom:18px}
   .paper-ta,.paper-ro{font-size:16px;line-height:1.75;min-height:340px}
+  /* El contrato del enlace baja igual: casi todo el que abre un
+     enlace lo abre en el telefono. */
+  .entrega-contrato-c{font-size:16px;line-height:1.75}
   .vban{padding:12px 14px;font-size:14px;border-radius:10px}
 
   /* firmas apiladas */
@@ -2020,12 +2029,18 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   cursor:pointer;font-size:14px;font-weight:600;list-style:none;user-select:none}
 .entrega-contrato summary::-webkit-details-marker{display:none}
 .entrega-contrato summary:hover{background:var(--gris-050,rgba(0,0,0,.03))}
+/* El contrato, como lo ve quien lo mando.
+   ← CORREGIDO (25 nov). Antes esto tenia su propia letra, mas chica y
+   mas apretada, y sobre todo le faltaba el respeto a los saltos de
+   linea: los que habia dentro de un parrafo se comian y el
+   contrato se leia como un muro. Ahora lleva la misma letra, el mismo
+   interlineado y el mismo trato a los saltos que la vista del dueno,
+   y los titulos y parrafos salen de las MISMAS reglas, mas abajo.
+   Lo unico suyo es la caja: alto maximo y barra, porque aqui el
+   contrato vive plegado dentro de otra pantalla. */
 .entrega-contrato-c{max-height:50vh;overflow:auto;padding:4px 20px 20px;
-  background:var(--papel,#fff);font-size:14.5px;line-height:1.6}
-.entrega-contrato-c h1{font-size:18px;margin:16px 0 10px}
-.entrega-contrato-c h2{font-size:15px;margin:15px 0 6px}
-.entrega-contrato-c p{margin:0 0 9px}
-.entrega-contrato-c ul,.entrega-contrato-c ol{margin:0 0 9px;padding-left:22px}
+  background:var(--papel,#fff);font-family:var(--f-p);font-size:19px;
+  line-height:1.9;color:var(--negro);white-space:pre-wrap;overflow-wrap:anywhere}
 
 .entrega-aceptar{border:1px solid var(--bordes);border-radius:12px;padding:18px 20px;
   margin:0 0 18px}
@@ -2116,22 +2131,27 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
 .paper-ta{min-height:420px;outline:none;white-space:pre-wrap;overflow-wrap:anywhere}
 .paper-ta:empty::before{content:attr(data-vacio);color:var(--gris-200)}
 
-/* Titulos, listas y alineacion, iguales leyendo y escribiendo. */
-.paper-ro h1,.paper-ta h1{font-family:var(--f-t);font-size:30px;font-weight:600;
+/* Titulos, listas y alineacion, iguales leyendo y escribiendo.
+   Y tambien en el enlace: la caja del contrato entra en estas mismas
+   reglas, no en una copia suya. Ricardo lo pidio asi -"quiero que se
+   vea como lo ve el que creo el expediente"- y una copia se desvia
+   sola en cuanto alguien toque una de las dos. */
+.paper-ro h1,.paper-ta h1,.entrega-contrato-c h1{font-family:var(--f-t);font-size:30px;font-weight:600;
   line-height:1.25;margin:22px 0 10px}
-.paper-ro h2,.paper-ta h2{font-family:var(--f-t);font-size:23px;font-weight:600;
+.paper-ro h2,.paper-ta h2,.entrega-contrato-c h2{font-family:var(--f-t);font-size:23px;font-weight:600;
   line-height:1.3;margin:20px 0 8px}
-.paper-ro h3,.paper-ta h3{font-family:var(--f-t);font-size:19px;font-weight:600;
+.paper-ro h3,.paper-ta h3,.entrega-contrato-c h3{font-family:var(--f-t);font-size:19px;font-weight:600;
   line-height:1.35;margin:16px 0 6px}
-.paper-ro h1:first-child,.paper-ta h1:first-child,
-.paper-ro h2:first-child,.paper-ta h2:first-child,
-.paper-ro h3:first-child,.paper-ta h3:first-child{margin-top:0}
-.paper-ro p,.paper-ta p{margin:0 0 10px}
-.paper-ro p:last-child,.paper-ta p:last-child{margin-bottom:0}
-.paper-ro ul,.paper-ta ul,.paper-ro ol,.paper-ta ol{margin:0 0 12px;padding-left:26px}
-.paper-ro li,.paper-ta li{margin:0 0 5px}
-.paper-ro strong,.paper-ta strong{font-weight:700}
-.paper-ro em,.paper-ta em{font-style:italic}
+.paper-ro h1:first-child,.paper-ta h1:first-child,.entrega-contrato-c h1:first-child,
+.paper-ro h2:first-child,.paper-ta h2:first-child,.entrega-contrato-c h2:first-child,
+.paper-ro h3:first-child,.paper-ta h3:first-child,.entrega-contrato-c h3:first-child{margin-top:0}
+.paper-ro p,.paper-ta p,.entrega-contrato-c p{margin:0 0 10px}
+.paper-ro p:last-child,.paper-ta p:last-child,.entrega-contrato-c p:last-child{margin-bottom:0}
+.paper-ro ul,.paper-ta ul,.entrega-contrato-c ul,
+.paper-ro ol,.paper-ta ol,.entrega-contrato-c ol{margin:0 0 12px;padding-left:26px}
+.paper-ro li,.paper-ta li,.entrega-contrato-c li{margin:0 0 5px}
+.paper-ro strong,.paper-ta strong,.entrega-contrato-c strong{font-weight:700}
+.paper-ro em,.paper-ta em,.entrega-contrato-c em{font-style:italic}
 
 .al-centro{text-align:center}
 .al-derecha{text-align:right}

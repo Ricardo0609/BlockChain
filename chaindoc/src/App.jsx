@@ -2203,16 +2203,14 @@ export default function Octavin(){
   // ← NUEVO: permite anotar a mano el importe de un comprobante subido.
   // Los documentos internos lo traen solos; un PDF escaneado no.
   // ← ACTUALIZADO: el importe se anota por comprobante, no por requisito
-  const setMontoReq = async(reqId, aid, texto)=>{
-    const n = parseFloat(String(texto).replace(/[^0-9.-]/g,""));
-    const monto = Number.isFinite(n) ? n : null;
-    const requisitos = d.requisitos.map(r=> r.id!==reqId ? r : {
-      ...quitarArchivoViejo(r),
-      archivos: archivosDe(r).map(a=> aidDe(a)!==aid ? a : {...a, monto}),
-    });
-    const up = await guardarCampos(d, { requisitos });
-    if(up) setD(up);
-  };
+  // ── QUITADO (25 nov): escribir el importe a mano ──────────
+  //
+  // Aquí vivía `setMontoReq`, que guardaba el importe que alguien
+  // tecleaba sobre un archivo suelto. Se fue con su campo: esa cifra
+  // entraba en la suma de lo comprobado y sostenía el «faltan
+  // $3,000» del expediente, y un número tecleado encima de la foto
+  // de otra persona no prueba nada. El importe sale ahora sólo de un
+  // documento de OCTAVIN, que lo LEE del archivo. Ver `llevaImporte`.
 
   // ← NUEVO (3 nov): cambiar si las fases van en orden o son sueltas.
   //
@@ -3067,7 +3065,7 @@ export default function Octavin(){
     setContent, setCreateStep, setD, setDirty, setDragOver, setDrop, setEdit, setEmail,
     setFaseSel, setFields, setFilesOpen, setFilterF, setFocoDup, setFolders, setHist,
     setHistTab, setLinkErr, setLinkExp, setLock, setLockInput, setMIn, setMIn2, setMenu,
-    setMethod, setModal, setMontoReq, setOpenSec, setPass, setShareErr, setShareFound,
+    setMethod, setModal, setOpenSec, setPass, setShareErr, setShareFound,
     setShowHashes, setSmartErr, setSmartRes, setSmartText, setSolMsg,
     renombrar, pedirRedaccion, usarRedaccion, redBusy, redRes,
     setTitle, setTpl, setUnlocked, setView, shareBusy, shareErr, shareFound,

@@ -43,7 +43,7 @@ export function renderExpediente(ctx){
     attachEvidence, bioCreds, bioOk, cancelarSolicitud, d, docs, faseSel, filesOpen,
     subiendoReq, setFasesEnOrden,
     focoDup, getFile, irADuplicado, openDoc, removeEvidence, saving, setFaseSel,
-    setFilesOpen, setFocoDup, setMIn, setModal, setMontoReq, setPass,
+    setFilesOpen, setFocoDup, setMIn, setModal, setPass,
     uid, verifVin, vinculos,
     // ← NUEVO (24 nov): para saber qué parte del contrato soy yo, y
     // si el botón de firmar de más abajo va a estar ahí.
@@ -728,7 +728,8 @@ export function renderExpediente(ctx){
                   lo que este producto promete. Para cambiarlo se edita
                   el recibo, y aquí se actualiza solo.
                   Un archivo suelto —un PDF, una foto— no tiene
-                  documento que leer, así que ese sí se escribe a mano. */}
+                  documento que leer, y desde el 25 de noviembre ya NO
+                  se escribe a mano: ver `llevaImporte`. */}
               {llevaImporte(r, a) && (
                 <div className="exp-monto">
                   <span className="mnt-lbl">Importe:</span>
@@ -740,10 +741,27 @@ export function renderExpediente(ctx){
                       {a.monto!=null ? "del documento" : "el documento no trae importe"}
                     </span>
                   </>) : (<>
-                    <input className="exp-monto-in" inputMode="decimal" placeholder="0.00"
-                      defaultValue={a.monto ?? ""}
-                      onBlur={e=>setMontoReq(r.id, aid, e.target.value)}
-                      onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()} />
+                    {/* ← CORREGIDO (25 nov): aquí había un campo para
+                        teclear el importe de un archivo suelto. Ya no.
+
+                        Ricardo lo vio en una foto que había subido la
+                        otra parte: «ese campo de importe no debería
+                        estar porque lo podrían alterar». Y pesaba más
+                        de lo que parecía: esa cifra entra en la suma de
+                        lo comprobado y sostenía el «faltan $3,000» del
+                        expediente. Un número tecleado encima de la foto
+                        de otra persona no prueba nada.
+
+                        Lo YA anotado se sigue viendo —el expediente se
+                        cuadró con ello y esconderlo sería perderlo sin
+                        avisar— pero diciendo quién lo puso ahí. Lo que
+                        no se puede es escribir uno nuevo: para eso se
+                        convierte la foto en recibo, y ahí el importe se
+                        LEE del archivo. */}
+                    <span className="exp-monto-fijo">
+                      {fmtMonto(a.monto, d.moneda||"MXN")}
+                    </span>
+                    <span className="tag t-mano">escrito a mano</span>
                   </>)}
                 </div>
               )}
@@ -755,6 +773,18 @@ export function renderExpediente(ctx){
               {esEnlace(a) && (
                 <a className="btn btn-tertiary" style={{marginRight:8}} href={a.url}
                    target="_blank" rel="noopener noreferrer nofollow">Abrir enlace</a>
+              )}
+              {/* ← NUEVO (25 nov): poder ver el archivo AQUÍ.
+                  La tarjeta enseñaba el nombre, el peso, la huella y un
+                  botón de retirar, y ninguna forma de mirar lo que te
+                  acababan de mandar: para eso había que bajar a la
+                  lista de adjuntos y desbloquearla. Es raro decidir si
+                  se retira algo sin poder abrirlo antes, y más raro aún
+                  darle el visto bueno, que se decide dos renglones más
+                  abajo. */}
+              {!esEnlace(a) && a.origen!=="interno" && isPreviewable(a.tipo) && (
+                <button className="btn btn-tertiary" style={{marginRight:8}}
+                  onClick={()=>getFile(a,false)}>Ver</button>
               )}
               {/* ← NUEVO (18 oct): «Retirar» no tenía ninguna puerta.
                   El servidor sí lo rechazaba, pero el botón se

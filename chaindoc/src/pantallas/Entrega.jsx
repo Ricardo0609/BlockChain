@@ -27,11 +27,11 @@
 // hacer en esta página pasa por crear una cuenta, y el texto no
 // insinúa que sí.
 
-import { Icon } from "../ui/iconos";
-import { ESTILOS } from "../ui/estilos";
+import { Icon, IcoEye } from "../ui/iconos";
 import { tiempoRestante } from "../nucleo/invitaciones";
 import { fmtFull } from "../nucleo/formato";
 import { CampoEnlace } from "../ui/CampoEnlace";
+import { MarcoEnlace } from "../ui/MarcoEnlace";
 
 /**
  * A dónde lleva «Conoce OCTAVIN».
@@ -53,23 +53,29 @@ export function renderEntrega(ctx){
     // ← NUEVO (15 nov): el candado y la firma de un documento de texto.
     invClave, setInvClave, abrirConClave, invClaveBusy, invClaveErr,
     firmarInvitacion,
+    // ← NUEVO (25 nov): la huella se enseña detrás del ojo, y el
+    // interruptor de quién está abierto vive en App.jsx, como el del
+    // expediente. Aquí las claves llevan «ent:» delante para no
+    // pisarse con las de los documentos.
+    showHashes, setShowHashes,
   } = ctx;
 
-  const Marco = ({ children }) => (<><style>{ESTILOS}</style>
-    {notif && <div className={`notif ${notif.t}`}>{notif.m}</div>}
-    <div className="entrega-wrap">
-      <div className="entrega">
-        <div className="entrega-marca">OCTAVIN</div>
-        {children}
-      </div>
-    </div></>);
+  // ← CORREGIDO (25 nov). Aquí vivía `Marco`, y por eso no se podía
+  // escribir el nombre: un componente definido dentro de la pintada
+  // es un tipo nuevo cada vez, y React tiraba la pantalla entera a
+  // cada letra. Se mudó a `ui/MarcoEnlace.jsx`, donde está el porqué.
+  //
+  // OJO: no se envuelve en otra función para ahorrarse escribir
+  // `notif` cinco veces. Una función escrita aquí dentro es un tipo
+  // nuevo en cada pintada, aunque lo único que haga sea llamar a la
+  // de fuera, y el fallo vuelve igual. El aviso viaja como propiedad.
 
   if(invitacion === undefined) return (
-    <Marco><div className="loading"><div className="spin"/><p>Abriendo el enlace…</p></div></Marco>
+    <MarcoEnlace notif={notif}><div className="loading"><div className="spin"/><p>Abriendo el enlace…</p></div></MarcoEnlace>
   );
 
   if(invError) return (
-    <Marco>
+    <MarcoEnlace notif={notif}>
       <div className="entrega-mal">
         <Icon n="link_off" size={40}/>
         <h1>Este enlace no se puede usar</h1>
@@ -78,7 +84,7 @@ export function renderEntrega(ctx){
           Si crees que es un error, responde el correo de quien te lo envió y pídele uno nuevo.
         </p>
       </div>
-    </Marco>
+    </MarcoEnlace>
   );
 
   // ══════════════════════════════════════════════════════════
@@ -95,7 +101,7 @@ export function renderEntrega(ctx){
   // sesión que lo proteja.
   // ══════════════════════════════════════════════════════════
   if(invitacion.bloqueado) return (
-    <Marco>
+    <MarcoEnlace notif={notif}>
       <div className="entrega-candado">
         <Icon n="lock" size={40}/>
         <h1>Este documento está protegido</h1>
@@ -114,7 +120,7 @@ export function renderEntrega(ctx){
           {invClaveBusy ? "Abriendo…" : "Abrir el documento"}
         </button>
       </div>
-    </Marco>
+    </MarcoEnlace>
   );
 
   // ══════════════════════════════════════════════════════════
@@ -144,7 +150,7 @@ export function renderEntrega(ctx){
     const quedaT = tiempoRestante(invitacion.expiraEn);
 
     return (
-      <Marco>
+      <MarcoEnlace notif={notif}>
         <div className="entrega-cab">
           <h1>{paraFirmar ? "Te mandaron un documento para firmar" : "Te compartieron un documento"}</h1>
           {invitacion.pedidoPor && (
@@ -284,7 +290,7 @@ export function renderEntrega(ctx){
             </a>
           </div>
         </div>
-      </Marco>
+      </MarcoEnlace>
     );
   }
 
@@ -443,7 +449,7 @@ export function renderEntrega(ctx){
   ) : null;
 
   return (
-    <Marco>
+    <MarcoEnlace notif={notif}>
       <div className="entrega-cab">
         {/* El titular dice qué toca AHORA. Si lo primero es aceptar un
             contrato, encabezar con «Te piden comprobantes» manda a la
@@ -504,7 +510,27 @@ export function renderEntrega(ctx){
                       <a className="entrega-item-u" href={hecho.url}
                          target="_blank" rel="noopener noreferrer nofollow">{hecho.url}</a>
                     )}
-                    <div className="entrega-item-h">{hecho.hash}</div>
+                    {/* ← ACTUALIZADO (25 nov): la huella ya no se
+                        enseña sola. Era lo primero que se leía después
+                        del nombre del archivo, y a quien acaba de subir
+                        un recibo de luz no le dice nada: sesenta y
+                        cuatro caracteres sin significado ocupando el
+                        sitio del «ya está».
+
+                        Queda detrás del ojo, para quien la vaya a usar.
+                        Es la misma decisión que se tomó el 14 de
+                        octubre dentro del expediente, y usa el MISMO
+                        botón, para que la huella se enseñe igual en los
+                        dos lados del enlace. */}
+                    <button className="hcard-eye exp-ojo"
+                      onClick={()=>setShowHashes({...showHashes,["ent:"+r.id]:!showHashes["ent:"+r.id]})}>
+                      <IcoEye/> {showHashes["ent:"+r.id] ? "Ocultar huella" : "Ver huella"}
+                    </button>
+                    {showHashes["ent:"+r.id] && (
+                      <div className="entrega-item-h">
+                        {hecho.url ? "SHA-256 de la dirección " : "SHA-256 "}{hecho.hash}
+                      </div>
+                    )}
                   </div>
                 )}
                 {yaEstaba && <div className="entrega-item-d">Ya se entregó.</div>}
@@ -516,12 +542,23 @@ export function renderEntrega(ctx){
                   captura de pantalla que prueba menos. Los dos caminos
                   van juntos y sin jerarquía: cuál sirve lo sabe quien
                   entrega, no nosotros. */}
-              {!hecho && enlReq!==r.id && (
+              {/* ← ACTUALIZADO (25 nov): los botones ya no desaparecen
+                  al entregar. Antes, en cuanto subías algo, el único
+                  camino para mandar una segunda cosa era recargar el
+                  enlace, y casi nunca se entrega una sola: va la
+                  factura y luego el comprobante de la transferencia, o
+                  te das cuenta de que mandaste la foto movida.
+
+                  Quien ya entregó algo no se queda sin salida; lo que
+                  cambia es la palabra, que pasa a «Subir otro» para que
+                  nadie crea que lo de antes se perdió. Lo de antes
+                  sigue en la cadena: esto añade, no sustituye. */}
+              {enlReq!==r.id && (
                 <div className="entrega-acts">
-                  <label className={`entrega-btn ${subiendo?"ocupado":""} ${yaEstaba?"otra":""}`}>
+                  <label className={`entrega-btn ${subiendo?"ocupado":""} ${hecho||yaEstaba?"otra":""}`}>
                     {subiendo
                       ? <><span className="mini-spin"/> {invPaso || "Subiendo…"}</>
-                      : <><Icon n="upload_file" size={17}/> {yaEstaba ? "Subir otro" : "Subir"}</>}
+                      : <><Icon n="upload_file" size={17}/> {hecho||yaEstaba ? "Subir otro" : "Subir"}</>}
                     <input type="file" style={{display:"none"}} disabled={invBusy}
                       onChange={e=>{ entregar(r.id, e.target.files?.[0]); e.target.value=""; }} />
                   </label>
@@ -567,8 +604,13 @@ export function renderEntrega(ctx){
       )}
 
       <div className="entrega-pie">
-        Las huellas que ves son de tus archivos: identifican cada uno de forma única, y si
-        alguien lo cambiara aunque fuera un carácter dejarían de coincidir. Puedes guardarlas.
+        {/* ← ACTUALIZADO (25 nov): decía «las huellas que ves», y
+            desde que están detrás del ojo, de entrada no se ve
+            ninguna. Un pie que habla de algo que no está en la
+            pantalla hace dudar de si falta cargar algo. */}
+        Detrás de «Ver huella» está la de cada archivo que entregaste: identifica el tuyo de
+        forma única, y si alguien lo cambiara aunque fuera un carácter dejaría de coincidir.
+        Puedes guardarla.
         {" "}
         {queda && queda !== "vencido" && <>Este enlace vence en {queda}</>}
         {invitacion.expiraEn ? <>, el {fmtFull(invitacion.expiraEn)}</> : "."}
@@ -598,6 +640,6 @@ export function renderEntrega(ctx){
       </div>
 
       </>}
-    </Marco>
+    </MarcoEnlace>
   );
 }
