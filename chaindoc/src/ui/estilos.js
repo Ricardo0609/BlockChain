@@ -87,8 +87,10 @@ img,svg{max-width:100%}
 .inp:focus{border-color:var(--negro)}
 .inp::placeholder{color:var(--gris-200)}
 .auth-actions{display:flex;gap:16px;align-items:center;justify-content:center;margin-top:8px;flex-wrap:wrap}
-.fingerprint{width:72px;height:72px;margin:24px auto 0;border:2.5px solid var(--negro);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;cursor:pointer;transition:all .15s}
+.bio-btn{display:block;width:100%;max-width:320px;margin:0 auto}
+.fingerprint{width:56px;height:56px;margin:16px auto 0;border:2.5px solid var(--negro);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;cursor:pointer;transition:all .15s}
 .fingerprint:hover{background:var(--negro);color:#fff}
+.fingerprint svg,.fingerprint .msym{width:26px;height:26px;font-size:26px}
 .dots{display:flex;gap:12px;justify-content:center;margin-top:24px}
 .dot{width:14px;height:14px;border-radius:50%;background:var(--bordes)}
 .dot.on{background:var(--negro)}
@@ -1387,6 +1389,36 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
    que salga del archivo. Desde el 25 de noviembre ya no se pueden
    escribir nuevos; esta marca es para los que quedaron. */
 .tag.t-mano{background:rgba(180,120,10,.12);color:#92610a}
+/* El motivo del rechazo, encima del papel mientras se corrige. En
+   rojo claro y no en gris: no es una nota al pie, es el encargo. */
+.exp-corrige{display:flex;gap:10px;align-items:flex-start;margin:0 0 16px;
+  padding:12px 14px;border:1px solid #fecaca;border-radius:10px;
+  background:#fef2f2;color:#b91c1c;font-size:13.5px;line-height:1.5}
+.exp-corrige strong{font-weight:600}
+.exp-corrige em{color:#991b1b}
+/* El paso de firma del reenvio, dentro de la banda. Un campo y un
+   boton: a quien se manda ya se sabe, y lo unico que falta es que
+   la persona diga que si. */
+.acu-reenvia{margin-top:12px;padding:12px 14px;border:1px solid var(--bordes);
+  border-radius:10px;background:#fff}
+.acu-reenvia-t{font-size:13px;color:var(--gris);margin-bottom:9px}
+/* En linea, no en bloque: la regla de la banda pone los strong en
+   bloque para su titulo, y aqui el nombre va dentro de la frase.
+   Sin esto se parte en tres renglones. */
+.acu-reenvia-t strong{display:inline;margin:0;font-family:inherit;font-size:inherit;
+  color:var(--negro);font-weight:600}
+.acu-reenvia-f{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* El campo dentro de una fila: el de siempre, pero sin estirarse
+   ni empujar lo de abajo. Antes llevaba una clase que no existe y
+   salia como un campo del navegador, sin estilo ninguno. */
+.inp-fila{flex:0 1 220px;width:auto;min-width:0;margin-bottom:0;
+  padding:11px 14px;font-size:15px;border-radius:10px}
+.acu-reenvia-n{margin-top:8px;font-size:12.5px;color:var(--gris)}
+.acu-reenvia-e{margin-top:8px;font-size:12.5px;color:#b91c1c}
+@media(max-width:560px){
+  .acu-reenvia-f{flex-direction:column;align-items:stretch}
+  .inp-fila{flex:1 1 auto}
+}
 .smart-x{background:none;border:none;font-size:22px;line-height:1;color:var(--gris-300);cursor:pointer;padding:0 4px}
 .smart-x:hover{color:#c2410c}
 
@@ -1498,7 +1530,7 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   border-radius:8px;padding:10px 12px;margin:12px 0 2px}
 
 /* ← NUEVO: separador "o usa tu código" en el modal de firma */
-.sign-or{display:flex;align-items:center;gap:12px;margin:18px 0 14px;color:var(--gris-300);font-size:13px}
+.sign-or{display:flex;align-items:center;gap:12px;margin:14px 0 12px;color:var(--gris-300);font-size:13px}
 .sign-or::before,.sign-or::after{content:"";flex:1;height:1px;background:var(--bordes)}
 
 .menu-name{font-family:var(--f-t);font-weight:600;font-size:20px;text-align:center}
@@ -1796,7 +1828,7 @@ html{overflow-x:clip}                 /* red de seguridad: sin arrastre lateral 
   .auth-sub{font-size:14px;margin-bottom:22px}
   .auth-actions{flex-direction:column-reverse;gap:10px}
   .auth-actions .btn{width:100%}
-  .fingerprint{width:64px;height:64px;margin-top:20px}
+  .fingerprint{width:52px;height:52px;margin-top:14px}
 
   /* bloqueo */
   .lock-wrap{padding:28px 20px;min-height:50vh}

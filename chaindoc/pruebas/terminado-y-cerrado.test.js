@@ -290,9 +290,16 @@ describe("y se nota lo que falta", () => {
     // La primera versión saltaba a la pestaña «Contrato», que sólo
     // enseña el texto: no se firma ahí. El botón de firmar está
     // abajo, fuera de las pestañas. Se vio siguiendo el clic.
+    // Ojo: se mira el manejador DE ESTE BOTÓN, no el archivo entero.
+    // Desde el 26 de noviembre hay otro botón que sí lleva a la
+    // pestaña del contrato —el de corregir lo que no aceptaron—, y
+    // buscar en todo el archivo confundiría uno con otro.
     const e = leer("src/pantallas/Expediente.jsx");
-    expect(e).toMatch(/getElementById\("sign-bar"\)/);
-    expect(e).not.toMatch(/setExpTab\("contrato"\)/);
+    const i = e.indexOf("Ir a firmar el cierre");
+    expect(i).toBeGreaterThan(-1);
+    const boton = e.slice(e.lastIndexOf("<button", i), i);
+    expect(boton).toMatch(/getElementById\("sign-bar"\)/);
+    expect(boton).not.toMatch(/setExpTab/);
     // Y el destino existe de verdad.
     expect(leer("src/pantallas/Documento.jsx")).toMatch(/className="sign-bar" id="sign-bar"/);
   });

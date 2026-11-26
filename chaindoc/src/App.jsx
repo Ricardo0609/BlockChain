@@ -17,6 +17,7 @@ import {
 } from "./auth";
 import { bioAvailable, bioRegister, bioAssert, bioError, b64uToBytes } from "./biometric";
 import { MIN_CONTRATO,
+  fmtMonto,
   analyzeContract,
   draftContract,
   montoDeDocumento,
@@ -231,6 +232,11 @@ export default function Octavin(){
   const [firmaBusy,setFirmaBusy]     = useState(false);
   const [enFirmeCorreo,setEnFirmeCorreo] = useState("");
   const [enFirmeNombre,setEnFirmeNombre] = useState("");
+  // ← NUEVO (26 nov): releer el contrato corregido, y el paso
+  // de firma que sale justo después, sin modal y sin preguntar a
+  // quién. Ver `guardarYVolverAEnviar`.
+  const [releyendo,setReleyendo]         = useState(false);
+  const [reenviando,setReenviando]       = useState(null);
   const [enFirmeErr,setEnFirmeErr]       = useState("");
   const [rechMotivo,setRechMotivo]   = useState("");
   const [rechDetalle,setRechDetalle] = useState("");
@@ -1296,7 +1302,183 @@ export default function Octavin(){
     if(up){ setD(up); setContent(body); setDirty(false); setEdit(false); notify("Documento actualizado ✓"); }
     else notify("Error al guardar","err");
     setSaving(false);
+    // ← NUEVO (26 nov): devuelve lo guardado. Lo necesita
+    // `guardarYVolverAEnviar`, que encadena un paso detrás y no puede
+    // seguir a ciegas si esto falló.
+    return up || null;
   };
+
+  // ── GUARDAR Y VOLVER A ENVIAR (26 nov) ─────────────────────
+  //
+  // Ricardo, corrigiendo un contrato que le rechazaron: «que mejor
+  // diga guardar y volver a enviar, y se vuelva a enviar el
+  // corregido».
+  //
+  // Guardar a secas dejaba el contrato corregido y QUIETO: el trabajo
+  // hecho, la otra parte sin enterarse, y el acuerdo parado sin que
+  // nada en la pantalla dijera que faltaba un paso. Y ese paso vivía
+  // en el menú de compartir, que es donde nadie lo va a buscar
+  // después de corregir un texto.
+  //
+  // Lo que NO hace es mandarlo solo. Mandar un contrato es FIRMARLO,
+  // y la firma pide el código: saltárselo convertiría un botón de
+  // guardar en una firma sin que nadie la autorice. Así que guarda
+  // primero —la cadena asienta la edición— y abre el paso de firma
+  // con la otra parte ya puesta, que es la misma a la que se le
+  // mandó antes.
+  // ── GUARDAR, RELEER Y VOLVER A ENVIAR (26 nov) ─────────────
+  //
+  // Ricardo, viendo que el expediente seguía diciendo $5,500 después
+  // de corregir el contrato a 6,000:
+  //
+  //   «Al darle guardar y enviar vuelve a analizar el contrato para
+  //    ver qué cambió y actualizar los datos en el expediente.»
+  //   «Se debe mandar luego luego a quien antes ya se había mandado,
+  //    porque ya sabemos a quién mandamos.»
+  //
+  // Tenía razón en lo de fondo: el texto y las tarjetas de arriba
+  // —importe, fecha límite, partes— salían del MISMO análisis, y al
+  // corregir el texto sólo cambiaba uno de los dos. Un contrato que
+  // dice 6,000 con una tarjeta que dice 5,500 al lado no es un
+  // detalle feo: es el expediente contradiciéndose a sí mismo, y lo
+  // que se firma es el texto.
+  //
+  // Tres pasos, en este orden, y cada uno se para si el anterior
+  // falló:
+  //
+  //   1. GUARDAR. La cadena asienta la edición del texto.
+  //   2. RELEER. Se vuelve a analizar lo guardado y se escriben
+  //      encima importe, moneda, fecha, partes, resumen y los puntos
+  //      a cumplir. Va a la cadena DICIENDO QUÉ CAMBIÓ: si el
+  //      importe pasa de 5,500 a 6,000, eso queda escrito, porque es
+  //      exactamente lo que la otra parte objetó.
+  //   3. PEDIR LA FIRMA, ahí mismo. Sin modal y sin preguntar a
+  //      quién: va a quien ya se le mandó.
+  //
+  // Por qué el paso 3 sigue pidiendo el código, que es lo único que
+  // no se automatizó: mandar un contrato ES firmarlo, y el servidor
+  // BORRA la firma anterior y escribe una nueva sobre el texto nuevo.
+  // Saltárselo dejaría en la cadena que Ricardo firmó un documento
+  // que nunca vio —el de 5,500— y mandaría el de 6,000 como firmado
+  // por él. Se lo pregunté y eligió esto: un campo y un botón, ahí
+  // mismo, sin pasar por el modal de compartir.
+  const guardarYVolverAEnviar = async()=>{
+    const up = await save();
+    if(!up) return;              // el fallo ya se aviso al guardar
+
+    // ── PRIMERO LA PANTALLA, DESPUES LA RELECTURA (26 nov) ───
+    //
+    // Ricardo: «al darle guardar y enviar no se tarde en regresarte
+    // o mandarte aqui para poderlo firmar, porque actualmente se
+    // tarda y eso genera friccion».
+    //
+    // Tenia razon y la culpa era del orden. La relectura es una
+    // llamada a la IA: tarda segundos. Antes se hacia ANTES de
+    // ensenar el paso de firma, asi que la persona se quedaba
+    // mirando una pantalla que no cambiaba, sin saber si habia
+    // pulsado bien.
+    //
+    // Ahora el paso de firma sale AL INSTANTE, y la relectura corre
+    // por detras mientras la persona lee a quien se manda y escribe
+    // su codigo. La espera sigue existiendo pero deja de ser una
+    // espera: pasa a ocurrir mientras se hace otra cosa.
+    //
+    // Lo que SI se espera es el momento de mandar: los botones de
+    // firmar estan apagados hasta que la relectura termina, porque
+    // mandarlo antes dejaria salir el contrato con el importe viejo.
+    // Y eso dura lo que la persona tarda en teclear cuatro digitos,
+    // que normalmente es mas que la propia relectura.
+    setPass(""); setEnFirmeErr("");
+    setExpTab("expediente");
+    setReenviando({
+      correo: up.acuerdo?.paraEmail || null,
+      nombre: up.acuerdo?.paraNombre || null,
+    });
+    releerContrato(up);
+  };
+
+  /**
+   * Vuelve a leer el contrato guardado y escribe encima lo que haya
+   * cambiado. Corre por detras: no bloquea la pantalla.
+   *
+   * Si falla —sin internet, o la IA caida— NO se cancela el envio: el
+   * texto ya esta guardado y es lo que vale. Se avisa y se sigue con
+   * los datos de antes, que es peor que releerlos y muchisimo mejor
+   * que perder la correccion.
+   */
+  const releerContrato = async(up)=>{
+    setReleyendo(true);
+    try{
+      const texto = aTextoPlano(up.content || "");
+      if(texto.trim().length >= MIN_CONTRATO){
+        const res = await analyzeContract(texto, ()=>{});
+        const cambios = diferenciasDelAnalisis(up, res);
+        if(cambios.length){
+          const actualizado = await aplicar(up, {
+            accion:"EDICIÓN",
+            contenido:`Al releer el contrato corregido cambia${cambios.length===1?"":"n"} `
+              + `${cambios.length} dato${cambios.length===1?"":"s"}: `
+              + cambios.map(c=>`${c.etiqueta} «${c.antes}» → «${c.ahora}»`).join("; "),
+            meta:{ tipo:"releido", modelo:res.modelo, campos:cambios },
+          }, camposDelAnalisis(up, res), { autor:user, autorUid:uid });
+          if(actualizado) setD(actualizado);
+        }
+      }
+    }catch(err){
+      console.error("[octavin] no se pudo releer el contrato", err);
+      notify("No se pudieron releer los datos del contrato. Se manda con los de antes.","err");
+    }finally{ setReleyendo(false); }
+  };
+
+  /** Lo que el relectura cambia, con nombres que se leen. */
+  const diferenciasDelAnalisis = (doc, res)=>{
+    const dinero = (v, m)=> v==null ? "sin importe" : fmtMonto(v, m || doc.moneda || "MXN");
+    const pares = [
+      ["montoTotal", "Importe", dinero(doc.montoTotal, doc.moneda), dinero(res.montoTotal, res.moneda)],
+      ["fechaLimite", "Fecha límite", doc.fechaLimite || "sin fecha", res.fechaLimite || "sin fecha"],
+      ["moneda", "Moneda", doc.moneda || "MXN", res.moneda || "MXN"],
+    ];
+    const fuera = pares
+      .filter(([k])=> String(doc[k] ?? "") !== String(res[k] ?? ""))
+      .map(([k, etiqueta, antes, ahora])=>({ k, etiqueta, antes, ahora }));
+    // Los puntos a cumplir se cuentan, no se listan: una lista de
+    // doce renglones dentro de un bloque no la lee nadie.
+    const antesN = (doc.requisitos||[]).length, ahoraN = (res.requisitos||[]).length;
+    if(puedeRehacerRequisitos(doc) && antesN !== ahoraN){
+      fuera.push({ k:"requisitos", etiqueta:"Puntos a cumplir",
+        antes:String(antesN), ahora:String(ahoraN) });
+    }
+    return fuera;
+  };
+
+  /** Lo que se escribe encima. */
+  const camposDelAnalisis = (doc, res)=>({
+    montoTotal: res.montoTotal, moneda: res.moneda,
+    fechaLimite: res.fechaLimite, partes: res.partes, resumen: res.resumen,
+    analisis: { modelo:res.modelo, fecha:res.analizadoEn },
+    // ── LOS PUNTOS SÓLO SI NO HAY NADA ENTREGADO ──────────
+    //
+    // Hoy no puede haberlo: un contrato rechazado nunca llegó a estar
+    // vigente, y sin estarlo no se puede subir nada. Pero esta
+    // función no sabe desde dónde la llaman, y rehacer la lista con
+    // comprobantes dentro los dejaría colgando de puntos que ya no
+    // existen. Se comprueba aquí y no en quien llama.
+    ...(puedeRehacerRequisitos(doc)
+      ? { requisitos: res.requisitos, fases: res.fases || [] }
+      : {}),
+  });
+
+  const puedeRehacerRequisitos = (doc)=>
+    !(doc.requisitos||[]).some(r=>(r.archivos||[]).length);
+
+  /** Manda el contrato corregido a quien ya se le había mandado. */
+  const reenviarAhora = async(conBio)=>{
+    if(!reenviando) return;
+    await mandarAFirmar(reenviando.correo || "", reenviando.nombre,
+      conBio === true, !reenviando.correo);
+    setReenviando(null);
+  };
+
 
   // ← NUEVO (11 nov): «AYÚDAME A REDACTAR».
   //
@@ -3061,6 +3243,13 @@ export default function Octavin(){
     mIn, mIn2, menuOpen, method, modal, notif, notify, ocultarConvertir, ocupado, onDrop, openCreate, openDoc,
     openExpedientes, openSec, pass, puedeConvertir, removeEvidence,
     corregirOriginal, corrigiendo,
+    // ← NUEVO (26 nov): corregir un contrato rechazado. Se
+    // calcula AQUÍ y no en cada pantalla: lo miran las dos
+    // —`Expediente` para dejar escribir, `Documento` para el
+    // botón— y dos copias de la misma pregunta acaban
+    // contestando distinto.
+    corrigiendoContrato: editMode && d?.kind==="expediente",
+    guardarYVolverAEnviar, releyendo, reenviando, setReenviando, reenviarAhora,
     removeImage, resetImport, revokeShare, runAnalysis, save, saveSettings, saving,
     setContent, setCreateStep, setD, setDirty, setDragOver, setDrop, setEdit, setEmail,
     setFaseSel, setFields, setFilesOpen, setFilterF, setFocoDup, setFolders, setHist,

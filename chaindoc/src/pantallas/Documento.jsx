@@ -10,7 +10,8 @@ import { fmtFull, fmtShort } from "../nucleo/formato";
 import { renderAccesos, cuantosAcceden } from "./Accesos";
 import { renderBarraEstilos } from "../ui/BarraEstilos";
 import { renderCuerpo } from "../ui/Cuerpo";
-import { estaVacio, normalizar, ID_PAPEL } from "../nucleo/texto";
+import { estaVacio } from "../nucleo/texto";
+import { PapelEditable } from "../ui/Papel";
 import { esBorradorContrato } from "../nucleo/catalogos";
 import { esComprobante, faltanDatos, sePuedeFirmar, puedeSalir, soloSuDueno,
          porQueNoSale, faltaRespaldo, sinOriginalViejo, originalDe } from "../nucleo/comprobantes";
@@ -27,7 +28,8 @@ import { SECCIONES, motivoOcupada } from "../nucleo/secciones";
 import { ESTILOS } from "../ui/estilos";
 export function renderDocumento(ctx){
   const {
-    MAX_IMGS, abrirProtegido, acctEmail, addImage, adjuntarOriginal,
+    MAX_IMGS, abrirProtegido, acctEmail, addImage, adjuntarOriginal, expTab,
+    corrigiendoContrato, guardarYVolverAEnviar, releyendo,
     corregirOriginal, corrigiendo,
     bioBusy, bioCreds, bioOk, convOculto, d, doVerify,
     docs, editMode, exportarPaquete, fields, getFile, goHome, histOpen, histTab, ocupado,
@@ -209,7 +211,28 @@ export function renderDocumento(ctx){
             Para cambiar lo pactado se manda una versión nueva, que es
             de lo que va la doble firma. */}
         {!editMode && d.kind!=="expediente" && puede("editar") && <button className="btn btn-secondary" onClick={()=>setEdit(true)}>Editar</button>}
-        {editMode && <button className="btn btn-primary" onClick={save} disabled={saving}>{saving?"Guardando…":"Guardar"}</button>}
+        {/* ← ACTUALIZADO (26 nov): corrigiendo un contrato rechazado,
+            el botón dice a dónde lleva. Lo pidió Ricardo: «que
+            mejor diga guardar y volver a enviar, y se vuelva a enviar
+            el corregido».
+
+            Guardar a secas dejaba el contrato corregido y quieto, con
+            la otra parte sin enterarse: el trabajo hecho y el acuerdo
+            parado. Y el último paso —mandarlo— quedaba escondido en
+            el menú de compartir, que es donde nadie lo iba a buscar
+            después de corregir.
+
+            No se manda solo, eso sí: mandar un contrato es FIRMARLO, y
+            para eso hace falta tu código. Así que guarda y abre el
+            paso de firma con la otra parte ya puesta. */}
+        {editMode && (
+          <button className="btn btn-primary" disabled={saving || releyendo}
+            onClick={corrigiendoContrato ? guardarYVolverAEnviar : save}>
+            {saving ? "Guardando…"
+              : releyendo ? "Releyendo el contrato…"
+              : corrigiendoContrato ? "Guardar y volver a enviar" : "Guardar"}
+          </button>
+        )}
         {/* ← NUEVO: vincula este documento a un expediente como comprobante.
             No aparece en los expedientes: uno no se adjunta a sí mismo. */}
         {/* ← ACTUALIZADO (3 nov): mientras editas no se ofrece nada
@@ -357,7 +380,13 @@ export function renderDocumento(ctx){
           Debajo de las pestañas y encima del papel, que es donde la
           busca la mano. Sólo mientras editas: fuera de edición no hay
           nada que aplicar y sería ruido encima del documento. */}
-      {editMode && d.kind!=="expediente" && !d.tplId && renderBarraEstilos(ctx)}
+      {/* ← ACTUALIZADO (26 nov): también al corregir el contrato de
+          un expediente rechazado, que se escribe en la pestaña
+          «Contrato». Fuera de esa pestaña no, porque flotaría encima
+          de la lista de comprobantes sin nada a lo que aplicarse. */}
+      {editMode && !d.tplId
+        && (d.kind!=="expediente" || expTab==="contrato")
+        && renderBarraEstilos(ctx)}
 
       <div className="paper">
         {/* ← NUEVO: los expedientes se ven como lista de comprobantes, no como papel */}
@@ -383,19 +412,11 @@ export function renderDocumento(ctx){
           ? (
             /* ← ACTUALIZADO (24 oct): era un <textarea>, que no sabe de
                negritas ni de títulos. Ahora es un contentEditable.
-
-               `dangerouslySetInnerHTML` aquí NO pinta lo que mandó
-               nadie: pinta el HTML canónico que sale de `normalizar`,
-               que sólo contiene p/h1-h3/ul/ol/li/strong/em. Y se pone
-               una sola vez —de `d.content`, no del estado— porque si
-               React lo re-pintara en cada tecla, el cursor saltaría al
-               principio en cada letra. Mientras editas manda el DOM; al
-               guardar se lee de ahí. */
-            <div className="paper-ta" contentEditable suppressContentEditableWarning
-              id={ID_PAPEL}
-              data-vacio="Comienza a escribir…"
-              onInput={()=>setDirty(true)}
-              dangerouslySetInnerHTML={{ __html: normalizar(d.content||"") }} />
+               ← MUDADO (26 nov) a `ui/Papel.jsx`: el contrato de un
+               expediente rechazado se corrige desde la pestaña
+               «Contrato», o sea desde otra pantalla, y el papel tiene
+               que ser EL MISMO en las dos. */
+            <PapelEditable html={d.content} onInput={()=>setDirty(true)}/>
           )
           : <div className={`paper-ro ${estaVacio(d.content)?"empty-txt":""}`}>
               {estaVacio(d.content)
@@ -711,7 +732,16 @@ export function renderDocumento(ctx){
           ← ACTUALIZADO (14 oct): la barra sólo se pinta si lleva algo.
           Los otros tres botones son de expediente, así que en un
           documento de texto se quedaba vacía: 40 px de hueco al pie. */}
-      {d.kind==="expediente" && (
+      {/* ← ACTUALIZADO (26 nov): y NO mientras se corrige el
+          contrato. Lo pidió Ricardo viéndolo: «al estar
+          editándolo aparecen esos dos botones abajo, quitalos».
+          Tiene sentido más allá del estorbo: revisar los adjuntos y
+          exportar el paquete son cosas que se hacen sobre lo que YA
+          está asentado, y lo que hay en pantalla en ese momento es un
+          texto a medio escribir que todavía no se ha guardado.
+          Exportar «la evidencia» de algo sin guardar es prometer una
+          prueba de lo que no existe. */}
+      {d.kind==="expediente" && !editMode && (
       <div className="acc-final">
         {/* ← NUEVO: revisa de nuevo los documentos adjuntos */}
         {d.kind==="expediente" && (

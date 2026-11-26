@@ -12,6 +12,8 @@ import { vanEnOrden, faseQueFalta, porQueEsperar, porQueEsperarLargo,
 import { permiteEstado, motivoBloqueo, firmasDe, firmaronLasDos, parteDe,
          FUERZA_TEXTO, PARTES } from "../nucleo/acuerdo";
 import { sePuedeFirmar } from "../nucleo/comprobantes";
+import { PapelEditable } from "../ui/Papel";
+import { renderBotonBio } from "../ui/BotonBio";
 import {
   aidDe,
   archivosDe,
@@ -45,6 +47,10 @@ export function renderExpediente(ctx){
     focoDup, getFile, irADuplicado, openDoc, removeEvidence, saving, setFaseSel,
     setFilesOpen, setFocoDup, setMIn, setModal, setPass,
     uid, verifVin, vinculos,
+    // ← NUEVO (26 nov): corregir el contrato que no aceptaron.
+    editMode, setEdit, setDirty, corrigiendoContrato,
+    reenviando, setReenviando, reenviarAhora, pass,
+    firmaBusy, enFirmeErr, releyendo,
     // ← NUEVO (24 nov): para saber qué parte del contrato soy yo, y
     // si el botón de firmar de más abajo va a estar ahí.
     user, acctEmail,
@@ -168,7 +174,19 @@ export function renderExpediente(ctx){
   // botón.
   const yaFirme = (d.chain || []).some((b) => b.action === "FIRMA" && b.author === user);
   const puedoFirmarYa = !yaFirme && puedo("firmar") && sePuedeFirmar(d);
-  const PESTANAS = [
+  // ── MIENTRAS SE CORRIGE EL CONTRATO (26 nov) ───────────────
+  //
+  // El expediente se queda en la pestaña «Contrato», y sola.
+  //
+  // No es por limpieza: al guardar, el texto se lee DEL PAPEL que
+  // está montado en la pantalla. Si alguien se fuera a «Archivos» a
+  // mitad de la corrección, el papel se desmontaría, y guardar
+  // escribiría encima el texto de antes sin decir nada. Perder lo
+  // escrito en silencio es el peor final posible para esto.
+  // Viene de App.jsx, donde se calcula una sola vez: lo miran esta
+  // pantalla y la de documento, y dos copias de la misma pregunta
+  // acaban contestando distinto.
+  const PESTANAS = corrigiendoContrato ? [{ id:"contrato", txt:"Contrato" }] : [
     { id:"expediente", txt:"Expediente" },
     { id:"tiempo",     txt:"Línea de tiempo" },
     { id:"archivos",   txt:"Archivos", n:nArchivos, candado:!filesOpen && nArchivos>0 },
@@ -184,7 +202,8 @@ export function renderExpediente(ctx){
     // número que nunca cambia no informa de nada.
     ...(cerrado ? [{ id:"firmas", txt:"Firmas" }] : []),
   ];
-  const tab = PESTANAS.some(x=>x.id===expTab) ? expTab : "expediente";
+  const tab = corrigiendoContrato ? "contrato"
+    : PESTANAS.some(x=>x.id===expTab) ? expTab : "expediente";
 
   return (<div className="exp">
     {/* Flechas izquierda y derecha para moverse sin el ratón: son
@@ -266,6 +285,92 @@ export function renderExpediente(ctx){
               baja hasta él en vez de cambiar de pestaña, y sólo sale
               cuando ese botón va a estar. Se vio siguiendo el clic,
               no leyendo el código. */}
+          {/* ── CORREGIR LO QUE NO ACEPTARON (26 nov) ───────
+              Ricardo, después de probar el rechazo: «se pudo rechazar
+              el contrato sin problema, peero creo que se nos pasó
+              añadir el después, o sea el poder editar ese
+              expediente».
+
+              Y la regla, con sus palabras: «quiero que sólo se pueda
+              editar después si se llega a rechazar; si lo aceptan se
+              queda igual sellado y no se puede editar».
+
+              El cartel ya decía «puedes corregirlo y volver a
+              mandarlo» y no había por dónde: una promesa escrita sin
+              puerta detrás. Aquí está la puerta, y lleva a la pestaña
+              donde de verdad se escribe. */}
+          {/* ── FIRMAR Y MANDARLO, AHI MISMO (26 nov) ───────
+              Ricardo: «al darle guardar y enviar me manda al modal de
+              a quién le quiero compartir, lo cual no debería, porque
+              ya sabemos a quién mandamos».
+
+              Tenía razón: preguntar a quién, cuando lo sabemos, es
+              pedir un dato por pedirlo. Así que no se pregunta — va a
+              quien ya se le mandó, y aquí sólo queda el código.
+
+              Y el código SÍ queda, y no es olvido. El servidor borra
+              la firma anterior y escribe una nueva sobre el texto
+              corregido: sin este paso, la cadena diría que firmaste un
+              contrato que nunca viste —el de antes— y se mandaría el
+              nuevo como firmado por ti. Se lo pregunté y eligió esto:
+              un campo y un botón, sin pasar por compartir. */}
+          {reenviando && (
+            <div className="acu-reenvia">
+              <div className="acu-reenvia-t">
+                Se vuelve a mandar a{" "}
+                <strong>{reenviando.nombre || reenviando.correo || "la otra parte"}</strong>
+                {reenviando.nombre && reenviando.correo ? ` · ${reenviando.correo}` : ""}
+                {!reenviando.correo ? " · por enlace" : ""}
+              </div>
+              {/* ← CORREGIDO (26 nov): con biometría se ofrecían las
+                  DOS cosas en el modal y aquí yo había dejado sólo la
+                  huella. Ricardo canceló el aviso del navegador y se
+                  quedó encerrado: «NotAllowedError», y el único botón
+                  volvía a pedirle la huella.
+
+                  Un camino de firma sin salida es de los peores
+                  callejones que puede haber, porque la huella falla
+                  por motivos que no dependen de la persona —el lector,
+                  el navegador, el tiempo de espera—. Así que van las
+                  dos, con el mismo botón compartido que usa el modal:
+                  si cambia allí, cambia aquí. */}
+              {renderBotonBio({ bioOk, bioCreds, ocupado: firmaBusy || releyendo,
+                verbo: "Firmar y mandar",
+                onBio: ()=>reenviarAhora(true) })}
+              <div className="acu-reenvia-f">
+                <input type="password" className="inp inp-fila" autoFocus
+                  placeholder="Tu código de firma" value={pass}
+                  onChange={e=>setPass(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter" && pass.trim().length>=4 && reenviarAhora(false)}/>
+                {/* Apagado mientras se relee: mandarlo antes dejaria
+                    salir el contrato con el importe viejo. Dura lo que
+                    se tarda en teclear cuatro digitos. */}
+                <button className="btn btn-primary"
+                  disabled={firmaBusy || releyendo || pass.trim().length<4}
+                  onClick={()=>reenviarAhora(false)}>
+                  {firmaBusy ? "Mandando…" : releyendo ? "Releyendo…" : "Firmar y enviar"}
+                </button>
+                <button className="btn btn-tertiary" disabled={firmaBusy}
+                  onClick={()=>setReenviando(null)}>Ahora no</button>
+              </div>
+              {releyendo && (
+                <div className="acu-reenvia-n">
+                  Releyendo el contrato para actualizar el importe y las fechas…
+                </div>
+              )}
+              {enFirmeErr && <div className="acu-reenvia-e">{enFirmeErr}</div>}
+            </div>
+          )}
+          {acu.estado==="rechazado" && !editMode && !reenviando && puedo("editar") && (
+            <div className="acu-banda-acts">
+              <button className="btn btn-primary" onClick={()=>{
+                setExpTab("contrato");
+                setEdit(true);
+              }}>
+                Editar el contrato
+              </button>
+            </div>
+          )}
           {acu.estado==="terminado" && miParte && faltaDe[miParte] && puedoFirmarYa && (
             <div className="acu-banda-acts">
               <button className="btn btn-primary" onClick={()=>{
@@ -1050,9 +1155,37 @@ export function renderExpediente(ctx){
 
     {tab==="contrato" && (
     <div role="tabpanel" id="panel-contrato" aria-labelledby="tab-contrato">
-      <div className="paper-ro">{estaVacio(d.content)
-        ? "Este expediente no tiene texto de contrato."
-        : renderCuerpo(d.content)}</div>
+      {/* ← NUEVO (26 nov): aquí se corrige el contrato que la otra
+          parte no aceptó. Es EL MISMO papel que el de un documento de
+          texto, no una copia: ver `ui/Papel.jsx`.
+
+          Cuándo se puede no se decide aquí. Lo decide `puede("editar")`,
+          que trae dentro el estado del acuerdo: en «rechazado» y en
+          «sin_firmar» sí, en «vigente» y «cerrado» no. Un contrato
+          aceptado se queda sellado, que es de lo que va todo esto. El
+          servidor lo vuelve a comprobar, así que esto es comodidad y
+          no la cerradura. */}
+      {/* ← NUEVO (26 nov): el motivo, a la vista MIENTRAS se corrige.
+          Se vio al recorrer el camino: el cartel rojo vive en la
+          pestaña «Expediente», así que al entrar a corregir
+          desaparecía, y con él la única frase que dice qué hay que
+          cambiar. Corregir de memoria lo que otro objetó es como se
+          manda dos veces el mismo error. */}
+      {corrigiendoContrato && acu.estado==="rechazado" && (
+        <div className="exp-corrige">
+          <Icon n="error" size={16}/>
+          <div>
+            <strong>{acu.rechazo?.porNombre || "La otra parte"} no lo aceptó:</strong>{" "}
+            {acu.rechazo?.motivo}
+            {acu.rechazo?.detalle && <><br/><em>«{acu.rechazo.detalle}»</em></>}
+          </div>
+        </div>
+      )}
+      {corrigiendoContrato
+        ? <PapelEditable html={d.content} onInput={()=>setDirty(true)}/>
+        : <div className="paper-ro">{estaVacio(d.content)
+            ? "Este expediente no tiene texto de contrato."
+            : renderCuerpo(d.content)}</div>}
     </div>
     )}
 

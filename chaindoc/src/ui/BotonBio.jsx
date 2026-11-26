@@ -22,8 +22,22 @@ export const comoSeLlama = () => {
  */
 export function renderBotonBio({ bioOk, bioCreds, ocupado, onBio, verbo = "Firmar" }){
   if(!bioOk || !(bioCreds || []).length) return null;
+  // ← ACHICADO (26 nov). Lo pidió Ricardo viéndolo dentro de la
+  // banda del expediente: «se ve muy grande lo de firmar con
+  // biometría, está muy largo el botón; hazlo más pequeño aunque
+  // también cambie en otros lados».
+  //
+  // Antes el botón se estiraba al 100% del sitio donde cayera. En un
+  // modal estrecho eso se lee bien; en una banda ancha salía un
+  // botón de pared a pared para una acción que no es la principal
+  // —la principal es firmar, con huella o con código, y éstas son
+  // dos formas de lo mismo—.
+  //
+  // Ahora tiene un ancho máximo y se centra: igual de cómodo de
+  // pulsar en el móvil, y proporcionado en una pantalla ancha. El
+  // círculo de la huella baja de 72 a 56.
   return (<>
-    <button className="btn btn-primary" style={{width:"100%"}} type="button"
+    <button className="btn btn-primary bio-btn" type="button"
       disabled={ocupado} onClick={onBio}>
       {ocupado ? "Esperando verificación…" : `${verbo} con ${comoSeLlama()}`}
     </button>
